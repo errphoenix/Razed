@@ -93,6 +93,7 @@ impl XpbdSolver {
     #[inline]
     fn substep(&self, nodes: &mut NodesRowTable, links: &mut LinksRowTable) {
         self.predict_positions(nodes);
+        links.lambda_mut_slice().fill(0.0);
         for _ in 0..self.iterations {
             self.solve_constraints(nodes, links);
         }
