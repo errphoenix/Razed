@@ -7,6 +7,28 @@ pub struct XpbdNodeOptions {
     mass: f32,
 }
 
+impl XpbdNodeOptions {
+    pub const fn new(pos: glam::Vec3, mass: f32) -> Self {
+        Self { pos, mass }
+    }
+}
+
+impl XpbdLinkOptions {
+    pub const fn new(compliance: f32) -> Self {
+        Self {
+            compliance,
+            rest_length: None,
+        }
+    }
+
+    pub const fn with_rest_length(compliance: f32, rest_length: f32) -> Self {
+        Self {
+            compliance,
+            rest_length: Some(rest_length),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct XpbdLinkOptions {
     compliance: f32,
@@ -64,7 +86,7 @@ impl XpbdLatticeBuilder {
     /// Returns the index of the link in the hierarchy.
     pub fn link(&mut self, options: XpbdLinkOptions) -> u32 {
         assert!(
-            self.stack.len() > 2,
+            self.stack.len() >= 2,
             "attempted to create lattice link with less than 2 nodes in stack"
         );
 
@@ -186,7 +208,7 @@ impl Default for XpbdSolver {
 
 impl XpbdSolver {
     #[inline]
-    pub fn new(iterations: u32, substeps: u32) -> Self {
+    pub const fn new(iterations: u32, substeps: u32) -> Self {
         Self {
             iterations,
             substeps,
@@ -196,27 +218,27 @@ impl XpbdSolver {
     }
 
     #[inline]
-    pub fn iterations(&self) -> u32 {
+    pub const fn iterations(&self) -> u32 {
         self.iterations
     }
 
     #[inline]
-    pub fn substeps(&self) -> u32 {
+    pub const fn substeps(&self) -> u32 {
         self.substeps
     }
 
     #[inline]
-    pub fn set_iterations(&mut self, iterations: u32) {
+    pub const fn set_iterations(&mut self, iterations: u32) {
         self.iterations = iterations;
     }
 
     #[inline]
-    pub fn set_substeps(&mut self, substeps: u32) {
+    pub const fn set_substeps(&mut self, substeps: u32) {
         self.substeps = substeps;
     }
 
     #[inline]
-    pub fn set_step_time(&mut self, delta: DeltaTime) {
+    pub const fn set_step_time(&mut self, delta: DeltaTime) {
         self.h = delta.as_f32() / self.substeps as f32;
         self.h2 = self.h * self.h;
     }
@@ -297,6 +319,80 @@ impl XpbdSolver {
         for (p, x, v) in p_pos.join(c_pos).join(vel) {
             *v = (*p - *x) / self.h;
             *x = *p;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn xpbd_lattice_builder() {
+        let mut builder = XpbdLatticeBuilder::new();
+
+        {
+            const MASS: f32 = 5.0;
+            const POS: glam::Vec3 = glam::Vec3::ONE;
+            const COMPLIANCE: f32 = 1.0;
+
+            const NODE: XpbdNodeOptions = XpbdNodeOptions::new(POS, MASS);
+            const LINK: XpbdLinkOptions = XpbdLinkOptions::new(COMPLIANCE);
+
+            builder.node(NODE); // A
+            builder.node(NODE); // B
+            builder.node(NODE); // C
+            builder.link(LINK); // B->C
+            builder.link(LINK); // A->B
+            builder.node(NODE); // D
+            builder.node(NODE); // E
+            builder.node(NODE); // F
+            builder.link(LINK); // E->F
+            builder.link(LINK); // D->E
+            builder.node(NODE); // G
+            builder.node(NODE); // H
+            builder.link(LINK); // G->H
+            builder.link(LINK); // D->G
+            builder.link(LINK); // A->D
+        }
+
+        const A: u32 = 0;
+        const B: u32 = 1;
+        const C: u32 = 2;
+        const D: u32 = 3;
+        const E: u32 = 4;
+        const F: u32 = 5;
+        const G: u32 = 6;
+        const H: u32 = 7;
+
+        const BC: u32 = 0;
+        const AB: u32 = 1;
+        const EF: u32 = 2;
+        const DE: u32 = 3;
+        const GH: u32 = 4;
+        const DG: u32 = 5;
+        const AD: u32 = 6;
+
+        let mut nodes = NodesRowTable::new();
+        let mut links = LinksRowTable::new();
+
+        let map = builder.export(&mut nodes, &mut links);
+        {
+            let node_ids = map.nodes;
+            let compare = {
+                let mut v = vec![A, B, C, D, E, F, G, H];
+                v.iter_mut().for_each(|i| *i += 1);
+                v
+            };
+            assert_eq!(node_ids, compare);
+
+            let link_ids = map.links;
+            let compare = {
+                let mut v = vec![BC, AB, EF, DE, GH, DG, AD];
+                v.iter_mut().for_each(|i| *i += 1);
+                v
+            };
+            assert_eq!(link_ids, compare);
         }
     }
 }
