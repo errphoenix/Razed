@@ -17,6 +17,7 @@ pub struct State {
 
     positions: ParallelIndexArrayColumn<glam::Vec4>,
     rotations: ParallelIndexArrayColumn<glam::Quat>,
+    scales: ParallelIndexArrayColumn<glam::Vec4>,
 
     camera: camera::Orbital,
 }
@@ -66,8 +67,12 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
 
                 let imap_positions = self.positions.handles();
                 let imap_rotations = self.rotations.handles();
+                let imap_scales = self.scales.handles();
+
                 let pod_positions = self.positions.contiguous();
                 let pod_rotations = self.rotations.contiguous();
+                let pod_scales = self.scales.contiguous();
+
                 unsafe {
                     scene.blit_part(
                         buf_idx,
@@ -83,6 +88,13 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     );
                     scene.blit_part(
                         buf_idx,
+                        LayoutEntityData::ImapScales as usize,
+                        imap_scales,
+                        0,
+                    );
+
+                    scene.blit_part(
+                        buf_idx,
                         LayoutEntityData::PodPositions as usize,
                         pod_positions,
                         0,
@@ -91,6 +103,12 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                         buf_idx,
                         LayoutEntityData::PodRotations as usize,
                         pod_rotations,
+                        0,
+                    );
+                    scene.blit_part(
+                        buf_idx,
+                        LayoutEntityData::PodScales as usize,
+                        pod_scales,
                         0,
                     );
                 }
@@ -147,8 +165,14 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     let z = rand::random::<f32>() * std::f32::consts::PI;
                     glam::Quat::from_euler(glam::EulerRot::YXZ, y, x, z)
                 };
+                let scale = {
+                    let x = rand::random::<f32>() + 0.5;
+                    let y = rand::random::<f32>() + 0.5;
+                    let z = rand::random::<f32>() + 0.5;
+                    glam::Vec3::new(x, y, z)
+                };
 
-                self.create_entity(0, position, rotation);
+                self.create_entity(0, position, rotation, scale);
             }
         }
     }
@@ -160,17 +184,20 @@ impl State {
         mesh_id: u32,
         position: glam::Vec3,
         rotation: glam::Quat,
+        scale: glam::Vec3,
     ) -> u32 {
         let position = glam::Vec4::new(position.x, position.y, position.z, 1.0);
+        let scale = glam::Vec4::new(scale.x, scale.y, scale.z, 1.0);
 
         let position_handle = self.positions.put(position);
         let rotation_handle = self.rotations.put(rotation);
+        let scale_handle = self.scales.put(scale);
 
         let entity = Entity {
             mesh_id,
             position_handle,
             rotation_handle,
-            _pad: 0,
+            scale_handle,
         };
 
         let id = self.entities.len();

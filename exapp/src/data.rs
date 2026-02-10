@@ -3,17 +3,17 @@ use ethel::{
     render::buffer::{PartitionedTriBuffer, TriBuffer},
 };
 
-pub const RENDER_STORAGE_PARTS: usize = 6;
+pub const RENDER_STORAGE_PARTS: usize = 8;
 pub const ENTITY_ALLOCATION: usize = 1024;
 pub const COMMAND_QUEUE_ALLOC: usize = 1024;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd, Eq, Ord, Hash)]
-#[repr(C, align(64))]
+#[repr(C)]
 pub struct Entity {
     pub mesh_id: u32,
     pub position_handle: u32,
     pub rotation_handle: u32,
-    pub _pad: u32,
+    pub scale_handle: u32,
 }
 
 layout_mesh_buffer!(count: 512; vertices: 2048);
@@ -41,15 +41,26 @@ layout_buffer! {
             bind 3;
             shader 3;
         };
-        enum PodPositions: ENTITY_ALLOCATION => {
-            type [f32; 4];
+        enum IMapScales: ENTITY_ALLOCATION => {
+            type u32;
             bind 4;
             shader 4;
         };
-        enum PodRotations: ENTITY_ALLOCATION => {
+
+        enum PodPositions: ENTITY_ALLOCATION => {
             type [f32; 4];
             bind 5;
             shader 5;
+        };
+        enum PodRotations: ENTITY_ALLOCATION => {
+            type [f32; 4];
+            bind 6;
+            shader 6;
+        };
+        enum PodScales: ENTITY_ALLOCATION => {
+            type [f32; 4];
+            bind 7;
+            shader 7;
         };
     }
 }

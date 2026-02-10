@@ -23,12 +23,7 @@ struct Entity {
     uint mesh_index;
     uint position_id;
     uint rotation_id;
-
-    // Pad to 16 bytes for compatibility
-    // While on my system the ssbo alignment is 4, for now we will force 
-    // alignment to 16 bytes to ensure compatibility. we might handle this 
-    // differently later on.
-    uint _pad; 
+    uint scale_id;
 };
 
 layout(std430, binding = 0) readonly buffer EntityIndexMap 
@@ -49,14 +44,22 @@ layout(std430, binding = 3) readonly buffer IMap_Rotations
 {
     uint imap_rotations[];
 };
+layout(std430, binding = 4) readonly buffer IMap_Scales
+{
+    uint imap_scales[];
+};
 
-layout(std430, binding = 4) readonly buffer POD_Positions
+layout(std430, binding = 5) readonly buffer POD_Positions
 {
     vec4 pod_positions[]; 
 };
-layout(std430, binding = 5) readonly buffer POD_Rotations
+layout(std430, binding = 6) readonly buffer POD_Rotations
 {
     vec4 pod_rotations[];
+};
+layout(std430, binding = 7) readonly buffer POD_Scales
+{
+    vec4 pod_scales[];
 };
 
 uniform mat4 u_projection;
@@ -81,21 +84,23 @@ void main() {
     uint mesh_id_index = mapping.mesh_index;
     uint position_index = imap_positions[mapping.position_id];
     uint rotation_index = imap_rotations[mapping.rotation_id];
+    uint scale_index = imap_scales[mapping.scale_id];
 
     uint mesh_id = mesh_ids[mesh_id_index];
-    vec3 position = pod_positions[position_index].xyz;
-    vec4 rotation = pod_rotations[rotation_index];
+    vec3 e_position = pod_positions[position_index].xyz;
+    vec4 e_rotation = pod_rotations[rotation_index];
+    vec3 e_scale = pod_scales[scale_index].xyz;
 
     Metadata metadata = metadata[mesh_id];
     uint offset = metadata.offset;
     uint index = offset + gl_VertexID;
 
     Vertex vertex = vertex_storage[index];
-    vec3 model = vertex.position.xyz;
-    vec3 normal = vertex.normal.xyz;
+    vec3 model = vertex.position.xyz * e_scale;
+    vec3 normal = normalize(vertex.normal.xyz);
 
-    vec3 local = rotateQuat(model, rotation);
-    vec4 world = vec4(local + position, 1.0);
+    vec3 local = rotateQuat(model, e_rotation);
+    vec4 world = vec4(local + e_position, 1.0);
 
     fs_world = world.xyz;
     fs_normal = normal;
