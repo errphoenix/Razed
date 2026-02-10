@@ -1,3 +1,5 @@
+pub(crate) mod physics;
+
 use crate::data::{Entity, FrameDataBuffers, LayoutEntityData};
 use ethel::{
     render::command::DrawArraysIndirectCommand,

@@ -4,9 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+janus = { path = "../../janus", features = ["expose_gl", "render", "input"] }
 ethel = { path = "../../ethel" }
+physics = { path = "../physics" }
 glam = "0.31.0"
-janus = { path = "../../janus", features = ["expose_gl", "state", "render", "input"] }
 log = "0.4.29"
 paste = "1.0.15"
 rand = "0.10.0"
