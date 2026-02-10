@@ -7,7 +7,7 @@ edition = "2024"
 janus = { path = "../../janus", features = ["expose_gl", "render", "input"] }
 ethel = { path = "../../ethel" }
 physics = { path = "../physics" }
-glam = "0.31.0"
+glam = "=0.31.0"
 log = "0.4.29"
 paste = "1.0.15"
 rand = "0.10.0"

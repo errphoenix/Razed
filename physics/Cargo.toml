@@ -6,5 +6,5 @@ edition = "2024"
 [dependencies]
 janus = { path = "../../janus" }
 ethel = { path = "../../ethel" }
-glam = "0.31.0"
+glam = "=0.31.0"
 paste = "1.0.15"
