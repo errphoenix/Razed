@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-ethel = { version = "0.1.0", path = "../../ethel" }
+janus = { path = "../../janus" }
+ethel = { path = "../../ethel" }
 glam = "0.31.0"
-janus = { version = "0.1.0", path = "../../janus" }
 paste = "1.0.15"
