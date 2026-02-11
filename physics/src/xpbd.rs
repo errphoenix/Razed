@@ -64,8 +64,17 @@ impl XpbdLatticeBuilder {
 
     /// Push a new node in the hierarchy with the specified `options`.
     ///
+    /// Subsequent [`node`] and [`link`] operations will operate on this new
+    /// node.
+    ///
     /// # Returns
     /// Returns the index of the node in the hierarchy.
+    ///
+    /// This index can be used to reference a node and create an explicit link,
+    /// through [`XpbdLatticeBuilder::link_to`].
+    ///
+    /// [`node`]: XpbdLatticeBuilder::node
+    /// [`link`]: XpbdLatticeBuilder::link
     pub fn node(&mut self, options: XpbdNodeOptions) -> u32 {
         let id = self.nodes.len();
         self.stack.push(id as u32);
@@ -73,11 +82,20 @@ impl XpbdLatticeBuilder {
         id as u32
     }
 
-    /// Finalise a link between the last 2 nodes in the stack.
+    /// Create a contraint between the last 2 nodes in the stack.
     ///
-    /// The last node is popped off the stack, but its parent remains. This
-    /// allows for the construction of hierarchies or more complex lattice
-    /// structures.
+    /// This effectively creates a link between the current node and its
+    /// parent.
+    ///
+    /// After this operation, the last node is popped off the stack, so no
+    /// other links can be created to it unless you explicitly reference it
+    /// using its ID.
+    ///
+    /// Afterwards the context returns to the parent node. All subsequent node
+    /// and link operations will operate on that node, again.
+    ///
+    /// Also see [`XpbdLatticeBuilder::link_to`] for explicit constraints
+    /// linking.
     ///
     /// # Panics
     /// Will panic if there are less than 2 nodes currently in the stack.
@@ -85,7 +103,7 @@ impl XpbdLatticeBuilder {
     /// # Returns
     /// Returns the index of the link in the hierarchy.
     pub fn link(&mut self, options: XpbdLinkOptions) -> u32 {
-        assert!(
+        debug_assert!(
             self.stack.len() >= 2,
             "attempted to create lattice link with less than 2 nodes in stack"
         );
@@ -97,6 +115,42 @@ impl XpbdLatticeBuilder {
         self.links.push(XpbdLink {
             node_a: *parent,
             node_b: id,
+            options,
+        });
+        link_id as u32
+    }
+
+    /// Create a contraint between the current node in the stack and an
+    /// arbitrary `node_id`.
+    ///
+    /// The `node_id` must be an ID returned from the
+    /// [`node`](XpbdLatticeBuilder::node) function.
+    ///
+    /// The intended use is for cross-node relations that cannot be created
+    /// as a hierarchical tree through the standard
+    /// [`link`](XpbdLatticeBuilder::link) function.
+    ///
+    /// # Panics
+    /// Will panic if there are less than 2 nodes currently in the stack or if
+    /// `node_id` does not point to a valid node in the stack.
+    /// Will also panic if `node_id` corresponds to the current node in the
+    /// stack, as a node cannot be linked to itself.
+    ///
+    /// # Returns
+    /// Returns the index of the link in the hierarchy.
+    pub fn link_to(&mut self, node_id: u32, options: XpbdLinkOptions) -> u32 {
+        debug_assert!(
+            self.stack.len() >= 1,
+            "attempted to create lattice link with no nodes in the stack"
+        );
+
+        let id = *self.stack.last().expect("stack must be populated");
+        debug_assert!(id != node_id, "cannot links node {id} to itself");
+
+        let link_id = self.links.len();
+        self.links.push(XpbdLink {
+            node_a: id,
+            node_b: node_id,
             options,
         });
         link_id as u32
@@ -406,6 +460,60 @@ mod tests {
             let link_ids = map.links;
             let compare = {
                 let mut v = vec![BC, AB, EF, DE, GH, DG, AD];
+                v.iter_mut().for_each(|i| *i += 1);
+                v
+            };
+            assert_eq!(link_ids, compare);
+        }
+    }
+
+    #[test]
+    fn xpbd_lattice_builder_cross_link() {
+        let mut builder = XpbdLatticeBuilder::new();
+
+        {
+            const MASS: f32 = 5.0;
+            const POS: glam::Vec3 = glam::Vec3::ONE;
+            const COMPLIANCE: f32 = 1.0;
+
+            const NODE: XpbdNodeOptions = XpbdNodeOptions::new(POS, MASS);
+            const LINK: XpbdLinkOptions = XpbdLinkOptions::new(COMPLIANCE);
+
+            let root = builder.node(NODE); // A
+            builder.node(NODE); // B
+            builder.node(NODE); // C
+            builder.node(NODE); // D
+            builder.link_to(root, LINK); // A->D
+            builder.link(LINK); // C->D
+            builder.link(LINK); // B->C
+        }
+
+        const A: u32 = 0;
+        const B: u32 = 1;
+        const C: u32 = 2;
+        const D: u32 = 3;
+
+        const AD: u32 = 0;
+        const CD: u32 = 1;
+        const BC: u32 = 2;
+
+        let mut nodes = NodesRowTable::new();
+        let mut links = LinksRowTable::new();
+
+        let map = builder.export(&mut nodes, &mut links);
+        {
+            let node_ids = map.nodes;
+            let compare = {
+                let mut v = vec![A, B, C, D];
+                v.iter_mut().for_each(|i| *i += 1);
+                v
+            };
+            assert_eq!(node_ids, compare);
+
+            let link_ids = map.links;
+            dbg!(&links);
+            let compare = {
+                let mut v = vec![AD, CD, BC];
                 v.iter_mut().for_each(|i| *i += 1);
                 v
             };
