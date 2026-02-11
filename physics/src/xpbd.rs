@@ -116,7 +116,10 @@ impl XpbdLatticeBuilder {
                 let p_pos = node_opt.pos;
                 let c_pos = node_opt.pos;
                 let mass = node_opt.mass;
-                let inv_mass = 1.0 / node_opt.mass;
+                let mut inv_mass = 1.0 / node_opt.mass;
+                if !inv_mass.is_normal() {
+                    inv_mass = 0.0;
+                }
                 let forces = glam::Vec3::ZERO;
                 let velocity = glam::Vec3::ZERO;
 
@@ -128,15 +131,16 @@ impl XpbdLatticeBuilder {
             .links
             .drain(..)
             .map(|link| {
-                let relation = LinkNodes(link.node_a, link.node_b);
+                let relation = LinkNodes(
+                    node_ids[link.node_a as usize],
+                    node_ids[link.node_b as usize],
+                );
+
                 let lambda = 0f32;
                 let compliance = link.options.compliance;
                 let rest_length = link.options.rest_length.unwrap_or_else(|| {
-                    let i_a = node_ids[relation.0 as usize];
-                    let i_b = node_ids[relation.1 as usize];
-
-                    let ip_a = unsafe { nodes.get_indirect_unchecked(i_a) };
-                    let ip_b = unsafe { nodes.get_indirect_unchecked(i_b) };
+                    let ip_a = unsafe { nodes.get_indirect_unchecked(relation.0) };
+                    let ip_b = unsafe { nodes.get_indirect_unchecked(relation.1) };
 
                     let node_positions = nodes.current_pos_slice();
                     let p_a = unsafe { node_positions.get_unchecked(ip_a as usize) };
@@ -162,7 +166,8 @@ pub struct LatticeIds {
 }
 
 pub const DEFAULT_SOLVE_ITERATIONS: u32 = 8;
-pub const DEFAULT_SUB_STEPS: u32 = 6;
+pub const DEFAULT_SUB_STEPS: u32 = 4;
+pub const DAMPING: f32 = 0.996;
 
 ethel::table_spec! {
     struct Nodes {
@@ -248,6 +253,9 @@ impl XpbdSolver {
         for _ in 0..self.substeps {
             self.substep(nodes, links);
         }
+        for v in nodes.velocity_mut_slice() {
+            *v *= DAMPING;
+        }
     }
 
     #[inline]
@@ -300,7 +308,16 @@ impl XpbdSolver {
 
             let ab_d = p_a - p_b;
             let dist = ab_d.length();
+            if dist < 0.1e-6 {
+                continue;
+            }
+
             let compliance = *inv_stiffness / self.h2;
+
+            let w_t = w_a + w_b;
+            if w_t < 0.1e-6 {
+                continue;
+            }
 
             let constraint = dist - *l;
             let d_y = (-constraint - compliance * *y) / (w_a + w_b + compliance);

@@ -21,9 +21,7 @@ layout(std430, binding = 11) readonly buffer MeshMetadata {
 
 struct Entity {
     uint mesh_index;
-    uint position_id;
-    uint rotation_id;
-    uint scale_id;
+    uint data_id;
 };
 
 layout(std430, binding = 0) readonly buffer EntityIndexMap 
@@ -36,28 +34,20 @@ layout(std430, binding = 1) readonly buffer MeshData
     uint mesh_ids[];
 };
 
-layout(std430, binding = 2) readonly buffer IMap_Positions
+layout(std430, binding = 2) readonly buffer IMap_EntityData
 {
-    uint imap_positions[];
-};
-layout(std430, binding = 3) readonly buffer IMap_Rotations
-{
-    uint imap_rotations[];
-};
-layout(std430, binding = 4) readonly buffer IMap_Scales
-{
-    uint imap_scales[];
+    uint imap_entity_data[];
 };
 
-layout(std430, binding = 5) readonly buffer POD_Positions
+layout(std430, binding = 4) readonly buffer POD_Positions
 {
     vec4 pod_positions[]; 
 };
-layout(std430, binding = 6) readonly buffer POD_Rotations
+layout(std430, binding = 5) readonly buffer POD_Rotations
 {
     vec4 pod_rotations[];
 };
-layout(std430, binding = 7) readonly buffer POD_Scales
+layout(std430, binding = 6) readonly buffer POD_Scales
 {
     vec4 pod_scales[];
 };
@@ -82,14 +72,12 @@ vec3 rotateQuat(vec3 p, vec4 q) {
 void main() {
     Entity mapping = entities[gl_DrawID];
     uint mesh_id_index = mapping.mesh_index;
-    uint position_index = imap_positions[mapping.position_id];
-    uint rotation_index = imap_rotations[mapping.rotation_id];
-    uint scale_index = imap_scales[mapping.scale_id];
+    uint entity_data_index = imap_entity_data[mapping.data_id];
 
     uint mesh_id = mesh_ids[mesh_id_index];
-    vec3 e_position = pod_positions[position_index].xyz;
-    vec4 e_rotation = pod_rotations[rotation_index];
-    vec3 e_scale = pod_scales[scale_index].xyz;
+    vec3 e_position = pod_positions[entity_data_index].xyz;
+    vec4 e_rotation = pod_rotations[entity_data_index];
+    vec3 e_scale = pod_scales[entity_data_index].xyz;
 
     Metadata metadata = metadata[mesh_id];
     uint offset = metadata.offset;

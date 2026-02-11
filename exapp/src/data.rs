@@ -9,11 +9,9 @@ pub const COMMAND_QUEUE_ALLOC: usize = 1024;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[repr(C)]
-pub struct Entity {
+pub struct Renderable {
     pub mesh_id: u32,
-    pub position_handle: u32,
-    pub rotation_handle: u32,
-    pub scale_handle: u32,
+    pub data_handle: u32,
 }
 
 layout_mesh_buffer!(count: 512; vertices: 2048);
@@ -21,7 +19,7 @@ layout_mesh_buffer!(count: 512; vertices: 2048);
 layout_buffer! {
     const EntityData: RENDER_STORAGE_PARTS, {
         enum EntityIndexMap: ENTITY_ALLOCATION => {
-            type Entity;
+            type Renderable;
             bind 0;
             shader 0;
         };
@@ -31,36 +29,25 @@ layout_buffer! {
             shader 1;
         };
 
-        enum IMapPositions: ENTITY_ALLOCATION => {
+        enum IMapEntityData: ENTITY_ALLOCATION => {
             type u32;
             bind 2;
             shader 2;
         };
-        enum IMapRotations: ENTITY_ALLOCATION => {
-            type u32;
-            bind 3;
-            shader 3;
-        };
-        enum IMapScales: ENTITY_ALLOCATION => {
-            type u32;
-            bind 4;
-            shader 4;
-        };
-
         enum PodPositions: ENTITY_ALLOCATION => {
             type [f32; 4];
-            bind 5;
-            shader 5;
+            bind 3;
+            shader 4;
         };
         enum PodRotations: ENTITY_ALLOCATION => {
             type [f32; 4];
-            bind 6;
-            shader 6;
+            bind 4;
+            shader 5;
         };
         enum PodScales: ENTITY_ALLOCATION => {
             type [f32; 4];
-            bind 7;
-            shader 7;
+            bind 5;
+            shader 6;
         };
     }
 }

@@ -1,23 +1,34 @@
 pub(crate) mod physics;
 
-use crate::data::{Entity, FrameDataBuffers, LayoutEntityData};
+use crate::{
+    data::{FrameDataBuffers, LayoutEntityData, Renderable},
+    state::physics::XpbdSystem,
+};
+use ::physics::xpbd::{LatticeIds, XpbdLatticeBuilder, XpbdLinkOptions, XpbdNodeOptions};
 use ethel::{
     render::command::DrawArraysIndirectCommand,
-    state::{
-        camera,
-        data::{Column, ParallelIndexArrayColumn, column::IterColumn},
-    },
+    state::{camera, data::Column},
 };
 use tracing::event;
 
+ethel::table_spec! {
+    struct EntityData {
+        position: glam::Vec4;
+        rotation: glam::Quat;
+        scale: glam::Vec4;
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct State {
-    entities: Vec<Entity>,
+    renderables: Vec<Renderable>,
     mesh_ids: Vec<ethel::mesh::Id>,
 
-    positions: ParallelIndexArrayColumn<glam::Vec4>,
-    rotations: ParallelIndexArrayColumn<glam::Quat>,
-    scales: ParallelIndexArrayColumn<glam::Vec4>,
+    entity_data: EntityDataRowTable,
+    xpbd: XpbdSystem,
+
+    // maps entity id to xpbd node handle
+    node_map: Vec<u32>,
 
     camera: camera::Orbital,
 }
@@ -33,9 +44,9 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         >,
         command_queue: &mut ethel::render::command::GpuCommandQueue<ethel::DrawCommand>,
     ) {
-        self.entities.iter().for_each(|_| {
+        self.renderables.iter().for_each(|_| {
             command_queue.push(DrawArraysIndirectCommand {
-                count: 3,
+                count: 6,
                 instance_count: 1,
                 first_vertex: 0,
                 base_instance: 0,
@@ -48,7 +59,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             {
                 let scene = &storage.scene;
 
-                let entity_map = &self.entities;
+                let entity_map = &self.renderables;
                 let mesh_handles = &self.mesh_ids;
                 unsafe {
                     scene.blit_part(
@@ -65,31 +76,16 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     );
                 }
 
-                let imap_positions = self.positions.handles();
-                let imap_rotations = self.rotations.handles();
-                let imap_scales = self.scales.handles();
-
-                let pod_positions = self.positions.contiguous();
-                let pod_rotations = self.rotations.contiguous();
-                let pod_scales = self.scales.contiguous();
+                let imap_entity_data = self.entity_data.handles();
+                let pod_positions = self.entity_data.position_slice();
+                let pod_rotations = self.entity_data.rotation_slice();
+                let pod_scales = self.entity_data.scale_slice();
 
                 unsafe {
                     scene.blit_part(
                         buf_idx,
-                        LayoutEntityData::ImapPositions as usize,
-                        imap_positions,
-                        0,
-                    );
-                    scene.blit_part(
-                        buf_idx,
-                        LayoutEntityData::ImapRotations as usize,
-                        imap_rotations,
-                        0,
-                    );
-                    scene.blit_part(
-                        buf_idx,
-                        LayoutEntityData::ImapScales as usize,
-                        imap_scales,
+                        LayoutEntityData::ImapEntityData as usize,
+                        imap_entity_data,
                         0,
                     );
 
@@ -150,36 +146,64 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             *vp = *self.camera.viewpoint();
         });
 
+        self.xpbd.apply_forces_batched(glam::vec3(0., -9.81, 0.0));
+        self.xpbd.update(delta);
+        {
+            let len = self.entity_data.len();
+            let p_pos = self.xpbd.nodes().current_pos_slice();
+            let e_pos = self.entity_data.position_mut_slice();
+
+            for i in 1..len {
+                let pos = unsafe { e_pos.get_unchecked_mut(i) };
+                let imap = self.node_map[i];
+                let phys_pos = *unsafe { p_pos.get_unchecked(imap as usize) };
+                *pos = glam::vec4(phys_pos.x, phys_pos.y, phys_pos.z, 1.0);
+            }
+        }
+
         // random demo
         if input.keys().key_pressed(janus::input::KeyCode::KeyH) {
-            for _ in 0..32 {
-                let position = {
-                    let x = rand::random::<f32>() * 64.0 - 32.0;
-                    let y = rand::random::<f32>() * 32.0 - 16.0;
-                    let z = rand::random::<f32>() * 64.0 - 32.0;
-                    glam::Vec3::new(x, y, z)
-                };
-                let rotation = {
-                    let x = rand::random::<f32>() * std::f32::consts::PI;
-                    let y = rand::random::<f32>() * std::f32::consts::PI;
-                    let z = rand::random::<f32>() * std::f32::consts::PI;
-                    glam::Quat::from_euler(glam::EulerRot::YXZ, y, x, z)
-                };
-                let scale = {
-                    let x = rand::random::<f32>() + 0.5;
-                    let y = rand::random::<f32>() + 0.5;
-                    let z = rand::random::<f32>() + 0.5;
-                    glam::Vec3::new(x, y, z)
-                };
+            let mut lattice = XpbdLatticeBuilder::with_capacity(20);
 
-                self.create_entity(0, position, rotation, scale);
+            const MASS: f32 = 80.0;
+            const COMPLIANCE: f32 = 0.0025;
+            const SPACING: f32 = 2.0;
+
+            lattice.node(XpbdNodeOptions::new(glam::Vec3::ZERO, MASS));
+            lattice.node(XpbdNodeOptions::new(glam::Vec3::Y * SPACING, MASS));
+            lattice.link(XpbdLinkOptions::new(COMPLIANCE));
+            lattice.node(XpbdNodeOptions::new(glam::Vec3::Y * SPACING * 2.0, MASS));
+            lattice.link(XpbdLinkOptions::new(COMPLIANCE));
+
+            lattice.node(XpbdNodeOptions::new(
+                glam::Vec3::new(SPACING, SPACING * 2.0, 0.0),
+                MASS,
+            ));
+            lattice.link(XpbdLinkOptions::new(COMPLIANCE * 2.5));
+            lattice.node(XpbdNodeOptions::new(
+                glam::Vec3::new(SPACING * 2.0, SPACING * 2.0, 0.0),
+                MASS,
+            ));
+            lattice.link(XpbdLinkOptions::new(COMPLIANCE));
+
+            let map = self.create_lattice(lattice);
+            let map = map.nodes;
+
+            if self.node_map.len() == 0 {
+                self.node_map.push(0);
             }
+            self.node_map.reserve(map.len());
+            for n_i in map {
+                self.node_map.push(n_i);
+            }
+
+            self.xpbd.nodes_mut().inv_mass_mut_slice()[1] = 0.0;
         }
     }
 }
 
 impl State {
-    pub fn create_entity(
+    pub fn create_renderable(
         &mut self,
         mesh_id: u32,
         position: glam::Vec3,
@@ -189,19 +213,30 @@ impl State {
         let position = glam::Vec4::new(position.x, position.y, position.z, 1.0);
         let scale = glam::Vec4::new(scale.x, scale.y, scale.z, 1.0);
 
-        let position_handle = self.positions.put(position);
-        let rotation_handle = self.rotations.put(rotation);
-        let scale_handle = self.scales.put(scale);
-
-        let entity = Entity {
+        let data_handle = self.entity_data.put((position, rotation, scale));
+        let entity = Renderable {
             mesh_id,
-            position_handle,
-            rotation_handle,
-            scale_handle,
+            data_handle,
         };
 
-        let id = self.entities.len();
-        self.entities.push(entity);
+        let id = self.renderables.len();
+        self.renderables.push(entity);
         id as u32
+    }
+
+    pub fn create_lattice(&mut self, lattice: XpbdLatticeBuilder) -> LatticeIds {
+        let lattice_map = self.xpbd.import_lattice(lattice);
+
+        for &node_id in &lattice_map.nodes {
+            let position = {
+                let nodes = self.xpbd.nodes();
+                let pos_id = unsafe { nodes.get_indirect_unchecked(node_id) };
+                *unsafe { nodes.current_pos_slice().get_unchecked(pos_id as usize) }
+            };
+
+            self.create_renderable(0, position, Default::default(), glam::Vec3::ONE);
+        }
+
+        lattice_map
     }
 }

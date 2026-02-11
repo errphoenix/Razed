@@ -21,16 +21,28 @@ fn main() {
         let mut mesh_stage = ethel::mesh::MeshStaging::new();
         let triangle = [
             Vertex {
-                position: [1.0, 0.0, 0.0, 1.0],
+                position: [0.5, -0.5, 0.0, 1.0],
                 normal: [0.33, -0.33, 0.33, 1.0],
             },
             Vertex {
-                position: [0.0, 1.0, 0.0, 1.0],
-                normal: [0.0, 0.5, 0.5, 1.0],
+                position: [0.5, 0.5, 0.0, 1.0],
+                normal: [0.33, 0.33, 0.33, 1.0],
             },
             Vertex {
-                position: [-1.0, 0.0, 0.0, 1.0],
+                position: [-0.5, 0.5, 0.0, 1.0],
+                normal: [-0.33, 0.33, 0.33, 1.0],
+            },
+            Vertex {
+                position: [-0.5, 0.5, 0.0, 1.0],
+                normal: [-0.33, 0.33, 0.33, 1.0],
+            },
+            Vertex {
+                position: [-0.5, -0.5, 0.0, 1.0],
                 normal: [-0.33, -0.33, 0.33, 1.0],
+            },
+            Vertex {
+                position: [0.5, -0.5, 0.0, 1.0],
+                normal: [0.33, -0.33, 0.33, 1.0],
             },
         ];
         let _triangle_id = mesh_stage.stage(&triangle);
