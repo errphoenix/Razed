@@ -24,12 +24,12 @@ struct Entity {
     uint data_id;
 };
 
-layout(std430, binding = 0) readonly buffer EntityIndexMap 
+layout(std430, binding = 0) readonly buffer EntityIndexMap
 {
     Entity entities[];
 };
 
-layout(std430, binding = 1) readonly buffer MeshData 
+layout(std430, binding = 1) readonly buffer MeshData
 {
     uint mesh_ids[];
 };
@@ -41,7 +41,7 @@ layout(std430, binding = 2) readonly buffer IMap_EntityData
 
 layout(std430, binding = 4) readonly buffer POD_Positions
 {
-    vec4 pod_positions[]; 
+    vec4 pod_positions[];
 };
 layout(std430, binding = 5) readonly buffer POD_Rotations
 {
@@ -92,7 +92,7 @@ void main() {
 
     fs_world = world.xyz;
     fs_normal = normal;
-    
+
     gl_Position = u_projection * u_view * world;
 }
 

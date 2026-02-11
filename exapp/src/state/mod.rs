@@ -1,7 +1,9 @@
 pub(crate) mod physics;
 
+use std::time::Instant;
+
 use crate::{
-    data::{FrameDataBuffers, LayoutEntityData, Renderable},
+    data::{FrameDataBuffers, LayoutEntityData, LayoutXpbdDebugData, Renderable},
     state::physics::XpbdSystem,
 };
 use ::physics::xpbd::{LatticeIds, XpbdLatticeBuilder, XpbdLinkOptions, XpbdNodeOptions};
@@ -108,6 +110,22 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                         0,
                     );
                 }
+
+                let xpbd_dbg = &storage.xpbd_debug;
+                let constraints = self.xpbd.links().relation_slice();
+                let imap_nodes = self.xpbd.nodes().handles();
+                let pod_nodes = self.xpbd.nodes().current_pos_slice();
+
+                const VEC3_VEC4_PADDING: usize = 4;
+
+                // SAFETY: the use of LayoutXpbdDebugData ensures we are
+                // blitting to a valid section of the xpbd_dbg partitioned
+                // buffer.
+                unsafe {
+                    xpbd_dbg.blit_part(buf_idx, LayoutXpbdDebugData::Constraints as usize, constraints, 0);
+                    xpbd_dbg.blit_part(buf_idx, LayoutXpbdDebugData::ImapNodes as usize, imap_nodes, 0);
+                    xpbd_dbg.blit_part_padded(buf_idx, LayoutXpbdDebugData::PodNodes as usize, pod_nodes, 0, VEC3_VEC4_PADDING);
+                }
             }
 
             {
@@ -163,27 +181,67 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
 
         // random demo
         if input.keys().key_pressed(janus::input::KeyCode::KeyH) {
+            let vp = view_point.get();
+            let view_pos = vp.position;
+            let view_fw = vp.forward();
+
             let mut lattice = XpbdLatticeBuilder::with_capacity(20);
 
             const MASS: f32 = 80.0;
             const COMPLIANCE: f32 = 0.0025;
             const SPACING: f32 = 2.0;
 
-            lattice.node(XpbdNodeOptions::new(glam::Vec3::ZERO, MASS));
-            lattice.node(XpbdNodeOptions::new(glam::Vec3::Y * SPACING, MASS));
-            lattice.link(XpbdLinkOptions::new(COMPLIANCE));
-            lattice.node(XpbdNodeOptions::new(glam::Vec3::Y * SPACING * 2.0, MASS));
-            lattice.link(XpbdLinkOptions::new(COMPLIANCE));
+            let p0 = view_pos + view_fw * 3.0;
+            let root = lattice.node(XpbdNodeOptions::new(
+                p0 + glam::vec3(-SPACING, -SPACING, -SPACING),
+                MASS,
+            ));
+            let bot_left = lattice.node(XpbdNodeOptions::new(
+                p0 + glam::vec3(SPACING, -SPACING, -SPACING),
+                MASS,
+            ));
+            let top_right = lattice.node(XpbdNodeOptions::new(
+                p0 + glam::vec3(SPACING, SPACING, -SPACING),
+                MASS,
+            ));
+            lattice.node(XpbdNodeOptions::new(
+                p0 + glam::vec3(-SPACING, SPACING, -SPACING),
+                MASS,
+            ));
+
+            let back_corner = lattice.node(XpbdNodeOptions::new(
+                p0 + glam::vec3(-SPACING, SPACING, SPACING),
+                MASS,
+            ));
+            lattice.node(XpbdNodeOptions::new(
+                p0 + glam::vec3(-SPACING, -SPACING, SPACING),
+                MASS,
+            ));
+            lattice.link_to(root, XpbdLinkOptions::new(COMPLIANCE));
 
             lattice.node(XpbdNodeOptions::new(
-                glam::Vec3::new(SPACING, SPACING * 2.0, 0.0),
+                p0 + glam::vec3(SPACING, -SPACING, SPACING),
                 MASS,
             ));
-            lattice.link(XpbdLinkOptions::new(COMPLIANCE * 2.5));
+            lattice.link_to(bot_left, XpbdLinkOptions::new(COMPLIANCE));
             lattice.node(XpbdNodeOptions::new(
-                glam::Vec3::new(SPACING * 2.0, SPACING * 2.0, 0.0),
+                p0 + glam::vec3(SPACING, SPACING, SPACING),
                 MASS,
             ));
+            lattice.link_to(
+                top_right,
+                XpbdLinkOptions::with_rest_length(COMPLIANCE, 3.8),
+            );
+            lattice.link_to(back_corner, XpbdLinkOptions::new(COMPLIANCE));
+            lattice.link(XpbdLinkOptions::new(COMPLIANCE));
+            lattice.link(XpbdLinkOptions::new(COMPLIANCE));
+
+            lattice.link(XpbdLinkOptions::new(COMPLIANCE));
+            lattice.link(XpbdLinkOptions::new(COMPLIANCE));
+            lattice.link_to(root, XpbdLinkOptions::new(COMPLIANCE));
+            lattice.link(XpbdLinkOptions::new(COMPLIANCE));
+
+            lattice.link(XpbdLinkOptions::new(COMPLIANCE));
             lattice.link(XpbdLinkOptions::new(COMPLIANCE));
 
             let map = self.create_lattice(lattice);
@@ -198,6 +256,9 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             }
 
             self.xpbd.nodes_mut().inv_mass_mut_slice()[1] = 0.0;
+            self.xpbd.nodes_mut().inv_mass_mut_slice()[2] = 0.0;
+            self.xpbd.nodes_mut().inv_mass_mut_slice()[6] = 0.0;
+            self.xpbd.nodes_mut().inv_mass_mut_slice()[7] = 0.0;
         }
     }
 }

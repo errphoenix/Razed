@@ -4,7 +4,8 @@ use crate::data::FrameDataBuffers;
 
 #[derive(Debug, Default)]
 pub struct Renderer {
-    shader: ShaderHandle,
+    base_shader: ShaderHandle,
+    xpbd_dbg_shader: ShaderHandle,
 }
 
 const FOV: f32 = 80.0;
@@ -16,15 +17,20 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         view_point: &mut janus::sync::Mirror<ethel::state::camera::ViewPoint>,
         _delta: janus::context::DeltaTime,
     ) {
-        self.shader.bind();
+        self.xpbd_dbg_shader.bind();
         let _ = view_point.sync();
         let view_mat = view_point.into_mat4();
-        self.shader.uniform_mat4_glam("u_view", view_mat);
+        self.xpbd_dbg_shader.uniform_mat4_glam("u_view", view_mat);
 
         let width = resolution.width;
         let height = resolution.height;
         let proj_mat = ethel::render::projection_perspective(width, height, FOV);
-        self.shader.uniform_mat4_glam("u_projection", proj_mat);
+        self.xpbd_dbg_shader
+            .uniform_mat4_glam("u_projection", proj_mat);
+
+        self.base_shader.bind();
+        self.base_shader.uniform_mat4_glam("u_view", view_mat);
+        self.base_shader.uniform_mat4_glam("u_projection", proj_mat);
     }
 
     fn render_frame(
@@ -43,11 +49,31 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         let cmds = &frame_data.command;
         GpuCommandDispatch::from_view(cmds.view_section(buf_idx)).dispatch();
+
+        {
+            self.xpbd_dbg_shader.bind();
+
+            let xpbd_dbg = &frame_data.xpbd_debug;
+            xpbd_dbg.bind_shader_storage(buf_idx);
+
+            let xpbd_count = crate::data::XPBD_CONSTRAINTS_ALLOC as i32;
+            unsafe {
+                janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 2, xpbd_count - 1);
+            }
+        }
     }
 
     fn init_resources(&mut self, _resolution: ethel::render::Resolution) {
-        let mut vsh = std::io::BufReader::new(include_bytes!("../shaders/base.vsh").as_slice());
-        let mut fsh = std::io::BufReader::new(include_bytes!("../shaders/base.fsh").as_slice());
-        self.shader = ShaderHandle::new(&mut vsh, &mut fsh);
+        const VSH_BASE_SOURCE: &[u8] = include_bytes!("../shaders/base.vsh");
+        const FSH_BASE_SOURCE: &[u8] = include_bytes!("../shaders/base.fsh");
+
+        let mut vsh = std::io::BufReader::new(VSH_BASE_SOURCE);
+        let mut fsh = std::io::BufReader::new(FSH_BASE_SOURCE);
+        self.base_shader = ShaderHandle::new(&mut vsh, &mut fsh);
+
+        const VSH_CONSTRAINT_SOURCE: &[u8] = include_bytes!("../shaders/constraint.vsh");
+        let mut vsh = std::io::BufReader::new(VSH_CONSTRAINT_SOURCE);
+        let mut fsh = std::io::BufReader::new(FSH_BASE_SOURCE);
+        self.xpbd_dbg_shader = ShaderHandle::new(&mut vsh, &mut fsh);
     }
 }
