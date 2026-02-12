@@ -3,6 +3,11 @@ name = "exapp"
 version = "0.1.0"
 edition = "2024"
 
+[profile.release]
+codegen-units = 1
+lto = false
+panic = "abort"
+
 [dependencies]
 janus = { path = "../../janus", features = ["expose_gl", "render", "input"] }
 ethel = { path = "../../ethel" }
