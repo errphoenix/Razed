@@ -1,3 +1,5 @@
+use std::sync::atomic::Ordering;
+
 use ethel::{render::command::GpuCommandDispatch, shader::ShaderHandle};
 
 use crate::data::FrameDataBuffers;
@@ -56,9 +58,9 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             let xpbd_dbg = &frame_data.xpbd_debug;
             xpbd_dbg.bind_shader_storage(buf_idx);
 
-            let xpbd_count = crate::data::XPBD_CONSTRAINTS_ALLOC as i32;
+            let xpbd_count = frame_data.xpbd_debug_link_count.load(Ordering::Acquire) as i32;
             unsafe {
-                janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 2, xpbd_count - 1);
+                janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 2, xpbd_count);
             }
         }
     }

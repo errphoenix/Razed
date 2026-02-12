@@ -32,9 +32,6 @@ void main() {
     vec3 position = pod_nodes[node_ii].xyz;
 
     fs_normal = vec3(0.0, 1.0, 0.0);
-    if (node_ii == 0) {
-        fs_normal.y = -0.67;
-    }
 
     gl_Position = u_projection * u_view * vec4(position, 1.0);
 }
