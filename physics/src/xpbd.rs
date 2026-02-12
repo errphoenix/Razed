@@ -5,11 +5,24 @@ use janus::context::DeltaTime;
 pub struct XpbdNodeOptions {
     pos: glam::Vec3,
     mass: f32,
+    fixed: bool,
 }
 
 impl XpbdNodeOptions {
     pub const fn new(pos: glam::Vec3, mass: f32) -> Self {
-        Self { pos, mass }
+        Self {
+            pos,
+            mass,
+            fixed: false,
+        }
+    }
+
+    pub const fn with_fixed(self, fixed: bool) -> Self {
+        Self {
+            pos: self.pos,
+            mass: self.mass,
+            fixed,
+        }
     }
 }
 
@@ -101,7 +114,7 @@ impl XpbdLatticeBuilder {
     /// Will panic if there are less than 2 nodes currently in the stack.
     ///
     /// # Returns
-    /// Returns the index of the link in the hierarchy.
+    /// Returns the index of the newly created link.
     pub fn link(&mut self, options: XpbdLinkOptions) -> u32 {
         debug_assert!(
             self.stack.len() >= 2,
@@ -137,7 +150,7 @@ impl XpbdLatticeBuilder {
     /// stack, as a node cannot be linked to itself.
     ///
     /// # Returns
-    /// Returns the index of the link in the hierarchy.
+    /// Returns the index of the newly created link.
     pub fn link_to(&mut self, node_id: u32, options: XpbdLinkOptions) -> u32 {
         debug_assert!(
             self.stack.len() >= 1,
@@ -151,6 +164,47 @@ impl XpbdLatticeBuilder {
         self.links.push(XpbdLink {
             node_a: id,
             node_b: node_id,
+            options,
+        });
+        link_id as u32
+    }
+
+    /// Create a link between two nodes `node_a` and `node_b`.
+    ///
+    /// The node IDs must be nodes provided by the [`node`] function.
+    ///
+    /// This will create a constraint between two arbitrary nodes with the
+    /// given `options` as constrant properties.
+    ///
+    /// Also see [`XpbdLatticeBuilder::link`] and
+    /// [`XpbdLatticeBuilder::link_to`] for alternative ways of constructing
+    /// lattice structures.
+    ///
+    /// [`node`]: XpbdLatticeBuilder::node
+    ///
+    /// # Panics
+    /// Will panic if either `node_a` of `node_b` do not point to a valid node ID.
+    ///
+    /// # Returns
+    /// Returns the index of the newly created link.
+    pub fn link_nodes(&mut self, node_a: u32, node_b: u32, options: XpbdLinkOptions) -> u32 {
+        #[cfg(debug_assertions)]
+        {
+            let node_count = self.nodes.len() as u32;
+            debug_assert!(
+                node_a < node_count,
+                "attempted to create a link containing invalid node {node_a}"
+            );
+            debug_assert!(
+                node_b < node_count,
+                "attempted to create a link containing invalid node {node_b}"
+            );
+        }
+
+        let link_id = self.links.len();
+        self.links.push(XpbdLink {
+            node_a,
+            node_b,
             options,
         });
         link_id as u32
@@ -171,7 +225,7 @@ impl XpbdLatticeBuilder {
                 let c_pos = node_opt.pos;
                 let mass = node_opt.mass;
                 let mut inv_mass = 1.0 / node_opt.mass;
-                if !inv_mass.is_normal() {
+                if !inv_mass.is_normal() || node_opt.fixed {
                     inv_mass = 0.0;
                 }
                 let forces = glam::Vec3::ZERO;
