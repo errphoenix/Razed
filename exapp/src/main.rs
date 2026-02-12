@@ -6,6 +6,7 @@ use crate::data::FrameDataBuffers;
 mod data;
 mod render;
 mod state;
+mod structure;
 
 const DISPLAY_PARAMS: DisplayParameters = DisplayParameters::fullscreen("Razed");
 
