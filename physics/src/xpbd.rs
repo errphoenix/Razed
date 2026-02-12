@@ -40,6 +40,13 @@ impl XpbdLinkOptions {
             rest_length: Some(rest_length),
         }
     }
+
+    pub const fn and_rest_length(self, rest_length: f32) -> Self {
+        Self {
+            compliance: self.compliance,
+            rest_length: Some(rest_length),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]

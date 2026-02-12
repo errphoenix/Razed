@@ -1,3 +1,5 @@
+use std::sync::{Arc, atomic::AtomicU32};
+
 use ethel::{
     DrawCommand, layout_buffer, layout_mesh_buffer,
     render::buffer::{PartitionedTriBuffer, TriBuffer},
@@ -80,7 +82,9 @@ layout_buffer! {
 pub struct FrameDataBuffers {
     pub command: TriBuffer<DrawCommand>,
     pub scene: PartitionedTriBuffer<RENDER_STORAGE_PARTS>,
+
     pub xpbd_debug: PartitionedTriBuffer<3>,
+    pub xpbd_debug_link_count: Arc<AtomicU32>,
 }
 
 impl FrameDataBuffers {
@@ -95,6 +99,7 @@ impl FrameDataBuffers {
             command: TriBuffer::zeroed(COMMAND_QUEUE_ALLOC),
             scene: scene_data_buffer,
             xpbd_debug: xpbd_visualiser,
+            xpbd_debug_link_count: Arc::new(AtomicU32::new(0)),
         }
     }
 }

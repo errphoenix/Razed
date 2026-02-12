@@ -1,6 +1,6 @@
 pub(crate) mod physics;
 
-use std::time::Instant;
+use std::{sync::atomic::Ordering, time::Instant};
 
 use crate::{
     data::{FrameDataBuffers, LayoutEntityData, LayoutXpbdDebugData, Renderable},
@@ -48,7 +48,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
     ) {
         self.renderables.iter().for_each(|_| {
             command_queue.push(DrawArraysIndirectCommand {
-                count: 6,
+                count: 36,
                 instance_count: 1,
                 first_vertex: 0,
                 base_instance: 0,
@@ -115,6 +115,9 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 let constraints = self.xpbd.links().relation_slice();
                 let imap_nodes = self.xpbd.nodes().handles();
                 let pod_nodes = self.xpbd.nodes().current_pos_slice();
+
+                let node_count = self.xpbd.links().len() as u32;
+                storage.xpbd_debug_link_count.store(node_count, Ordering::Release);
 
                 const VEC3_VEC4_PADDING: usize = 4;
 

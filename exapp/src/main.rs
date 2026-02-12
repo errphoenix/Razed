@@ -19,39 +19,18 @@ fn main() {
     let mut start_handler = StartupHandler::new(input_system, || FrameDataBuffers::new());
     {
         let mut mesh_stage = ethel::mesh::MeshStaging::new();
-        let triangle = [
-            Vertex {
-                position: [0.5, -0.5, 0.0, 1.0],
-                normal: [0.33, -0.33, 0.33, 1.0],
-            },
-            Vertex {
-                position: [0.5, 0.5, 0.0, 1.0],
-                normal: [0.33, 0.33, 0.33, 1.0],
-            },
-            Vertex {
-                position: [-0.5, 0.5, 0.0, 1.0],
-                normal: [-0.33, 0.33, 0.33, 1.0],
-            },
-            Vertex {
-                position: [-0.5, 0.5, 0.0, 1.0],
-                normal: [-0.33, 0.33, 0.33, 1.0],
-            },
-            Vertex {
-                position: [-0.5, -0.5, 0.0, 1.0],
-                normal: [-0.33, -0.33, 0.33, 1.0],
-            },
-            Vertex {
-                position: [0.5, -0.5, 0.0, 1.0],
-                normal: [0.33, -0.33, 0.33, 1.0],
-            },
-        ];
-        let _triangle_id = mesh_stage.stage(&triangle);
+        let _triangle_id = mesh_stage.stage(&MESH_UNIT_CUBE);
 
         start_handler.with_mesh_data(mesh_stage);
         start_handler.with_mesh_layout(data::LayoutMeshStorage::create());
     }
 
-    start_handler.with_gl_state(|| {});
+    start_handler.with_gl_state(|| unsafe {
+        janus::gl::ClipControl(janus::gl::LOWER_LEFT, janus::gl::ZERO_TO_ONE);
+        janus::gl::DepthFunc(janus::gl::GREATER);
+        janus::gl::ClearDepth(0.0);
+        janus::gl::Enable(janus::gl::DEPTH_TEST);
+    });
 
     let ctx = janus::context::Context::new(
         |state: &mut State, renderer: &mut Renderer| start_handler.init(state, renderer),
@@ -61,3 +40,156 @@ fn main() {
 
     janus::run(ctx);
 }
+
+const MESH_UNIT_CUBE: [Vertex; 36] = [
+    // Z+
+    Vertex {
+        position: [0.5, -0.5, 0.5, 1.0],
+        normal: [0.33, -0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [0.5, 0.5, 0.5, 1.0],
+        normal: [0.33, 0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [-0.5, 0.5, 0.5, 1.0],
+        normal: [-0.33, 0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [-0.5, 0.5, 0.5, 1.0],
+        normal: [-0.33, 0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [-0.5, -0.5, 0.5, 1.0],
+        normal: [-0.33, -0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [0.5, -0.5, 0.5, 1.0],
+        normal: [0.33, -0.33, 0.33, 1.0],
+    },
+    // Z-
+    Vertex {
+        position: [0.5, -0.5, -0.5, 1.0],
+        normal: [0.33, -0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [0.5, 0.5, -0.5, 1.0],
+        normal: [0.33, 0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [-0.5, 0.5, -0.5, 1.0],
+        normal: [-0.33, 0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [-0.5, 0.5, -0.5, 1.0],
+        normal: [-0.33, 0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [-0.5, -0.5, -0.5, 1.0],
+        normal: [-0.33, -0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [0.5, -0.5, -0.5, 1.0],
+        normal: [0.33, -0.33, 0.33, 1.0],
+    },
+    // Y+
+    Vertex {
+        position: [-0.5, 0.5, 0.5, 1.0],
+        normal: [0.33, -0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [-0.5, 0.5, -0.5, 1.0],
+        normal: [0.33, 0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [0.5, 0.5, -0.5, 1.0],
+        normal: [-0.33, 0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [0.5, 0.5, -0.5, 1.0],
+        normal: [-0.33, 0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [0.5, 0.5, 0.5, 1.0],
+        normal: [-0.33, -0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [-0.5, 0.5, 0.5, 1.0],
+        normal: [0.33, -0.33, 0.33, 1.0],
+    },
+    // Y-
+    Vertex {
+        position: [-0.5, -0.5, 0.5, 1.0],
+        normal: [0.33, -0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [-0.5, -0.5, -0.5, 1.0],
+        normal: [0.33, 0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [0.5, -0.5, -0.5, 1.0],
+        normal: [-0.33, 0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [0.5, -0.5, -0.5, 1.0],
+        normal: [-0.33, 0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [0.5, -0.5, 0.5, 1.0],
+        normal: [-0.33, -0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [-0.5, -0.5, 0.5, 1.0],
+        normal: [0.33, -0.33, 0.33, 1.0],
+    },
+    // X+
+    Vertex {
+        position: [0.5, 0.5, -0.5, 1.0],
+        normal: [0.33, -0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [0.5, -0.5, -0.5, 1.0],
+        normal: [0.33, 0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [0.5, -0.5, 0.5, 1.0],
+        normal: [-0.33, 0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [0.5, -0.5, 0.5, 1.0],
+        normal: [-0.33, 0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [0.5, 0.5, 0.5, 1.0],
+        normal: [-0.33, -0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [0.5, 0.5, -0.5, 1.0],
+        normal: [0.33, -0.33, 0.33, 1.0],
+    },
+    // X-
+    Vertex {
+        position: [-0.5, 0.5, -0.5, 1.0],
+        normal: [0.33, -0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [-0.5, -0.5, -0.5, 1.0],
+        normal: [0.33, 0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [-0.5, -0.5, 0.5, 1.0],
+        normal: [-0.33, 0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [-0.5, -0.5, 0.5, 1.0],
+        normal: [-0.33, 0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [-0.5, 0.5, 0.5, 1.0],
+        normal: [-0.33, -0.33, 0.33, 1.0],
+    },
+    Vertex {
+        position: [-0.5, 0.5, -0.5, 1.0],
+        normal: [0.33, -0.33, 0.33, 1.0],
+    },
+];
