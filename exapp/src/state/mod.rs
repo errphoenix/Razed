@@ -7,7 +7,7 @@ use crate::{
     state::physics::XpbdSystem,
     structure,
 };
-use ::physics::xpbd::{LatticeIds, XpbdLatticeBuilder, XpbdLinkOptions, XpbdNodeOptions};
+use ::physics::xpbd::{LatticeIds, XpbdLatticeBuilder};
 use ethel::{
     render::command::DrawArraysIndirectCommand,
     state::{camera, data::Column},
@@ -194,10 +194,9 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
 
         // random demo
         if input.keys().key_pressed(janus::input::KeyCode::KeyH) {
-            let _ = view_point.sync();
             let vp = view_point.get();
 
-            let lattice = structure::create_structure_lattice(vp.position, 8.0, 2.5, 6.0, 16);
+            let lattice = structure::create_structure_lattice(vp.position, 8.0, 3.2, 6.0, 16);
             let map = self.create_lattice(lattice);
             self.integrate_xpbd_entities(&map);
         }
