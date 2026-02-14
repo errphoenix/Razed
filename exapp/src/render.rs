@@ -11,34 +11,31 @@ pub struct Renderer {
     line_dbg_shader: ShaderHandle,
 }
 
-const FOV: f32 = 80.0;
-
 impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
     fn pre_frame(
         &mut self,
-        resolution: ethel::render::Resolution,
-        view_point: &mut janus::sync::Mirror<ethel::state::camera::ViewPoint>,
+        screen: &mut janus::sync::Mirror<ethel::render::ScreenSpace>,
+        view: &mut janus::sync::Mirror<ethel::state::camera::ViewPoint>,
         _delta: janus::context::DeltaTime,
     ) {
-        self.xpbd_dbg_shader.bind();
-        let _ = view_point.sync();
-        let view_mat = view_point.into_mat4();
-        self.xpbd_dbg_shader.uniform_mat4_glam("u_view", view_mat);
+        view.sync().unwrap();
+        screen.sync().unwrap();
+        let view_mat = view.into_mat4();
+        let proj = screen.projection();
 
-        let width = resolution.width;
-        let height = resolution.height;
-        let proj_mat = ethel::render::projection_perspective(width, height, FOV);
+        self.xpbd_dbg_shader.bind();
+        self.xpbd_dbg_shader.uniform_mat4_glam("u_view", view_mat);
         self.xpbd_dbg_shader
-            .uniform_mat4_glam("u_projection", proj_mat);
+            .uniform_mat4_glam("u_projection", *proj);
 
         self.line_dbg_shader.bind();
         self.line_dbg_shader.uniform_mat4_glam("u_view", view_mat);
         self.line_dbg_shader
-            .uniform_mat4_glam("u_projection", proj_mat);
+            .uniform_mat4_glam("u_projection", *proj);
 
         self.base_shader.bind();
         self.base_shader.uniform_mat4_glam("u_view", view_mat);
-        self.base_shader.uniform_mat4_glam("u_projection", proj_mat);
+        self.base_shader.uniform_mat4_glam("u_projection", *proj);
     }
 
     fn render_frame(
