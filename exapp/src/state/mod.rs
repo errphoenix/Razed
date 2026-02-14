@@ -151,7 +151,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
 
     fn step(
         &mut self,
-        input: &ethel::InputSystem,
+        input: &mut ethel::InputSystem,
         view_point: &mut janus::sync::Mirror<camera::ViewPoint>,
         delta: janus::context::DeltaTime,
     ) {
@@ -199,6 +199,12 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             let lattice = structure::create_structure_lattice(vp.position, 8.0, 3.2, 6.0, 16);
             let map = self.create_lattice(lattice);
             self.integrate_xpbd_entities(&map);
+        }
+
+        if input.keys().key_pressed(janus::input::KeyCode::KeyK) {
+            input.cursor_options().publish_with(|opt| {
+                opt.grabbed = !opt.grabbed;
+            });
         }
     }
 }
