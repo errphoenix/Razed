@@ -296,7 +296,7 @@ ethel::table_spec! {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd, Eq, Ord, Hash)]
-pub struct LinkNodes(u32, u32);
+pub struct LinkNodes(pub u32, pub u32);
 
 ethel::table_spec! {
     struct Links {

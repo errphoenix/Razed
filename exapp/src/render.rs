@@ -20,7 +20,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
     ) {
         view.sync().unwrap();
         screen.sync().unwrap();
-        let view_mat = view.into_mat4();
+        let view_mat = view.into_mat4().inverse();
         let proj = screen.projection();
 
         self.xpbd_dbg_shader.bind();

@@ -9,9 +9,10 @@ use crate::{
 };
 use ::physics::xpbd::{LatticeIds, XpbdLatticeBuilder};
 use ethel::{
-    render::command::DrawArraysIndirectCommand,
+    render::{ScreenSpace, command::DrawArraysIndirectCommand},
     state::{camera, data::Column},
 };
+use glam::Vec3Swizzles;
 use tracing::event;
 
 ethel::table_spec! {
@@ -29,6 +30,9 @@ pub struct State {
 
     entity_data: EntityDataRowTable,
     xpbd: XpbdSystem,
+
+    // selected xpbd link id
+    selection: Option<u32>,
 
     // maps entity id to xpbd node handle
     node_map: Vec<u32>,
@@ -116,6 +120,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 let constraints = self.xpbd.links().relation_slice();
                 let imap_nodes = self.xpbd.nodes().handles();
                 let pod_nodes = self.xpbd.nodes().current_pos_slice();
+                let selected_link = self.selection.unwrap_or_default();
 
                 let node_count = self.xpbd.links().len() as u32;
                 storage.xpbd_debug_link_count.store(node_count, Ordering::Release);
@@ -129,6 +134,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     xpbd_dbg.blit_part(buf_idx, LayoutXpbdDebugData::Constraints as usize, constraints, 0);
                     xpbd_dbg.blit_part(buf_idx, LayoutXpbdDebugData::ImapNodes as usize, imap_nodes, 0);
                     xpbd_dbg.blit_part_padded(buf_idx, LayoutXpbdDebugData::PodNodes as usize, pod_nodes, 0, VEC3_VEC4_PADDING);
+                    xpbd_dbg.blit_part(buf_idx, LayoutXpbdDebugData::ISelected as usize, &[selected_link], 0);
                 }
             }
 
@@ -152,24 +158,67 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
     fn step(
         &mut self,
         input: &mut ethel::InputSystem,
+        screen: &mut janus::sync::Mirror<ScreenSpace>,
         view_point: &mut janus::sync::Mirror<camera::ViewPoint>,
         delta: janus::context::DeltaTime,
     ) {
-        let _ = view_point.sync();
+        view_point.sync().unwrap();
 
-        let (dx, dy) = input.cursor().delta_f32();
-        let (dx, dy) = (dx.to_radians(), dy.to_radians());
-        self.camera.update(dx, dy);
+        if !input.cursor_options().grabbed {
+            screen.sync().unwrap();
 
-        let dw = *input.mouse_wheel();
-        *self.camera.distance_mut() -= dw * delta.as_f32() * 100.0;
+            let cursor = input.cursor().current_f32();
+            let inverse_view = view_point.into_mat4();
 
-        view_point.publish_with(|vp| {
-            *vp = *self.camera.viewpoint();
-        });
+            let mouse_world_dir = screen.to_world_space(cursor, inverse_view);
+            let mouse_ray = ::physics::Ray::new(view_point.position, mouse_world_dir);
 
-        self.xpbd.apply_forces_batched(glam::vec3(0., -9.81, 0.0));
+            let node_positions = self.xpbd.nodes().current_pos_slice();
+            let constraints = self.xpbd.links().relation_view();
+            let mut closest = None::<f32>;
+
+            for (i, ::physics::xpbd::LinkNodes(a, b)) in constraints.into_iter().enumerate() {
+                const RAY_SIZE: f32 = 0.05;
+
+                let a_i = unsafe { self.xpbd.nodes().get_indirect_unchecked(*a) };
+                let b_i = unsafe { self.xpbd.nodes().get_indirect_unchecked(*b) };
+                let a_p = *unsafe { node_positions.get_unchecked(a_i as usize) };
+                let b_p = *unsafe { node_positions.get_unchecked(b_i as usize) };
+
+                if let Some(t) = ::physics::intersect_ray_segment(mouse_ray, (a_p, b_p), RAY_SIZE) {
+                    if let Some(ct) = closest
+                        && t > ct
+                    {
+                        continue;
+                    }
+
+                    closest = Some(t);
+                    let id = *unsafe { self.xpbd.links().handles().get_unchecked(i) };
+                    self.selection = Some(id as u32);
+                }
+            }
+        } else {
+            let (dx, dy) = input.cursor().delta_f32();
+            let (dx, dy) = (dx.to_radians(), dy.to_radians());
+            self.camera.update(dx, dy);
+
+            let dw = *input.mouse_wheel();
+            *self.camera.distance_mut() -= dw * delta.as_f32() * 100.0;
+
+            view_point.publish_with(|vp| {
+                *vp = *self.camera.viewpoint();
+            });
+        }
+
+        let look_dir = self.camera.viewpoint().forward();
+        const WIND_STRENGTH: f32 = 1.85;
+        let (wind_x, wind_z) = (look_dir.x * WIND_STRENGTH, look_dir.z * WIND_STRENGTH);
+
+        let t0 = Instant::now();
+        self.xpbd
+            .apply_forces_batched(glam::vec3(wind_z, -9.81, wind_x));
         self.xpbd.update(delta);
+        let t1 = Instant::now();
         {
             let len = self.entity_data.len();
             let p_pos = self.xpbd.nodes().current_pos_slice();

@@ -58,7 +58,7 @@ pub const XPBD_CONSTRAINTS_ALLOC: usize = 4096;
 pub const XPBD_NODES_ALLOC: usize = 512;
 
 layout_buffer! {
-    const XpbdDebugData: 3, {
+    const XpbdDebugData: 4, {
         enum Constraints: XPBD_CONSTRAINTS_ALLOC => {
             type [u32; 2];
             bind 0;
@@ -75,6 +75,12 @@ layout_buffer! {
             bind 2;
             shader 6;
         };
+
+        enum I_Selected: 1 => {
+            type u32;
+            bind 3;
+            shader 7;
+        };
     }
 }
 
@@ -83,7 +89,7 @@ pub struct FrameDataBuffers {
     pub command: TriBuffer<DrawCommand>,
     pub scene: PartitionedTriBuffer<RENDER_STORAGE_PARTS>,
 
-    pub xpbd_debug: PartitionedTriBuffer<3>,
+    pub xpbd_debug: PartitionedTriBuffer<4>,
     pub xpbd_debug_link_count: Arc<AtomicU32>,
 }
 
