@@ -307,12 +307,14 @@ ethel::table_spec! {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct XpbdSolver {
     iterations: u32,
     substeps: u32,
     h: f32,
     h2: f32,
+    allow_breaking: bool,
+    broken_links: Vec<u32>,
 }
 
 impl Default for XpbdSolver {
@@ -322,18 +324,22 @@ impl Default for XpbdSolver {
             substeps: DEFAULT_SUB_STEPS,
             h: 0.0,
             h2: 0.0,
+            allow_breaking: true,
+            broken_links: Vec::with_capacity(32),
         }
     }
 }
 
 impl XpbdSolver {
     #[inline]
-    pub const fn new(iterations: u32, substeps: u32) -> Self {
+    pub fn new(iterations: u32, substeps: u32, allow_breaking: bool) -> Self {
         Self {
             iterations,
             substeps,
+            allow_breaking,
             h: 0.0,
             h2: 0.0,
+            broken_links: Vec::with_capacity(32 * allow_breaking as usize),
         }
     }
 
@@ -364,7 +370,7 @@ impl XpbdSolver {
     }
 
     #[inline]
-    pub fn step(&self, nodes: &mut NodesRowTable, links: &mut LinksRowTable) {
+    pub fn step(&mut self, nodes: &mut NodesRowTable, links: &mut LinksRowTable) {
         for _ in 0..self.substeps {
             self.substep(nodes, links);
         }
@@ -374,12 +380,31 @@ impl XpbdSolver {
     }
 
     #[inline]
-    fn substep(&self, nodes: &mut NodesRowTable, links: &mut LinksRowTable) {
+    fn substep(&mut self, nodes: &mut NodesRowTable, links: &mut LinksRowTable) {
         self.predict_positions(nodes);
         links.lambda_mut_slice().fill(0.0);
         for _ in 0..self.iterations {
             self.solve_constraints(nodes, links);
         }
+
+        if self.allow_breaking {
+            const LAMBDA_STRAIN_THRESHOLD: f32 = 15_000.0;
+            const LAMBDA_COMPRESSION_THRESHOLD: f32 = -20_000.0;
+
+            for (handle, lambda) in links.handles().iter().zip(links.lambda_slice()) {
+                let force_strain = *lambda / self.h2;
+                if force_strain >= LAMBDA_STRAIN_THRESHOLD
+                    || force_strain <= LAMBDA_COMPRESSION_THRESHOLD
+                {
+                    self.broken_links.push(*handle);
+                }
+            }
+
+            self.broken_links.drain(..).for_each(|handle| {
+                links.free(handle);
+            });
+        }
+
         self.finalise_nodes(nodes);
     }
 

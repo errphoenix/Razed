@@ -170,6 +170,12 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         if !input.cursor_options().grabbed {
             screen.sync().unwrap();
 
+            if let Some(selected) = self.selection.take()
+                && input.keys().key_pressed(janus::input::KeyCode::Delete)
+            {
+                self.xpbd.links_mut().free(selected);
+            }
+
             let cursor = input.cursor().current_f32();
             let inverse_view = view_point.into_mat4();
 
