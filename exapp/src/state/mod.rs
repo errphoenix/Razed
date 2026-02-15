@@ -1,18 +1,17 @@
 pub(crate) mod physics;
 
-use std::{sync::atomic::Ordering, time::Instant};
+use std::sync::atomic::Ordering;
 
 use crate::{
     data::{FrameDataBuffers, LayoutEntityData, LayoutXpbdDebugData, Renderable},
     state::physics::XpbdSystem,
     structure,
 };
-use ::physics::xpbd::{LatticeIds, XpbdLatticeBuilder};
+use ::physics::xpbd::{LatticeIds, XpbdLatticeBuilder, XpbdOptions, XpbdSolver};
 use ethel::{
     render::{ScreenSpace, command::DrawArraysIndirectCommand},
     state::{camera, data::Column},
 };
-use glam::Vec3Swizzles;
 use tracing::event;
 
 ethel::table_spec! {
@@ -23,7 +22,9 @@ ethel::table_spec! {
     }
 }
 
-#[derive(Debug, Default)]
+const GROUND_LEVEL: f32 = -15.0;
+
+#[derive(Debug)]
 pub struct State {
     renderables: Vec<Renderable>,
     mesh_ids: Vec<ethel::mesh::Id>,
@@ -38,6 +39,23 @@ pub struct State {
     node_map: Vec<u32>,
 
     camera: camera::Orbital,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            xpbd: XpbdSystem::new(XpbdSolver::new(
+                XpbdOptions::default().with_ground_level(Some(GROUND_LEVEL)),
+            )),
+
+            renderables: Default::default(),
+            mesh_ids: Default::default(),
+            entity_data: Default::default(),
+            selection: Default::default(),
+            node_map: Default::default(),
+            camera: Default::default(),
+        }
+    }
 }
 
 impl ethel::StateHandler<FrameDataBuffers> for State {
@@ -240,21 +258,18 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 *pos = glam::vec4(phys_pos.x, phys_pos.y, phys_pos.z, 1.0);
             }
         }
-        let t2 = Instant::now();
-
-        println!(
-            "{} physics nodes; compute time: {} nanos /// flush time: {} nanos /// total time: {} nanos",
-            self.entity_data.len(),
-            (t1 - t0).as_nanos(),
-            (t2 - t1).as_nanos(),
-            (t2 - t0).as_nanos()
-        );
 
         // random demo
         if input.keys().key_pressed(janus::input::KeyCode::KeyH) {
             let vp = view_point.get();
 
-            let lattice = structure::create_structure_lattice(vp.position, 8.0, 3.2, 6.0, 16);
+            let lattice = structure::create_structure_lattice(
+                glam::vec3(vp.position.x, GROUND_LEVEL, vp.position.z),
+                8.0,
+                3.2,
+                6.0,
+                10,
+            );
             let map = self.create_lattice(lattice);
             self.integrate_xpbd_entities(&map);
         }

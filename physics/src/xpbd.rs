@@ -314,6 +314,7 @@ pub struct XpbdSolver {
     h: f32,
     h2: f32,
     allow_breaking: bool,
+    ground_level: Option<f32>,
     broken_links: Vec<u32>,
 }
 
@@ -324,22 +325,95 @@ impl Default for XpbdSolver {
             substeps: DEFAULT_SUB_STEPS,
             h: 0.0,
             h2: 0.0,
+            ground_level: None,
             allow_breaking: true,
             broken_links: Vec::with_capacity(32),
         }
     }
 }
 
-impl XpbdSolver {
-    #[inline]
-    pub fn new(iterations: u32, substeps: u32, allow_breaking: bool) -> Self {
+#[derive(Clone, Copy, Debug)]
+pub struct XpbdOptions {
+    pub iterations: u32,
+    pub substeps: u32,
+    pub allow_breaking: bool,
+    pub ground_level: Option<f32>,
+}
+
+impl XpbdOptions {
+    pub const fn new(
+        iterations: u32,
+        substeps: u32,
+        allow_breaking: bool,
+        ground_level: Option<f32>,
+    ) -> Self {
         Self {
             iterations,
             substeps,
             allow_breaking,
+            ground_level,
+        }
+    }
+
+    pub const fn with_iterations(self, iterations: u32) -> Self {
+        Self {
+            iterations,
+            substeps: self.substeps,
+            allow_breaking: self.allow_breaking,
+            ground_level: self.ground_level,
+        }
+    }
+
+    pub const fn with_substeps(self, substeps: u32) -> Self {
+        Self {
+            substeps,
+            iterations: self.iterations,
+            allow_breaking: self.allow_breaking,
+            ground_level: self.ground_level,
+        }
+    }
+
+    pub const fn with_breaking(self, breaking: bool) -> Self {
+        Self {
+            allow_breaking: breaking,
+            iterations: self.iterations,
+            substeps: self.substeps,
+            ground_level: self.ground_level,
+        }
+    }
+
+    pub const fn with_ground_level(self, ground_level: Option<f32>) -> Self {
+        Self {
+            ground_level,
+            iterations: self.iterations,
+            substeps: self.substeps,
+            allow_breaking: self.allow_breaking,
+        }
+    }
+}
+
+impl Default for XpbdOptions {
+    fn default() -> Self {
+        Self {
+            iterations: DEFAULT_SOLVE_ITERATIONS,
+            substeps: DEFAULT_SUB_STEPS,
+            allow_breaking: true,
+            ground_level: None,
+        }
+    }
+}
+
+impl XpbdSolver {
+    #[inline]
+    pub fn new(options: XpbdOptions) -> Self {
+        Self {
             h: 0.0,
             h2: 0.0,
-            broken_links: Vec::with_capacity(32 * allow_breaking as usize),
+            iterations: options.iterations,
+            substeps: options.substeps,
+            allow_breaking: options.allow_breaking,
+            ground_level: options.ground_level,
+            broken_links: Vec::with_capacity(32 * options.allow_breaking as usize),
         }
     }
 
@@ -382,6 +456,10 @@ impl XpbdSolver {
     #[inline]
     fn substep(&mut self, nodes: &mut NodesRowTable, links: &mut LinksRowTable) {
         self.predict_positions(nodes);
+        if self.ground_level.is_some() {
+            self.apply_ground_constraint(nodes);
+        }
+
         links.lambda_mut_slice().fill(0.0);
         for _ in 0..self.iterations {
             self.solve_constraints(nodes, links);
@@ -404,7 +482,6 @@ impl XpbdSolver {
                 links.free(handle);
             });
         }
-
         self.finalise_nodes(nodes);
     }
 
@@ -466,6 +543,25 @@ impl XpbdSolver {
             let gradient = ab_d / dist;
             position[i_a as usize] += w_a * d_y * gradient;
             position[i_b as usize] -= w_b * d_y * gradient;
+        }
+    }
+
+    #[inline]
+    fn apply_ground_constraint(&self, node_data: &mut NodesRowTable) {
+        const RESTITUTION: f32 = 0.1;
+        const FRICTION: f32 = 0.75;
+
+        let ground_level = self.ground_level.unwrap_or_default();
+        let (n_pos, c_pos, _, _, _, velocity) = node_data.split_mut();
+        for (n_pos, c_pos, vel) in n_pos.join(c_pos).join(velocity) {
+            if n_pos.y < ground_level {
+                n_pos.y = ground_level;
+                c_pos.y = ground_level;
+
+                vel.y *= -RESTITUTION;
+                vel.x *= FRICTION;
+                vel.z *= FRICTION;
+            }
         }
     }
 
