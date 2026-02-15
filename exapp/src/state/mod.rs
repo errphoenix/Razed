@@ -120,7 +120,10 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 let constraints = self.xpbd.links().relation_slice();
                 let imap_nodes = self.xpbd.nodes().handles();
                 let pod_nodes = self.xpbd.nodes().current_pos_slice();
-                let selected_link = self.selection.unwrap_or_default();
+                let selected_link = {
+                    let handle = self.selection.unwrap_or_default();
+                    self.xpbd.links().get_indirect(handle).unwrap_or_default()
+                };
 
                 let node_count = self.xpbd.links().len() as u32;
                 storage.xpbd_debug_link_count.store(node_count, Ordering::Release);
