@@ -137,3 +137,14 @@ impl From<ethel::state::camera::ViewPoint> for Ray {
         Ray::new(value.position, value.forward())
     }
 }
+
+pub fn integrate_bare_body(
+    position: &mut glam::Vec3,
+    velocity: &mut glam::Vec3,
+    inv_mass: f32,
+    forces: glam::Vec3,
+    delta: janus::context::DeltaTime,
+) {
+    let t = delta.as_f32();
+    *position += *velocity * t + forces * inv_mass * t * t;
+}

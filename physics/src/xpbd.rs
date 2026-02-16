@@ -466,8 +466,8 @@ impl XpbdSolver {
         }
 
         if self.allow_breaking {
-            const LAMBDA_STRAIN_THRESHOLD: f32 = 15_000.0;
-            const LAMBDA_COMPRESSION_THRESHOLD: f32 = -20_000.0;
+            const LAMBDA_STRAIN_THRESHOLD: f32 = 60_000.0;
+            const LAMBDA_COMPRESSION_THRESHOLD: f32 = -50_000.0;
 
             for (handle, lambda) in links.handles().iter().zip(links.lambda_slice()) {
                 let force_strain = *lambda / self.h2;
@@ -548,8 +548,8 @@ impl XpbdSolver {
 
     #[inline]
     fn apply_ground_constraint(&self, node_data: &mut NodesRowTable) {
-        const RESTITUTION: f32 = 0.1;
-        const FRICTION: f32 = 0.75;
+        const RESTITUTION: f32 = 0.05;
+        const FRICTION: f32 = 0.65;
 
         let ground_level = self.ground_level.unwrap_or_default();
         let (n_pos, c_pos, _, _, _, velocity) = node_data.split_mut();
