@@ -1,3 +1,5 @@
+pub mod fragment;
+
 use physics::xpbd::{XpbdLatticeBuilder, XpbdLinkOptions, XpbdNodeOptions as Node};
 
 // height is per floor, not total building; todo: docs
