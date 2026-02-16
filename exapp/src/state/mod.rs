@@ -198,6 +198,15 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             let inverse_view = view_point.into_mat4();
 
             let mouse_world_dir = screen.to_world_space(cursor, inverse_view);
+            if input.keys().key_pressed(janus::input::KeyCode::Space) {
+                let dy = mouse_world_dir.y;
+                if dy.abs() > 0.001 {
+                    let t = -view_point.position.y / dy;
+                    let anchor = view_point.position + mouse_world_dir * t;
+                    self.camera.set_anchor(anchor);
+                }
+            }
+
             let mouse_ray = ::physics::Ray::new(view_point.position, mouse_world_dir);
 
             let node_positions = self.xpbd.nodes().current_pos_slice();
@@ -274,9 +283,15 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             self.integrate_xpbd_entities(&map);
         }
 
-        if input.keys().key_pressed(janus::input::KeyCode::KeyK) {
+        const CAMERA_KEY: janus::input::KeyCode = janus::input::KeyCode::Tab;
+        if input.keys().key_pressed(CAMERA_KEY) {
             input.cursor_options().publish_with(|opt| {
-                opt.grabbed = !opt.grabbed;
+                opt.grabbed = true;
+            });
+        }
+        if input.keys().key_released(CAMERA_KEY) {
+            input.cursor_options().publish_with(|opt| {
+                opt.grabbed = false;
             });
         }
     }
@@ -284,15 +299,10 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
 
 impl State {
     pub fn integrate_xpbd_entities(&mut self, mapping: &LatticeIds) {
-        let map = &mapping.nodes;
-
-        if self.node_map.len() == 0 {
+        if self.node_map.is_empty() {
             self.node_map.push(0);
         }
-        self.node_map.reserve(map.len());
-        for &n_i in map {
-            self.node_map.push(n_i);
-        }
+        self.node_map.extend_from_slice(&mapping.nodes);
     }
 
     pub fn create_renderable(
