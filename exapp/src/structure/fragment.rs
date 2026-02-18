@@ -70,7 +70,6 @@ impl FragmentSystem {
             node_hash.dump_soa(positions, handles);
         }
 
-        // todo
         let mut node_map = {
             let len = lattice.nodes().len();
             let mut node_map = Vec::with_capacity(len);
@@ -82,52 +81,59 @@ impl FragmentSystem {
 
         let mut fragments = FragmentsRowTable::with_capacity(voxels.count());
 
-        {
-            const QUERY_MAX_RANGE: u32 = 16;
+        const QUERY_MAX_RANGE: u32 = 16;
 
-            let mut near_buf = Vec::with_capacity(4);
-            let voxels = voxels.voxels().values();
+        let mut near_buf = Vec::with_capacity(4);
+        let voxels = voxels.voxels().values();
 
-            for &voxel in voxels {
-                let cell = node_hash.cell_at(voxel);
+        for &voxel in voxels {
+            let cell = node_hash.cell_at(voxel);
 
-                #[cfg(not(debug_assertions))]
-                let _ = node_hash.nearest_cells(cell, 4, QUERY_MAX_RANGE, &mut near_buf);
+            #[cfg(not(debug_assertions))]
+            let _ = node_hash.nearest_cells(cell, 4, QUERY_MAX_RANGE, &mut near_buf);
 
-                #[cfg(debug_assertions)]
-                {
-                    if let Err(rem) =
-                        node_hash.nearest_cells(cell, 4, QUERY_MAX_RANGE, &mut near_buf)
-                    {
-                        tracing::event!(
-                            name: "structure.fragment.build.query.err_maybe_miss",
-                            tracing::Level::DEBUG,
-                            "Query for nearby nodes to {cell:?} could not produce {rem} amount of nodes within range {QUERY_MAX_RANGE}: maybe a miss? or lattice is malformed."
-                        )
-                    }
+            #[cfg(debug_assertions)]
+            {
+                if let Err(rem) = node_hash.nearest_cells(cell, 4, QUERY_MAX_RANGE, &mut near_buf) {
+                    tracing::event!(
+                        name: "structure.fragment.build.query.err_maybe_miss",
+                        tracing::Level::DEBUG,
+                        "Query for nearby nodes to {cell:?} could not produce {rem} amount of nodes within range {QUERY_MAX_RANGE}: maybe a miss? or lattice is malformed."
+                    )
                 }
+            }
 
-                let parents = {
-                    let mut parents = [0u32; 4];
-                    near_buf
-                        .drain(..4)
-                        .zip(&mut parents)
-                        .for_each(|(cell, id)| {
-                            *id = node_hash.get(&cell).copied().unwrap_or_default()
-                        });
-                    near_buf.clear();
-                    parents
-                };
+            let (parents, weights) = {
+                let (mut parents, mut weights) = ([0u32; 4], [0f32; 4]);
 
-                fragments.put((
-                    parents,
-                    [0.25; 4], //todo
-                    FragmentState::Attached,
-                    100.0, //todo
-                    voxel,
-                    glam::Vec3::ZERO,
-                    glam::Vec3::ZERO,
-                ));
+                near_buf
+                    .drain(..4)
+                    .zip(&mut parents.iter_mut().zip(&mut weights))
+                    .for_each(|(cell, (id, weight))| {
+                        *id = node_hash.get(&cell).copied().unwrap_or_default();
+                        let point = node_hash.approx_point_at(cell);
+                        *weight = voxel.distance_squared(point);
+                    });
+
+                near_buf.clear();
+
+                let w_t = weights.iter().fold(0f32, |t, &v| t + v);
+                weights.iter_mut().for_each(|v| *v /= w_t);
+                (parents, weights)
+            };
+
+            let handle = fragments.put((
+                parents,
+                weights,
+                FragmentState::Attached,
+                100.0, //todo; health
+                voxel,
+                glam::Vec3::ZERO,
+                glam::Vec3::ZERO,
+            ));
+
+            for node in parents {
+                node_map[node as usize].push(handle);
             }
         }
 
