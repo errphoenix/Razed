@@ -1,3 +1,10 @@
+use ethel::state::data::{
+    Column,
+    hash::{Cell, FxSpatialHash, SpatialResolution},
+};
+
+use crate::state::physics::XpbdSystem;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FragmentState {
     /// The fragment is attached to the lattice structure.
@@ -39,15 +46,123 @@ ethel::table_spec! {
 #[derive(Debug, Default)]
 pub struct FragmentSystem {
     fragments: FragmentsRowTable,
+
+    // sparse map of node ID to sequence of fragment IDs
+    node_map: Vec<Vec<u32>>,
 }
 
-impl FragmentSystem {}
+impl FragmentSystem {
+    const LATTICE_SPATIAL_RESOLUTION: u32 = 2;
+
+    /// Initialise a new fragment complex from a [`VoxelGrid`] and `lattice`.
+    ///
+    /// The `voxels` [`VoxelGrid`] is expected to have been built previously
+    /// with [`VoxelGrid::build`].
+    pub fn new(voxels: VoxelGrid, lattice: XpbdSystem) -> Self {
+        let mut node_hash = FxSpatialHash::with_capacity(
+            SpatialResolution::new(Self::LATTICE_SPATIAL_RESOLUTION),
+            lattice.nodes().len(),
+        );
+
+        {
+            let positions = lattice.nodes().current_pos_slice();
+            let handles = lattice.nodes().handles();
+            node_hash.dump_soa(positions, handles);
+        }
+
+        // todo
+        let mut node_map = {
+            let len = lattice.nodes().len();
+            let mut node_map = Vec::with_capacity(len);
+            for _ in 0..len {
+                node_map.push(Vec::<u32>::new());
+            }
+            node_map
+        };
+
+        let mut fragments = FragmentsRowTable::with_capacity(voxels.count());
+
+        {
+            const QUERY_MAX_RANGE: u32 = 16;
+
+            let mut near_buf = Vec::with_capacity(4);
+            let voxels = voxels.voxels().values();
+
+            for &voxel in voxels {
+                let cell = node_hash.cell_at(voxel);
+
+                #[cfg(not(debug_assertions))]
+                let _ = node_hash.nearest_cells(cell, 4, QUERY_MAX_RANGE, &mut near_buf);
+
+                #[cfg(debug_assertions)]
+                {
+                    if let Err(rem) =
+                        node_hash.nearest_cells(cell, 4, QUERY_MAX_RANGE, &mut near_buf)
+                    {
+                        tracing::event!(
+                            name: "structure.fragment.build.query.err_maybe_miss",
+                            tracing::Level::DEBUG,
+                            "Query for nearby nodes to {cell:?} could not produce {rem} amount of nodes within range {QUERY_MAX_RANGE}: maybe a miss? or lattice is malformed."
+                        )
+                    }
+                }
+
+                let parents = {
+                    let mut parents = [0u32; 4];
+                    near_buf
+                        .drain(..4)
+                        .zip(&mut parents)
+                        .for_each(|(cell, id)| {
+                            *id = node_hash.get(&cell).copied().unwrap_or_default()
+                        });
+                    near_buf.clear();
+                    parents
+                };
+
+                fragments.put((
+                    parents,
+                    [0.25; 4], //todo
+                    FragmentState::Attached,
+                    100.0, //todo
+                    voxel,
+                    glam::Vec3::ZERO,
+                    glam::Vec3::ZERO,
+                ));
+            }
+        }
+
+        Self {
+            fragments,
+            node_map,
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VoxelCell {
-    x: i32,
-    y: i32,
-    z: i32,
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+}
+
+impl From<Cell> for VoxelCell {
+    fn from(value: Cell) -> Self {
+        VoxelCell {
+            x: value.x,
+            y: value.y,
+            z: value.z,
+        }
+    }
+}
+
+impl Into<Cell> for VoxelCell {
+    fn into(self) -> Cell {
+        Cell {
+            x: self.x,
+            y: self.y,
+            z: self.z,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
@@ -193,5 +308,9 @@ impl VoxelGrid {
 
     pub fn voxels(&self) -> &std::collections::HashMap<VoxelCell, glam::Vec3> {
         &self.voxels
+    }
+
+    pub fn count(&self) -> usize {
+        self.voxels.len()
     }
 }
