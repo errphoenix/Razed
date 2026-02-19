@@ -2,6 +2,9 @@ pub mod fragment;
 
 use physics::xpbd::{XpbdLatticeBuilder, XpbdLinkOptions, XpbdNodeOptions as Node};
 
+#[allow(unused_imports)]
+pub use fragment::{FragmentState, FragmentSystem};
+
 // height is per floor, not total building; todo: docs
 pub fn create_structure_lattice(
     origin: glam::Vec3,

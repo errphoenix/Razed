@@ -5,7 +5,10 @@ use std::sync::atomic::Ordering;
 use crate::{
     data::{FrameDataBuffers, LayoutEntityData, LayoutXpbdDebugData, Renderable},
     state::physics::XpbdSystem,
-    structure,
+    structure::{
+        self, FragmentSystem,
+        fragment::{VoxelGrid, VoxelGridOptions},
+    },
 };
 use ::physics::xpbd::{LatticeIds, XpbdLatticeBuilder, XpbdOptions, XpbdSolver};
 use ethel::{
@@ -31,6 +34,7 @@ pub struct State {
 
     entity_data: EntityDataRowTable,
     xpbd: XpbdSystem,
+    fragments: FragmentSystem,
 
     // selected xpbd link id
     selection: Option<u32>,
@@ -48,6 +52,7 @@ impl Default for State {
                 XpbdOptions::default().with_ground_level(Some(GROUND_LEVEL)),
             )),
 
+            fragments: Default::default(),
             renderables: Default::default(),
             mesh_ids: Default::default(),
             entity_data: Default::default(),
@@ -69,13 +74,11 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         >,
         command_queue: &mut ethel::render::command::GpuCommandQueue<ethel::DrawCommand>,
     ) {
-        self.renderables.iter().for_each(|_| {
-            command_queue.push(DrawArraysIndirectCommand {
-                count: 36,
-                instance_count: 1,
-                first_vertex: 0,
-                base_instance: 0,
-            });
+        command_queue.push(DrawArraysIndirectCommand {
+            count: 36,
+            instance_count: self.renderables.len() as u32,
+            first_vertex: 0,
+            base_instance: 0,
         });
 
         frame_boundary.cross(|section, storage| {
@@ -254,32 +257,43 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         self.xpbd
             .apply_forces_batched(glam::vec3(wind_z, -9.81, wind_x));
         self.xpbd.update(delta);
-        let t1 = Instant::now();
-        {
-            let len = self.entity_data.len();
-            let p_pos = self.xpbd.nodes().current_pos_slice();
-            let e_pos = self.entity_data.position_mut_slice();
-
-            for i in 1..len {
-                let pos = unsafe { e_pos.get_unchecked_mut(i) };
-                let imap = self.node_map[i];
-                let phys_pos = *unsafe { p_pos.get_unchecked(imap as usize) };
-                *pos = glam::vec4(phys_pos.x, phys_pos.y, phys_pos.z, 1.0);
-            }
-        }
+        // todo: change this to update fragments positions
+        //     let len = self.entity_data.len();
+        //     let p_pos = self.xpbd.nodes().current_pos_slice();
+        //     let e_pos = self.entity_data.position_mut_slice();
+        //
+        //     for i in 1..len {
+        //         let pos = unsafe { e_pos.get_unchecked_mut(i) };
+        //         let imap = self.node_map[i];
+        //         let phys_pos = *unsafe { p_pos.get_unchecked(imap as usize) };
+        //         *pos = glam::vec4(phys_pos.x, phys_pos.y, phys_pos.z, 1.0);
+        //     }
+        // }
 
         // random demo
         if input.keys().key_pressed(janus::input::KeyCode::KeyH) {
             let vp = view_point.get();
 
-            let lattice = structure::create_structure_lattice(
-                glam::vec3(vp.position.x, GROUND_LEVEL, vp.position.z),
-                8.0,
-                3.2,
-                6.0,
-                10,
+            const WIDTH: f32 = 8.0;
+            const HEIGHT: f32 = 4.0;
+            const DEPTH: f32 = 6.0;
+            const FLOORS: u32 = 2;
+            const TOTAL_HEIGHT: f32 = HEIGHT * FLOORS as f32;
+
+            let center = glam::vec3(vp.position.x, GROUND_LEVEL, vp.position.z);
+
+            let lattice = structure::create_structure_lattice(center, WIDTH, HEIGHT, DEPTH, FLOORS);
+
+            let mut voxel_grid = VoxelGrid::new(
+                |_| true,
+                VoxelGridOptions::default()
+                    .with_width(WIDTH)
+                    .with_height(TOTAL_HEIGHT)
+                    .with_depth(DEPTH),
             );
-            let map = self.create_lattice(lattice);
+            voxel_grid.build(center + glam::vec3(0f32, TOTAL_HEIGHT * 0.5, 0f32));
+
+            let map = self.register_structure(&voxel_grid, lattice);
             self.integrate_xpbd_entities(&map);
         }
 
@@ -326,18 +340,43 @@ impl State {
         id as u32
     }
 
-    pub fn create_lattice(&mut self, lattice: XpbdLatticeBuilder) -> LatticeIds {
+    pub fn register_structure(
+        &mut self,
+        voxel_grid: &VoxelGrid,
+        lattice: XpbdLatticeBuilder,
+    ) -> LatticeIds {
+        let l0 = self.xpbd.nodes().handles().len();
         let lattice_map = self.xpbd.import_lattice(lattice);
+        let l1 = self.xpbd.nodes().handles().len();
 
-        for &node_id in &lattice_map.nodes {
-            let position = {
-                let nodes = self.xpbd.nodes();
-                let pos_id = unsafe { nodes.get_indirect_unchecked(node_id) };
-                *unsafe { nodes.current_pos_slice().get_unchecked(pos_id as usize) }
-            };
+        if l0 == l1 {
+            return lattice_map;
+        }
 
+        let handles = &self.xpbd.nodes().handles()[l0..l1];
+        let positions = &self.xpbd.nodes().current_pos_slice()[l0..l1];
+
+        let l0 = self.fragments.table().handles().len();
+        self.fragments
+            .generate_fragments(voxel_grid, (handles, positions));
+        let l1 = self.fragments.table().handles().len();
+
+        for frag_idx in l0..l1 {
+            let table = self.fragments.table();
+            let position = *unsafe { table.position_slice().get_unchecked(frag_idx) };
             self.create_renderable(0, position, Default::default(), glam::Vec3::ONE);
         }
+
+        // debug render of nodes
+        // for &node_id in &lattice_map.nodes {
+        //     let position = {
+        //         let nodes = self.xpbd.nodes();
+        //         let pos_id = unsafe { nodes.get_indirect_unchecked(node_id) };
+        //         *unsafe { nodes.current_pos_slice().get_unchecked(pos_id as usize) }
+        //     };
+        //
+        //     self.create_renderable(0, position, Default::default(), glam::Vec3::ONE * 0.5);
+        // }
 
         lattice_map
     }

@@ -70,7 +70,7 @@ vec3 rotateQuat(vec3 p, vec4 q) {
 }
 
 void main() {
-    Entity mapping = entities[gl_DrawID];
+    Entity mapping = entities[gl_InstanceID];
     uint mesh_id_index = mapping.mesh_index;
     uint entity_data_index = imap_entity_data[mapping.data_id];
 
