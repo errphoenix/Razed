@@ -36,11 +36,10 @@ pub struct State {
     xpbd: XpbdSystem,
     fragments: FragmentSystem,
 
+    frag_map: Vec<u32>,
+
     // selected xpbd link id
     selection: Option<u32>,
-
-    // maps entity id to xpbd node handle
-    node_map: Vec<u32>,
 
     camera: camera::Orbital,
 }
@@ -56,8 +55,8 @@ impl Default for State {
             renderables: Default::default(),
             mesh_ids: Default::default(),
             entity_data: Default::default(),
+            frag_map: Default::default(),
             selection: Default::default(),
-            node_map: Default::default(),
             camera: Default::default(),
         }
     }
@@ -293,8 +292,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             );
             voxel_grid.build(center + glam::vec3(0f32, TOTAL_HEIGHT * 0.5, 0f32));
 
-            let map = self.register_structure(&voxel_grid, lattice);
-            self.integrate_xpbd_entities(&map);
+            self.register_structure(&voxel_grid, lattice);
         }
 
         const CAMERA_KEY: janus::input::KeyCode = janus::input::KeyCode::Tab;
@@ -312,13 +310,6 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
 }
 
 impl State {
-    pub fn integrate_xpbd_entities(&mut self, mapping: &LatticeIds) {
-        if self.node_map.is_empty() {
-            self.node_map.push(0);
-        }
-        self.node_map.extend_from_slice(&mapping.nodes);
-    }
-
     pub fn create_renderable(
         &mut self,
         mesh_id: u32,
@@ -353,6 +344,11 @@ impl State {
             return lattice_map;
         }
 
+        // handle degenerate
+        if self.frag_map.is_empty() {
+            self.frag_map.push(0);
+        }
+
         let handles = &self.xpbd.nodes().handles()[l0..l1];
         let positions = &self.xpbd.nodes().current_pos_slice()[l0..l1];
 
@@ -364,7 +360,8 @@ impl State {
         for frag_idx in l0..l1 {
             let table = self.fragments.table();
             let position = *unsafe { table.position_slice().get_unchecked(frag_idx) };
-            self.create_renderable(0, position, Default::default(), glam::Vec3::ONE);
+            let e_id = self.create_renderable(0, position, Default::default(), glam::Vec3::ONE);
+            self.frag_map.push(e_id);
         }
 
         // debug render of nodes

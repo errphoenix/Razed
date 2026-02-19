@@ -94,6 +94,11 @@ impl XpbdSystem {
     }
 
     #[inline]
+    pub fn frame_broken_links(&self) -> &[u32] {
+        self.solver.broken_links()
+    }
+
+    #[inline]
     pub fn import_lattice(
         &mut self,
         lattice_builder: XpbdLatticeBuilder,

@@ -443,8 +443,26 @@ impl XpbdSolver {
         self.h2 = self.h * self.h;
     }
 
+    /// Returns a slice over the constraint IDs that were broken in the last
+    /// step.
+    ///
+    /// This is reset at the beginning of every step. Broken constraint IDs
+    /// are accumulated every sub-step.
+    ///
+    /// # Panics
+    /// Will panic if the XPBD's solver `allow_breaking` flag is `false`.
+    pub fn broken_links(&self) -> &[u32] {
+        assert!(
+            self.allow_breaking,
+            "cannot query broken links: allow_breaking flag for XPBD is set to false"
+        );
+
+        &self.broken_links
+    }
+
     #[inline]
     pub fn step(&mut self, nodes: &mut NodesRowTable, links: &mut LinksRowTable) {
+        self.broken_links.clear();
         for _ in 0..self.substeps {
             self.substep(nodes, links);
         }
@@ -478,7 +496,7 @@ impl XpbdSolver {
                 }
             }
 
-            self.broken_links.drain(..).for_each(|handle| {
+            self.broken_links.iter().for_each(|&handle| {
                 links.free(handle);
             });
         }

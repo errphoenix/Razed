@@ -1,7 +1,11 @@
+use std::collections::HashSet;
+
 use ethel::state::data::{
     Column,
     hash::{Cell, FxSpatialHash, SpatialResolution},
 };
+use physics::xpbd::{LinkNodes, LinksRowTable};
+use rustc_hash::FxHashSet;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FragmentState {
@@ -47,6 +51,16 @@ pub struct FragmentSystem {
 
     // sparse map of node ID to sequence of fragment IDs
     node_map: Vec<Vec<u32>>,
+
+    // alltime accumulated set of disabled node IDs; avoids dedup op
+    disabled_nodes: FxHashSet<u32>,
+
+    // alltime accumulated set of disable fragment IDs; avoids dedup op
+    // these are the fragments' indirect indices (stable)
+    disabled_frags_alltime: FxHashSet<u32>,
+    // per-frame list of disabled fragment IDs
+    // these are the fragments' direct indices (unstable)
+    disabled_frags_frame: Vec<u32>,
 }
 
 impl Default for FragmentSystem {
@@ -61,6 +75,10 @@ impl FragmentSystem {
             fragments: FragmentsRowTable::new(),
             // account for degenerate
             node_map: vec![Vec::new()],
+
+            disabled_nodes: FxHashSet::default(),
+            disabled_frags_alltime: FxHashSet::default(),
+            disabled_frags_frame: Vec::new(),
         }
     }
 
@@ -72,6 +90,10 @@ impl FragmentSystem {
         Self {
             fragments: FragmentsRowTable::with_capacity(capacity),
             node_map,
+
+            disabled_nodes: FxHashSet::default(),
+            disabled_frags_alltime: FxHashSet::default(),
+            disabled_frags_frame: Vec::new(),
         }
     }
 
@@ -100,6 +122,69 @@ impl FragmentSystem {
 
     pub fn table_mut(&mut self) -> &mut FragmentsRowTable {
         &mut self.fragments
+    }
+
+    pub fn reset(&mut self) {
+        self.disabled_nodes.clear();
+        self.node_map.clear();
+    }
+
+    pub fn handle_constraint_break(&mut self, broken_ids: &[u32], constraints: &LinksRowTable) {
+        self.disabled_frags_frame.clear();
+        {
+            let f_handles = self.fragments.handles();
+            let relations = constraints.relation_slice();
+
+            for broken in broken_ids {
+                let index = unsafe { constraints.get_indirect_unchecked(*broken) };
+                let LinkNodes(a, b) = *unsafe { relations.get_unchecked(index as usize) };
+
+                println!("check.. node{a}");
+                if self.disabled_nodes.insert(a) {
+                    for &frag_id in &self.node_map[a as usize] {
+                        if frag_id == 0 {
+                            continue;
+                        }
+                        println!("check.. {frag_id}");
+                        if self.disabled_frags_alltime.insert(frag_id) {
+                            println!("break {frag_id}");
+                            let index = *unsafe { f_handles.get_unchecked(frag_id as usize) };
+                            self.disabled_frags_frame.push(index);
+                        }
+                    }
+                }
+                if self.disabled_nodes.insert(b) {
+                    for &frag_id in &self.node_map[b as usize] {
+                        if frag_id == 0 {
+                            continue;
+                        }
+                        if self.disabled_frags_alltime.insert(frag_id) {
+                            println!("break {frag_id}");
+                            let index = *unsafe { f_handles.get_unchecked(frag_id as usize) };
+                            self.disabled_frags_frame.push(index);
+                        }
+                    }
+                }
+            }
+        }
+
+        let states = self.fragments.state_mut_slice();
+        self.disabled_frags_frame.iter().for_each(|&frag_id| {
+            *unsafe { states.get_unchecked_mut(frag_id as usize) } = FragmentState::Debris;
+        });
+    }
+
+    /// Return a slice containing the *direct indices* of all fragments
+    /// disabled in the last frame.
+    ///
+    /// Note: this returns **direct indices**; these are the direct element
+    /// indices inside of the fragments table. These are not stable handles.
+    ///
+    /// These are unstable and may change from one frame to another; they are
+    /// intended for use only during the same frame this was populated in and
+    /// before any operation that might add/remove elements to the table.
+    pub fn frame_disabled_frags_direct(&self) -> &[u32] {
+        &self.disabled_frags_frame
     }
 
     const LATTICE_SPATIAL_RESOLUTION: u32 = 2;
