@@ -36,9 +36,10 @@ pub struct State {
     xpbd: XpbdSystem,
     fragments: FragmentSystem,
 
+    /// Mapping between fragment direct index and the **RENDERABLE** index
     frag_map: Vec<u32>,
 
-    // selected xpbd link id
+    /// Selected xpbd link id
     selection: Option<u32>,
 
     camera: camera::Orbital,
@@ -259,8 +260,9 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
 
             let broken_frags = self.fragments.frame_disabled_frags_direct();
             for &broken in broken_frags {
-                let e_id = *unsafe { self.frag_map.get_unchecked(broken as usize) };
-                let e_index = unsafe { self.entity_data.get_indirect_unchecked(e_id) };
+                let renderable_id = *unsafe { self.frag_map.get_unchecked(broken as usize) };
+                let entity_id = self.renderables[renderable_id as usize].data_handle;
+                let e_index = unsafe { self.entity_data.get_indirect_unchecked(entity_id) };
                 let pos = unsafe {
                     self.entity_data
                         .position_mut_slice()

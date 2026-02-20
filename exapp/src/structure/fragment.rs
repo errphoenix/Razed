@@ -218,13 +218,25 @@ impl FragmentSystem {
             let cell = node_hash.cell_at(voxel);
 
             #[cfg(not(debug_assertions))]
-            let _ = node_hash.nearest_cells(cell, 4, Self::QUERY_MAX_RANGE, &mut near_buf);
+            let _ = node_hash.nearest_cells(
+                cell,
+                4,
+                Self::QUERY_MAX_RANGE,
+                Self::QUERY_MAX_RANGE,
+                Self::QUERY_MAX_RANGE,
+                &mut near_buf,
+            );
 
             #[cfg(debug_assertions)]
             {
-                if let Err(rem) =
-                    node_hash.nearest_cells(cell, 4, Self::QUERY_MAX_RANGE, &mut near_buf)
-                {
+                if let Err(rem) = node_hash.nearest_cells(
+                    cell,
+                    4,
+                    Self::QUERY_MAX_RANGE,
+                    Self::QUERY_MAX_RANGE,
+                    Self::QUERY_MAX_RANGE,
+                    &mut near_buf,
+                ) {
                     tracing::event!(
                         name: "structure.fragment.build.query.err_maybe_miss",
                         tracing::Level::ERROR,
