@@ -443,6 +443,21 @@ impl XpbdSolver {
         self.h2 = self.h * self.h;
     }
 
+    /// Break a link by its ID.
+    ///
+    /// # Panics
+    /// Will panic:
+    /// * If `link_id` is an invalid constraint handle.
+    /// * If the XPBD solver's `allow_breaking` flag is `false`.
+    pub fn break_link(&mut self, link_id: u32) {
+        assert!(
+            self.allow_breaking,
+            "cannot query broken links: allow_breaking flag for XPBD is set to false"
+        );
+
+        self.broken_links.push(link_id);
+    }
+
     /// Returns a slice over the constraint IDs that were broken in the last
     /// step.
     ///
@@ -450,7 +465,7 @@ impl XpbdSolver {
     /// are accumulated every sub-step.
     ///
     /// # Panics
-    /// Will panic if the XPBD's solver `allow_breaking` flag is `false`.
+    /// Will panic if the XPBD solver's `allow_breaking` flag is `false`.
     pub fn broken_links(&self) -> &[u32] {
         assert!(
             self.allow_breaking,
@@ -462,7 +477,24 @@ impl XpbdSolver {
 
     #[inline]
     pub fn step(&mut self, nodes: &mut NodesRowTable, links: &mut LinksRowTable) {
+        if self.allow_breaking {
+            const LAMBDA_STRAIN_THRESHOLD: f32 = 45_000.0;
+            const LAMBDA_COMPRESSION_THRESHOLD: f32 = -15_000.0;
+
+            for (handle, lambda) in links.handles().iter().zip(links.lambda_slice()) {
+                let force_strain = *lambda / self.h2;
+                if force_strain >= LAMBDA_STRAIN_THRESHOLD
+                    || force_strain <= LAMBDA_COMPRESSION_THRESHOLD
+                {
+                    self.broken_links.push(*handle);
+                }
+            }
+        }
+        self.broken_links.iter().for_each(|&handle| {
+            links.free(handle);
+        });
         self.broken_links.clear();
+
         for _ in 0..self.substeps {
             self.substep(nodes, links);
         }
@@ -481,24 +513,6 @@ impl XpbdSolver {
         links.lambda_mut_slice().fill(0.0);
         for _ in 0..self.iterations {
             self.solve_constraints(nodes, links);
-        }
-
-        if self.allow_breaking {
-            const LAMBDA_STRAIN_THRESHOLD: f32 = 45_000.0;
-            const LAMBDA_COMPRESSION_THRESHOLD: f32 = -15_000.0;
-
-            for (handle, lambda) in links.handles().iter().zip(links.lambda_slice()) {
-                let force_strain = *lambda / self.h2;
-                if force_strain >= LAMBDA_STRAIN_THRESHOLD
-                    || force_strain <= LAMBDA_COMPRESSION_THRESHOLD
-                {
-                    self.broken_links.push(*handle);
-                }
-            }
-
-            self.broken_links.iter().for_each(|&handle| {
-                links.free(handle);
-            });
         }
         self.finalise_nodes(nodes);
     }

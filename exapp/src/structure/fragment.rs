@@ -139,15 +139,12 @@ impl FragmentSystem {
                 let index = unsafe { constraints.get_indirect_unchecked(*broken) };
                 let LinkNodes(a, b) = *unsafe { relations.get_unchecked(index as usize) };
 
-                println!("check.. node{a}");
                 if self.disabled_nodes.insert(a) {
                     for &frag_id in &self.node_map[a as usize] {
                         if frag_id == 0 {
                             continue;
                         }
-                        println!("check.. {frag_id}");
                         if self.disabled_frags_alltime.insert(frag_id) {
-                            println!("break {frag_id}");
                             let index = *unsafe { f_handles.get_unchecked(frag_id as usize) };
                             self.disabled_frags_frame.push(index);
                         }
@@ -159,7 +156,6 @@ impl FragmentSystem {
                             continue;
                         }
                         if self.disabled_frags_alltime.insert(frag_id) {
-                            println!("break {frag_id}");
                             let index = *unsafe { f_handles.get_unchecked(frag_id as usize) };
                             self.disabled_frags_frame.push(index);
                         }
@@ -220,7 +216,6 @@ impl FragmentSystem {
         let mut i = 0;
         for &voxel in voxels {
             let cell = node_hash.cell_at(voxel);
-            println!("{cell:?}");
 
             #[cfg(not(debug_assertions))]
             let _ = node_hash.nearest_cells(cell, 4, Self::QUERY_MAX_RANGE, &mut near_buf);
@@ -230,22 +225,24 @@ impl FragmentSystem {
                 if let Err(rem) =
                     node_hash.nearest_cells(cell, 4, Self::QUERY_MAX_RANGE, &mut near_buf)
                 {
-                    // tracing::event!(
-                    //     name: "structure.fragment.build.query.err_maybe_miss",
-                    //     tracing::Level::ERROR,
-                    //     "Query for nearby nodes to {cell:?} could not produce {rem} amount of nodes within range {}: maybe a miss? or lattice is malformed.",
-                    //     Self::QUERY_MAX_RANGE
-                    // )
+                    tracing::event!(
+                        name: "structure.fragment.build.query.err_maybe_miss",
+                        tracing::Level::ERROR,
+                        "Query for nearby nodes to {cell:?} could not produce {rem} amount of nodes within range {}: maybe a miss? or lattice is malformed.",
+                        Self::QUERY_MAX_RANGE
+                    )
                 }
             }
 
+            println!("{cell:?}, found nearest nodes: {near_buf:?}");
+
             let n_count = near_buf.len().min(4);
             if n_count == 0 {
-                // tracing::event!(
-                //     name: "structure.fragment.build.query.skip_voxel",
-                //     tracing::Level::WARN,
-                //     "Skipping voxel {cell:?}: no nearby nodes in spatial hash."
-                // );
+                tracing::event!(
+                    name: "structure.fragment.build.query.skip_voxel",
+                    tracing::Level::WARN,
+                    "Skipping voxel {cell:?}: no nearby nodes in spatial hash."
+                );
                 continue;
             }
 

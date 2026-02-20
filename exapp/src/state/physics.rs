@@ -40,6 +40,14 @@ impl XpbdSystem {
         self.solver.step(&mut self.nodes, &mut self.links);
     }
 
+    /// Break a `constraint` by its handle.
+    #[inline]
+    pub fn break_constraint(&mut self, constraint: u32) {
+        if self.links.get_indirect(constraint).is_some() {
+            self.solver.break_link(constraint);
+        }
+    }
+
     #[inline]
     pub fn apply_forces(&mut self, index: u32, force: glam::Vec3) {
         if let Some(node) = self.nodes.get_indirect(index) {

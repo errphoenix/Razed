@@ -193,7 +193,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             if let Some(selected) = self.selection.take()
                 && input.keys().key_pressed(janus::input::KeyCode::Delete)
             {
-                self.xpbd.links_mut().free(selected);
+                self.xpbd.break_constraint(selected);
             }
 
             let cursor = input.cursor().current_f32();
@@ -248,14 +248,31 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             });
         }
 
-        let look_dir = self.camera.viewpoint().forward();
-        const WIND_STRENGTH: f32 = 1.85;
-        let (wind_x, wind_z) = (look_dir.x * WIND_STRENGTH, look_dir.z * WIND_STRENGTH);
-
-        let t0 = Instant::now();
+        const WIND_FORCE: f32 = 1.0;
         self.xpbd
-            .apply_forces_batched(glam::vec3(wind_z, -9.81, wind_x));
+            .apply_forces_batched(glam::vec3(WIND_FORCE, -9.81, WIND_FORCE));
+
+        {
+            let broken_links = self.xpbd.frame_broken_links();
+            self.fragments
+                .handle_constraint_break(broken_links, self.xpbd.links());
+
+            let broken_frags = self.fragments.frame_disabled_frags_direct();
+            for &broken in broken_frags {
+                let e_id = *unsafe { self.frag_map.get_unchecked(broken as usize) };
+                let e_index = unsafe { self.entity_data.get_indirect_unchecked(e_id) };
+                let pos = unsafe {
+                    self.entity_data
+                        .position_mut_slice()
+                        .get_unchecked_mut(e_index as usize)
+                };
+
+                pos.w = 0.0;
+            }
+        }
+
         self.xpbd.update(delta);
+
         // todo: change this to update fragments positions
         //     let len = self.entity_data.len();
         //     let p_pos = self.xpbd.nodes().current_pos_slice();
