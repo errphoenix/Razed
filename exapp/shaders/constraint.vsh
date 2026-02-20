@@ -26,7 +26,7 @@ layout(std430, binding = 7) readonly buffer I_Selected
 uniform mat4 u_projection;
 uniform mat4 u_view;
 
-out vec3 fs_normal;
+out vec4 fs_color;
 
 void main() {
     uint constraint_id = gl_InstanceID;
@@ -36,9 +36,9 @@ void main() {
     uint node_id = constraint.node_pair[node_offset];
     uint node_ii = imap_nodes[node_id];
 
-    fs_normal = vec3(0.0, 1.0, 0.0);
+    fs_color = vec4(0.0, 1.0, 0.0, 0.4);
     if (constraint_id == i_selected) {
-        fs_normal = vec3(1.0, 0.0, 0.0);
+        fs_color = vec4(1.0, 0.0, 0.0, 1.0);
     }
 
     vec3 position = pod_nodes[node_ii].xyz;

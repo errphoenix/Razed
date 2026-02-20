@@ -22,6 +22,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         screen.sync().unwrap();
         let view_mat = view.into_mat4().inverse();
         let proj = screen.projection();
+        let cam_forward = view.forward();
 
         self.xpbd_dbg_shader.bind();
         self.xpbd_dbg_shader.uniform_mat4_glam("u_view", view_mat);
@@ -34,6 +35,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             .uniform_mat4_glam("u_projection", *proj);
 
         self.base_shader.bind();
+        self.base_shader
+            .uniform_vec3_glam("u_camera_forward", cam_forward);
         self.base_shader.uniform_mat4_glam("u_view", view_mat);
         self.base_shader.uniform_mat4_glam("u_projection", *proj);
     }
@@ -83,12 +86,12 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         self.base_shader = ShaderHandle::new(&mut vsh, &mut fsh);
 
         const VSH_CONSTRAINT_SOURCE: &[u8] = include_bytes!("../shaders/constraint.vsh");
+        const FSH_SOLID_SOURCE: &[u8] = include_bytes!("../shaders/solid.fsh");
         let mut vsh = std::io::BufReader::new(VSH_CONSTRAINT_SOURCE);
-        let mut fsh = std::io::BufReader::new(FSH_BASE_SOURCE);
+        let mut fsh = std::io::BufReader::new(FSH_SOLID_SOURCE);
         self.xpbd_dbg_shader = ShaderHandle::new(&mut vsh, &mut fsh);
 
         const VSH_LINE_SOURCE: &[u8] = include_bytes!("../shaders/line.vsh");
-        const FSH_SOLID_SOURCE: &[u8] = include_bytes!("../shaders/solid.fsh");
         let mut vsh = std::io::BufReader::new(VSH_LINE_SOURCE);
         let mut fsh = std::io::BufReader::new(FSH_SOLID_SOURCE);
         self.line_dbg_shader = ShaderHandle::new(&mut vsh, &mut fsh);

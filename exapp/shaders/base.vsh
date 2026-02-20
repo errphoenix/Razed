@@ -57,6 +57,7 @@ uniform mat4 u_view;
 
 out vec3 fs_world;
 out vec3 fs_normal;
+out vec4 fs_color;
 
 vec4 mulQuat(vec4 q0, vec4 q1);
 
@@ -84,7 +85,7 @@ void main() {
     uint index = offset + gl_VertexID;
 
     Vertex vertex = vertex_storage[index];
-    vec3 model = vertex.position.xyz * e_scale;
+    vec3 model = vertex.position.xyz * e_scale * 0.5;
     vec3 normal = normalize(vertex.normal.xyz);
 
     vec3 local = rotateQuat(model, e_rotation);
@@ -92,6 +93,11 @@ void main() {
 
     fs_world = world.xyz;
     fs_normal = normal;
+
+    const vec4 COL_ATTACHED = vec4(0.0, 0.0, 1.0, 1.0);
+    const vec4 COL_DETACHED = vec4(1.0, 0.0, 0.0, 1.0);
+    float e_state_dbg = pod_positions[entity_data_index].w;
+    fs_color = vec4(vec3(0.35), e_state_dbg);
 
     gl_Position = u_projection * u_view * world;
 }
