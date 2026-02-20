@@ -477,6 +477,14 @@ impl XpbdSolver {
 
     #[inline]
     pub fn step(&mut self, nodes: &mut NodesRowTable, links: &mut LinksRowTable) {
+        self.broken_links.iter().for_each(|&handle| {
+            links.free(handle);
+        });
+
+        // clear last frame, allow external systems to act from
+        // accumulated broken links
+        self.broken_links.clear();
+
         if self.allow_breaking {
             const LAMBDA_STRAIN_THRESHOLD: f32 = 45_000.0;
             const LAMBDA_COMPRESSION_THRESHOLD: f32 = -15_000.0;
@@ -490,10 +498,6 @@ impl XpbdSolver {
                 }
             }
         }
-        self.broken_links.iter().for_each(|&handle| {
-            links.free(handle);
-        });
-        self.broken_links.clear();
 
         for _ in 0..self.substeps {
             self.substep(nodes, links);
