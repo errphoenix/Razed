@@ -12,6 +12,11 @@ const float LIGHT_AMBIENT = 0.1;
 
 void main() {
     vec4 albedo = fs_color;
+
+    if (albedo.a < 0.1) {
+        discard;
+    }
+
     vec3 normal = fs_normal;
 
     // basic directional light (camera source)

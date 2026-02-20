@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use ethel::state::data::{
     Column,
     hash::{Cell, FxSpatialHash, SpatialResolution},
@@ -184,7 +182,7 @@ impl FragmentSystem {
     }
 
     const LATTICE_SPATIAL_RESOLUTION: u32 = 2;
-    const QUERY_MAX_RANGE: u32 = 8 * Self::LATTICE_SPATIAL_RESOLUTION;
+    const QUERY_MAX_RANGE: u32 = 2 * Self::LATTICE_SPATIAL_RESOLUTION;
 
     /// Generate new fragments from a [`VoxelGrid`] and `lattice`.
     ///
