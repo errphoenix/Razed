@@ -6,8 +6,8 @@ use ethel::{
 };
 
 pub const RENDER_STORAGE_PARTS: usize = 8;
-pub const ENTITY_ALLOCATION: usize = 1024;
-pub const COMMAND_QUEUE_ALLOC: usize = 1024;
+pub const ENTITY_ALLOCATION: usize = 8192;
+pub const COMMAND_QUEUE_ALLOC: usize = 2048;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[repr(C)]
@@ -84,10 +84,45 @@ layout_buffer! {
     }
 }
 
+pub const FRAGMENTS_ALLOC: usize = 16384;
+pub const FRAGMENTS_DATA_PARTS: usize = 5;
+
+layout_buffer! {
+    const FragmentData: FRAGMENTS_DATA_PARTS, {
+        enum PodParents: FRAGMENTS_ALLOC => {
+            type [u32; 4];
+            bind 0;
+            shader 0;
+        };
+        enum PodWeights: FRAGMENTS_ALLOC => {
+            type [f32; 4];
+            bind 1;
+            shader 1;
+        };
+        enum PodOffsets: FRAGMENTS_ALLOC => {
+            type glam::Vec4;
+            bind 2;
+            shader 2;
+        };
+
+        enum IMapNodes: XPBD_NODES_ALLOC => {
+            type u32;
+            bind 3;
+            shader 6;
+        };
+        enum PodNodesPositions: XPBD_NODES_ALLOC => {
+            type [f32; 4];
+            bind 4;
+            shader 7;
+        };
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct FrameDataBuffers {
     pub command: TriBuffer<DrawCommand>,
     pub scene: PartitionedTriBuffer<RENDER_STORAGE_PARTS>,
+    pub fragments: PartitionedTriBuffer<FRAGMENTS_DATA_PARTS>,
 
     pub xpbd_debug: PartitionedTriBuffer<4>,
     pub xpbd_debug_link_count: Arc<AtomicU32>,
@@ -101,10 +136,16 @@ impl FrameDataBuffers {
         let xpbd_visualiser = PartitionedTriBuffer::new(LayoutXpbdDebugData::create());
         LayoutXpbdDebugData::initialise_partitions(&xpbd_visualiser);
 
+        let fragment_data = PartitionedTriBuffer::new(LayoutFragmentData::create());
+        LayoutFragmentData::initialise_partitions(&fragment_data);
+
         Self {
             command: TriBuffer::zeroed(COMMAND_QUEUE_ALLOC),
+
             scene: scene_data_buffer,
             xpbd_debug: xpbd_visualiser,
+            fragments: fragment_data,
+
             xpbd_debug_link_count: Arc::new(AtomicU32::new(0)),
         }
     }

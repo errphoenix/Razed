@@ -3,7 +3,9 @@ pub(crate) mod physics;
 use std::sync::atomic::Ordering;
 
 use crate::{
-    data::{FrameDataBuffers, LayoutEntityData, LayoutXpbdDebugData, Renderable},
+    data::{
+        FrameDataBuffers, LayoutEntityData, LayoutFragmentData, LayoutXpbdDebugData, Renderable,
+    },
     state::physics::XpbdSystem,
     structure::{
         self, FragmentSystem,
@@ -13,7 +15,10 @@ use crate::{
 use ::physics::xpbd::{LatticeIds, XpbdLatticeBuilder, XpbdOptions, XpbdSolver};
 use ethel::{
     render::{ScreenSpace, command::DrawArraysIndirectCommand},
-    state::{camera, data::Column},
+    state::{
+        camera,
+        data::{Column, SparseSlot},
+    },
 };
 use tracing::event;
 
@@ -74,15 +79,45 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         >,
         command_queue: &mut ethel::render::command::GpuCommandQueue<ethel::DrawCommand>,
     ) {
+        // command_queue.push(DrawArraysIndirectCommand {
+        //     count: 36,
+        //     instance_count: self.renderables.len() as u32,
+        //     first_vertex: 0,
+        //     base_instance: 0,
+        // });
+
+        let fragment_count = self.fragments.table().len() as u32;
         command_queue.push(DrawArraysIndirectCommand {
             count: 36,
-            instance_count: self.renderables.len() as u32,
+            // degenerate 0 offset handled in shader
+            instance_count: fragment_count - 1,
             first_vertex: 0,
             base_instance: 0,
         });
 
         frame_boundary.cross(|section, storage| {
             let buf_idx = section.as_index();
+
+            {
+                let fragments = &storage.fragments;
+
+                let imap_nodes = self.xpbd.nodes().handles();
+                let pod_nodes_positions = self.xpbd.nodes().current_pos_slice();
+                let pod_parents = self.fragments.table().parents_slice();
+                let pod_weights = self.fragments.table().influence_slice();
+                let pod_offsets = self.fragments.table().rest_offset_slice();
+
+                // SAFETY: the use of LayoutFragmentData ensures we are
+                // blitting to a valid section of the fragments partitioned
+                // buffer.
+                unsafe {
+                    fragments.blit_part(buf_idx, LayoutFragmentData::ImapNodes as usize, imap_nodes, 0);
+                    fragments.blit_part_padded(buf_idx, LayoutFragmentData::PodNodesPositions as usize, pod_nodes_positions, 0, 4);
+                    fragments.blit_part(buf_idx, LayoutFragmentData::PodParents as usize, pod_parents, 0);
+                    fragments.blit_part(buf_idx, LayoutFragmentData::PodWeights as usize, pod_weights, 0);
+                    fragments.blit_part_padded(buf_idx, LayoutFragmentData::PodOffsets as usize, pod_offsets, 0, 4);
+                }
+            }
 
             {
                 let scene = &storage.scene;
@@ -275,27 +310,14 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
 
         self.xpbd.update(delta);
 
-        // todo: change this to update fragments positions
-        //     let len = self.entity_data.len();
-        //     let p_pos = self.xpbd.nodes().current_pos_slice();
-        //     let e_pos = self.entity_data.position_mut_slice();
-        //
-        //     for i in 1..len {
-        //         let pos = unsafe { e_pos.get_unchecked_mut(i) };
-        //         let imap = self.node_map[i];
-        //         let phys_pos = *unsafe { p_pos.get_unchecked(imap as usize) };
-        //         *pos = glam::vec4(phys_pos.x, phys_pos.y, phys_pos.z, 1.0);
-        //     }
-        // }
-
         // random demo
         if input.keys().key_pressed(janus::input::KeyCode::KeyH) {
             let vp = view_point.get();
 
-            const WIDTH: f32 = 8.0;
-            const HEIGHT: f32 = 4.0;
-            const DEPTH: f32 = 6.0;
-            const FLOORS: u32 = 2;
+            const WIDTH: f32 = 12.0;
+            const HEIGHT: f32 = 6.0;
+            const DEPTH: f32 = 16.0;
+            const FLOORS: u32 = 4;
             const TOTAL_HEIGHT: f32 = HEIGHT * FLOORS as f32;
 
             let center = glam::vec3(vp.position.x, GROUND_LEVEL, vp.position.z);
@@ -368,14 +390,27 @@ impl State {
             self.frag_map.push(0);
         }
 
+        // todo: CLEANUP THIS UGLY PIECE OF SHIT
+        let owners = &self
+            .xpbd
+            .nodes()
+            .slots_map()
+            .iter()
+            .map(|v| v.saturating_sub(l0 as u32))
+            .collect::<Vec<_>>();
+
         let handles = &self.xpbd.nodes().handles()[l0..l1];
         let positions = &self.xpbd.nodes().current_pos_slice()[l0..l1];
 
         let l0 = self.fragments.table().handles().len();
         self.fragments
-            .generate_fragments(voxel_grid, (handles, positions));
+            .generate_fragments(voxel_grid, (owners, handles, positions));
         let l1 = self.fragments.table().handles().len();
 
+        // currently unnecessary
+        // fragments are rendered directly, not as renderables
+        // eventually this will no longer be the case: fragments will be
+        // adapted to renderables through compute shaders.
         for frag_idx in l0..l1 {
             let table = self.fragments.table();
             let position = *unsafe { table.position_slice().get_unchecked(frag_idx) };

@@ -9,6 +9,7 @@ pub struct Renderer {
     base_shader: ShaderHandle,
     xpbd_dbg_shader: ShaderHandle,
     line_dbg_shader: ShaderHandle,
+    frags_shader: ShaderHandle,
 }
 
 impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
@@ -39,6 +40,12 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             .uniform_vec3_glam("u_camera_forward", cam_forward);
         self.base_shader.uniform_mat4_glam("u_view", view_mat);
         self.base_shader.uniform_mat4_glam("u_projection", *proj);
+
+        self.frags_shader.bind();
+        self.frags_shader
+            .uniform_vec3_glam("u_camera_forward", cam_forward);
+        self.frags_shader.uniform_mat4_glam("u_view", view_mat);
+        self.frags_shader.uniform_mat4_glam("u_projection", *proj);
     }
 
     fn render_frame(
@@ -46,15 +53,13 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         frame_data: &FrameDataBuffers,
         section: ethel::render::buffer::StorageSection,
     ) {
-        let buf_idx = section.as_index();
-
-        let scene = &frame_data.scene;
-        scene.bind_shader_storage(buf_idx);
-
         unsafe {
             janus::gl::Clear(janus::gl::COLOR_BUFFER_BIT | janus::gl::DEPTH_BUFFER_BIT);
         }
+        let buf_idx = section.as_index();
 
+        let frags = &frame_data.fragments;
+        frags.bind_shader_storage(buf_idx);
         let cmds = &frame_data.command;
         GpuCommandDispatch::from_view(cmds.view_section(buf_idx)).dispatch();
 
@@ -80,7 +85,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
     fn init_resources(&mut self, _resolution: ethel::render::Resolution) {
         const VSH_BASE_SOURCE: &[u8] = include_bytes!("../shaders/base.vsh");
         const FSH_BASE_SOURCE: &[u8] = include_bytes!("../shaders/base.fsh");
-
         let mut vsh = std::io::BufReader::new(VSH_BASE_SOURCE);
         let mut fsh = std::io::BufReader::new(FSH_BASE_SOURCE);
         self.base_shader = ShaderHandle::new(&mut vsh, &mut fsh);
@@ -95,5 +99,10 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         let mut vsh = std::io::BufReader::new(VSH_LINE_SOURCE);
         let mut fsh = std::io::BufReader::new(FSH_SOLID_SOURCE);
         self.line_dbg_shader = ShaderHandle::new(&mut vsh, &mut fsh);
+
+        const VSH_FRAG_SOURCE: &[u8] = include_bytes!("../shaders/fragment.vsh");
+        let mut vsh = std::io::BufReader::new(VSH_FRAG_SOURCE);
+        let mut fsh = std::io::BufReader::new(FSH_BASE_SOURCE);
+        self.frags_shader = ShaderHandle::new(&mut vsh, &mut fsh);
     }
 }

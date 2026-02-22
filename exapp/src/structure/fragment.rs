@@ -33,6 +33,7 @@ ethel::table_spec! {
     struct Fragments {
         parents: [u32; 4];
         influence: [f32; 4];
+        rest_offset: glam::Vec3;
 
         state: FragmentState;
         health: f32; // also acts as mass in Debris state
@@ -182,7 +183,7 @@ impl FragmentSystem {
     }
 
     const LATTICE_SPATIAL_RESOLUTION: u32 = 2;
-    const QUERY_MAX_RANGE: u32 = 2 * Self::LATTICE_SPATIAL_RESOLUTION;
+    const QUERY_MAX_RANGE: u32 = 3 * Self::LATTICE_SPATIAL_RESOLUTION;
 
     /// Generate new fragments from a [`VoxelGrid`] and `lattice`.
     ///
@@ -192,9 +193,11 @@ impl FragmentSystem {
     /// The `lattice` slices indicate the node IDs and node positions. These
     /// must be parallel to one another: each node ID must correspond to its
     /// node's position at the same index.
-    pub fn generate_fragments(&mut self, grid: &VoxelGrid, lattice: (&[u32], &[glam::Vec3])) {
-        let (handles, positions) = lattice;
-
+    pub fn generate_fragments(
+        &mut self,
+        grid: &VoxelGrid,
+        (owners, handles, positions): (&[u32], &[u32], &[glam::Vec3]),
+    ) {
         let node_hash = {
             let mut node_hash = FxSpatialHash::with_capacity(
                 SpatialResolution::new(Self::LATTICE_SPATIAL_RESOLUTION),
@@ -256,28 +259,39 @@ impl FragmentSystem {
                 continue;
             }
 
-            let (parents, weights) = {
+            let (parents, weights, mut rest_offset) = {
                 let (mut parents, mut weights) = ([0u32; 4], [0f32; 4]);
+                let mut rest_offset = glam::Vec3::ZERO;
 
                 near_buf
                     .drain(..n_count)
                     .zip(&mut parents.iter_mut().zip(&mut weights))
                     .for_each(|(cell, (id, weight))| {
                         *id = node_hash.get(&cell).copied().unwrap_or_default();
-                        let point = node_hash.approx_point_at(cell);
+                        let point = positions[owners[*id as usize] as usize];
                         *weight = voxel.distance_squared(point);
                     });
 
-                near_buf.clear();
-
                 let w_t = weights.iter().fold(0f32, |t, &v| t + v);
                 weights.iter_mut().for_each(|v| *v /= w_t);
-                (parents, weights)
+
+                parents
+                    .iter()
+                    .zip(&weights)
+                    .take(n_count)
+                    .for_each(|(&parent, &weight)| {
+                        let point = positions[owners[parent as usize] as usize];
+                        rest_offset += point * weight;
+                    });
+
+                (parents, weights, rest_offset)
             };
+            rest_offset = voxel - rest_offset;
 
             let handle = self.fragments.put((
                 parents,
                 weights,
+                rest_offset,
                 FragmentState::Attached,
                 100.0, //todo; health
                 voxel,
