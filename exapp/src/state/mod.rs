@@ -50,6 +50,10 @@ pub struct State {
     camera: camera::Orbital,
 }
 
+const CAMERA_YAW_CLAMP: std::ops::Range<f32> = f32::NEG_INFINITY..f32::INFINITY;
+const CAMERA_PITCH_CLAMP: std::ops::Range<f32> =
+    -std::f32::consts::FRAC_PI_2..std::f32::consts::FRAC_PI_2;
+
 impl Default for State {
     fn default() -> Self {
         Self {
@@ -63,7 +67,11 @@ impl Default for State {
             entity_data: Default::default(),
             frag_map: Default::default(),
             selection: Default::default(),
-            camera: Default::default(),
+            camera: camera::Orbital::new(
+                Default::default(),
+                Default::default(),
+                camera::RotationLimits::new(CAMERA_YAW_CLAMP, CAMERA_PITCH_CLAMP),
+            ),
         }
     }
 }
