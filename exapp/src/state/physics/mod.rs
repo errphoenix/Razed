@@ -1,3 +1,5 @@
+pub mod rotor;
+
 use ethel::state::data::Column;
 use janus::context::DeltaTime;
 use physics::xpbd::{LinksRowTable, NodesRowTable, XpbdLatticeBuilder, XpbdSolver};
@@ -7,6 +9,8 @@ pub struct XpbdSystem {
     solver: XpbdSolver,
     nodes: NodesRowTable,
     links: LinksRowTable,
+
+    rotations: Vec<glam::Quat>,
 }
 
 impl XpbdSystem {
@@ -22,6 +26,7 @@ impl XpbdSystem {
             solver,
             nodes: NodesRowTable::with_capacity(capacity),
             links: LinksRowTable::with_capacity(capacity),
+            rotations: Vec::with_capacity(capacity),
         }
     }
 
@@ -30,6 +35,7 @@ impl XpbdSystem {
             solver,
             nodes,
             links,
+            ..Default::default()
         }
     }
 

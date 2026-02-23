@@ -247,8 +247,6 @@ impl FragmentSystem {
                 }
             }
 
-            println!("{cell:?}, found nearest nodes: {near_buf:?}");
-
             let n_count = near_buf.len().min(4);
             if n_count == 0 {
                 tracing::event!(
