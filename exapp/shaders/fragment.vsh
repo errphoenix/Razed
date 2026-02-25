@@ -97,12 +97,9 @@ void main() {
     vec4 r2 = pod_nodes_rotors[i2];
     vec4 r3 = pod_nodes_rotors[i3];
 
-    vec3 rotation_lbs = rotateQuat(model, r0 * w0);
-    rotation_lbs = rotateQuat(model, r1 * w1);
-    rotation_lbs = rotateQuat(model, r2 * w2);
-    rotation_lbs = rotateQuat(model, r3 * w3);
-
-    vec3 local = rotation_lbs;
+    vec3 local = model;
+    vec4 rotation_lbs = normalize((r0 * w0) + (r1 * w1) + (r2 * w2) + (r3 * w3));
+    local = rotateQuat(local, rotation_lbs);
 
     // linear-blend-skinning for positions
     vec3 p0 = pod_nodes_positions[i0].xyz;
@@ -110,14 +107,13 @@ void main() {
     vec3 p2 = pod_nodes_positions[i2].xyz;
     vec3 p3 = pod_nodes_positions[i3].xyz;
 
-
     vec3 fragment_base = pod_offsets[fragment_id].xyz;
     vec3 fragment_offset = p0 * w0 + p1 * w1 + p2 * w2 + p3 * w3;
     vec3 fragment_pos = fragment_base + fragment_offset;
 
     vec4 world = vec4(local + fragment_pos, 1.0);
     fs_world = world.xyz;
-    fs_normal = normal;
+    fs_normal = rotateQuat(normal, rotation_lbs);
     fs_color = vec4(vec3(0.35), 1.0);
 
     gl_Position = u_projection * u_view * world;

@@ -1,4 +1,4 @@
-use ethel::state::data::{Column, ParallelIndexArrayColumn, column::IterColumn};
+use ethel::state::data::{Column, ParallelIndexArrayColumn, SparseSlot, column::IterColumn};
 use physics::xpbd::{LinkNodes, LinksRowTable, NodesRowTable};
 
 #[derive(Debug, Default)]
@@ -56,7 +56,10 @@ impl RotorSystem {
         overwrite: bool,
     ) {
         if overwrite {
-            self.basis.clear();
+            self.basis.slots_map_mut().resize(1, 0);
+            self.basis.free_list_mut().clear();
+            self.basis.handles_mut().fill(0);
+            self.basis.contiguous_mut().iter_mut().for_each(Vec::clear);
         }
 
         for LinkNodes(node_a, node_b) in constraints.relation_view() {
@@ -116,12 +119,17 @@ impl RotorSystem {
                 let relatives_id = unsafe { self.relatives.get_indirect_unchecked(rotor.relative) };
                 let relatives = &self.relatives.contiguous()[relatives_id as usize];
 
-                let mut rot = glam::Quat::IDENTITY;
+                let mut q = glam::Quat::IDENTITY;
                 basis.iter().zip(relatives).for_each(|(&basis, &rel)| {
-                    let q = glam::Quat::from_rotation_arc(basis, rel);
-                    rot = rot.inverse() * q * rot;
+                    let mut r = glam::Quat::from_rotation_arc(basis, rel);
+                    // invert sign of quaternion r if rotation is on opposite
+                    // hemisphere
+                    if q.dot(r) < 0.0 {
+                        r = -r;
+                    }
+                    q += r;
                 });
-                self.rotations.push(rot);
+                self.rotations.push(q);
             }
         }
     }
