@@ -8,7 +8,7 @@ pub struct RotorSystem {
     /// Mapping between node handle to internal storage handles
     node_map: Vec<RotorHandle>,
 
-    //todo
+    //todo: don't nest Vec's
     relatives: ParallelIndexArrayColumn<Vec<glam::Vec3>>,
     basis: ParallelIndexArrayColumn<Vec<glam::Vec3>>,
 }
@@ -87,7 +87,8 @@ impl RotorSystem {
 
                 let mut rot = glam::Quat::IDENTITY;
                 basis.iter().zip(relatives).for_each(|(&basis, &rel)| {
-                    rot = rot.mul_quat(glam::Quat::from_rotation_arc(basis, rel));
+                    let q = glam::Quat::from_rotation_arc(basis, rel);
+                    rot = rot.inverse() * q * rot;
                 });
                 self.rotations.push(rot);
             }
