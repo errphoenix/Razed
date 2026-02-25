@@ -111,6 +111,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
 
                 let imap_nodes = self.xpbd.nodes().handles();
                 let pod_nodes_positions = self.xpbd.nodes().current_pos_slice();
+                let pod_nodes_rotors = self.xpbd.rotor_system().rotations();
                 let pod_parents = self.fragments.table().parents_slice();
                 let pod_weights = self.fragments.table().influence_slice();
                 let pod_offsets = self.fragments.table().rest_offset_slice();
@@ -121,6 +122,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 unsafe {
                     fragments.blit_part(buf_idx, LayoutFragmentData::ImapNodes as usize, imap_nodes, 0);
                     fragments.blit_part_padded(buf_idx, LayoutFragmentData::PodNodesPositions as usize, pod_nodes_positions, 0, 4);
+                    fragments.blit_part(buf_idx, LayoutFragmentData::PodNodesRotors as usize, pod_nodes_rotors, 0);
                     fragments.blit_part(buf_idx, LayoutFragmentData::PodParents as usize, pod_parents, 0);
                     fragments.blit_part(buf_idx, LayoutFragmentData::PodWeights as usize, pod_weights, 0);
                     fragments.blit_part_padded(buf_idx, LayoutFragmentData::PodOffsets as usize, pod_offsets, 0, 4);

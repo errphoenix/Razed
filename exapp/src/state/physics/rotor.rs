@@ -1,6 +1,7 @@
 use ethel::state::data::{Column, ParallelIndexArrayColumn, column::IterColumn};
 use physics::xpbd::{LinkNodes, LinksRowTable, NodesRowTable};
 
+#[derive(Debug, Default)]
 pub struct RotorSystem {
     /// Final computed rotations of nodes
     rotations: Vec<glam::Quat>,
@@ -14,6 +15,36 @@ pub struct RotorSystem {
 }
 
 impl RotorSystem {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            rotations: Vec::with_capacity(capacity),
+            node_map: Vec::with_capacity(capacity),
+            relatives: ParallelIndexArrayColumn::with_capacity(capacity),
+            basis: ParallelIndexArrayColumn::with_capacity(capacity),
+        }
+    }
+
+    /// Returns a the contiguous slice of node rotations in their last computed
+    /// state.
+    ///
+    /// This is parallel to the node contiguous data passed in
+    /// [`recompute_rotations`].
+    /// Therefore, this can effectively be treated as an additional row in the
+    /// [`NodesRowTable`].
+    ///
+    /// This is true only if it can be guaranteed that the contiguous data
+    /// order in [`NodesRowTable`] has not changed since the last
+    /// [`recompute_rotations`] function call.
+    ///
+    /// [`recompute_rotations`]: RotorSystem::recompute_rotations
+    pub fn rotations(&self) -> &[glam::Quat] {
+        &self.rotations
+    }
+
     pub fn clear_relatives(&mut self) {
         self.relatives.iter_mut().for_each(Vec::clear);
     }
@@ -100,7 +131,7 @@ impl RotorSystem {
         let index = node_id as usize;
 
         if self.node_map.len() <= index {
-            self.node_map.resize(index, RotorHandle::default());
+            self.node_map.resize(index + 1, RotorHandle::default());
         }
         let map = &mut self.node_map[index];
 

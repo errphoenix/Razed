@@ -4,13 +4,15 @@ use ethel::state::data::Column;
 use janus::context::DeltaTime;
 use physics::xpbd::{LinksRowTable, NodesRowTable, XpbdLatticeBuilder, XpbdSolver};
 
+use crate::state::physics::rotor::RotorSystem;
+
 #[derive(Debug, Default)]
 pub struct XpbdSystem {
-    solver: XpbdSolver,
     nodes: NodesRowTable,
     links: LinksRowTable,
 
-    rotations: Vec<glam::Quat>,
+    solver: XpbdSolver,
+    rotor_system: RotorSystem,
 }
 
 impl XpbdSystem {
@@ -26,7 +28,7 @@ impl XpbdSystem {
             solver,
             nodes: NodesRowTable::with_capacity(capacity),
             links: LinksRowTable::with_capacity(capacity),
-            rotations: Vec::with_capacity(capacity),
+            rotor_system: RotorSystem::with_capacity(capacity),
         }
     }
 
@@ -44,6 +46,10 @@ impl XpbdSystem {
         // todo: perf telemetry
         self.solver.set_step_time(delta);
         self.solver.step(&mut self.nodes, &mut self.links);
+
+        self.rotor_system
+            .recompute_relatives(&self.nodes, &self.links);
+        self.rotor_system.recompute_rotations(&self.nodes);
     }
 
     /// Break a `constraint` by its handle.
@@ -93,6 +99,11 @@ impl XpbdSystem {
     }
 
     #[inline]
+    pub fn rotor_system(&self) -> &RotorSystem {
+        &self.rotor_system
+    }
+
+    #[inline]
     pub fn nodes_mut(&mut self) -> &mut NodesRowTable {
         &mut self.nodes
     }
@@ -100,6 +111,11 @@ impl XpbdSystem {
     #[inline]
     pub fn links_mut(&mut self) -> &mut LinksRowTable {
         &mut self.links
+    }
+
+    #[inline]
+    pub fn rotor_system_mut(&mut self) -> &mut RotorSystem {
+        &mut self.rotor_system
     }
 
     #[inline]
@@ -117,6 +133,12 @@ impl XpbdSystem {
         &mut self,
         lattice_builder: XpbdLatticeBuilder,
     ) -> physics::xpbd::LatticeIds {
-        lattice_builder.export(&mut self.nodes, &mut self.links)
+        let map = lattice_builder.export(&mut self.nodes, &mut self.links);
+
+        //todo: only recompute basis for new nodes/constraints, don't overwrite
+        self.rotor_system
+            .recompute_basis_cache(&self.nodes, &self.links, true);
+
+        map
     }
 }

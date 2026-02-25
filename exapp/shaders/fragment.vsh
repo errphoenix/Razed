@@ -41,6 +41,10 @@ layout(std430, binding = 7) readonly buffer POD_Nodes_Positions
     // cpu physics data is vec3; padded to vec4 during upload
     vec4 pod_nodes_positions[];
 };
+layout(std430, binding = 8) readonly buffer POD_Nodes_Rotors
+{
+    vec4 pod_nodes_rotors[];
+};
 
 uniform mat4 u_projection;
 uniform mat4 u_view;
@@ -77,38 +81,35 @@ void main() {
     uvec4 parents = pod_parents[fragment_id];
     vec4 weights = pod_weights[fragment_id];
 
-    // gather
+    // common ids and weights gather
     uint i0 = imap_nodes[parents.x];
     uint i1 = imap_nodes[parents.y];
     uint i2 = imap_nodes[parents.z];
     uint i3 = imap_nodes[parents.w];
+    float w0 = weights.x;
+    float w1 = weights.y;
+    float w2 = weights.z;
+    float w3 = weights.w;
+
+    // linear-blend-skinning for rotations
+    vec4 r0 = pod_nodes_rotors[i0];
+    vec4 r1 = pod_nodes_rotors[i1];
+    vec4 r2 = pod_nodes_rotors[i2];
+    vec4 r3 = pod_nodes_rotors[i3];
+
+    vec3 rotation_lbs = rotateQuat(model, r0 * w0);
+    rotation_lbs = rotateQuat(model, r1 * w1);
+    rotation_lbs = rotateQuat(model, r2 * w2);
+    rotation_lbs = rotateQuat(model, r3 * w3);
+
+    vec3 local = rotation_lbs;
+
+    // linear-blend-skinning for positions
     vec3 p0 = pod_nodes_positions[i0].xyz;
     vec3 p1 = pod_nodes_positions[i1].xyz;
     vec3 p2 = pod_nodes_positions[i2].xyz;
     vec3 p3 = pod_nodes_positions[i3].xyz;
 
-    // todo: trash it
-    vec3 p0_val = pod_nodes_positions[i0].xyz;
-    vec3 p1_val = p0_val;
-    vec3 p2_val = p0_val;
-    if (parents.y != 0) p1_val = pod_nodes_positions[i1].xyz;
-    if (parents.z != 0) p2_val = pod_nodes_positions[i2].xyz;
-    vec3 dirX = p1_val - p0_val;
-    if (length(dirX) < 0.0001) dirX = vec3(1, 0, 0);
-    dirX = normalize(dirX);
-    vec3 dirTemp = p2_val - p0_val;
-    if (length(dirTemp) < 0.0001) dirTemp = vec3(0, 1, 0);
-    vec3 vZ = normalize(cross(dirX, dirTemp + vec3(0.00001)));
-    vec3 vY = cross(vZ, dirX);
-    mat3 rotation = mat3(dirX, vY, vZ);
-
-    vec3 local = rotation * model;
-
-    // ### COMPUTE POSITION ###
-    float w0 = weights.x;
-    float w1 = weights.y;
-    float w2 = weights.z;
-    float w3 = weights.w;
 
     vec3 fragment_base = pod_offsets[fragment_id].xyz;
     vec3 fragment_offset = p0 * w0 + p1 * w1 + p2 * w2 + p3 * w3;
@@ -116,7 +117,7 @@ void main() {
 
     vec4 world = vec4(local + fragment_pos, 1.0);
     fs_world = world.xyz;
-    fs_normal = normalize(transpose(inverse(rotation)) * normal);
+    fs_normal = normal;
     fs_color = vec4(vec3(0.35), 1.0);
 
     gl_Position = u_projection * u_view * world;
