@@ -19,7 +19,7 @@ pub fn create_structure_lattice(
     // include 4 anchor nodes of the building
     let total_node_count = FLOOR_NODE_COUNT * floors as usize + 4;
 
-    const MASS: f32 = 200.0;
+    const MASS: f32 = 150.0;
 
     const VERY_STIFF_COMPL: f32 = 0.1e-6;
     const STIFF_COMPL: f32 = 0.2e-5;
