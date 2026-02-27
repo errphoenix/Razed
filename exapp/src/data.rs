@@ -85,7 +85,7 @@ layout_buffer! {
 }
 
 pub const FRAGMENTS_ALLOC: usize = 16384;
-pub const FRAGMENTS_DATA_PARTS: usize = 6;
+pub const FRAGMENTS_DATA_PARTS: usize = 7;
 
 layout_buffer! {
     const FragmentData: FRAGMENTS_DATA_PARTS, {
@@ -104,20 +104,25 @@ layout_buffer! {
             bind 2;
             shader 2;
         };
+        enum PodStates: FRAGMENTS_ALLOC => {
+            type u32;
+            bind 3;
+            shader 3;
+        };
 
         enum IMapNodes: XPBD_NODES_ALLOC => {
             type u32;
-            bind 3;
+            bind 4;
             shader 6;
         };
         enum PodNodesPositions: XPBD_NODES_ALLOC => {
             type [f32; 4];
-            bind 4;
+            bind 5;
             shader 7;
         };
         enum PodNodesRotors: XPBD_NODES_ALLOC => {
             type [f32; 4];
-            bind 5;
+            bind 6;
             shader 8;
         };
     }

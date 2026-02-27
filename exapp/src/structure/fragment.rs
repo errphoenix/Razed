@@ -5,6 +5,7 @@ use ethel::state::data::{
 use physics::xpbd::{LinkNodes, LinksRowTable};
 use rustc_hash::FxHashSet;
 
+#[repr(u32)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FragmentState {
     /// The fragment is attached to the lattice structure.
@@ -12,13 +13,13 @@ pub enum FragmentState {
     /// The behaviour of the fragment is entirely driven by the lattice nodes
     /// it is attached to.
     #[default]
-    Attached,
+    Attached = 1,
 
     /// The fragment is an independent physical body.
     ///
     /// It is not attached to any structure and it is most likely in movement
     /// heading towards the ground.
-    Debris,
+    Debris = 0,
 
     /// Static/inactive
     ///
@@ -26,7 +27,7 @@ pub enum FragmentState {
     /// prolonged period of time.
     ///
     /// It is likely scheduled for removal.
-    InactiveDebris,
+    InactiveDebris = 2,
 }
 
 ethel::table_spec! {
@@ -183,7 +184,7 @@ impl FragmentSystem {
     }
 
     const LATTICE_SPATIAL_RESOLUTION: u32 = 1;
-    const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 3;
+    const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 4;
 
     /// Generate new fragments from a [`VoxelGrid`] and `lattice`.
     ///

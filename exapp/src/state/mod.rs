@@ -115,6 +115,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 let pod_parents = self.fragments.table().parents_slice();
                 let pod_weights = self.fragments.table().influence_slice();
                 let pod_offsets = self.fragments.table().rest_offset_slice();
+                let pod_states = self.fragments.table().state_slice();
 
                 // SAFETY: the use of LayoutFragmentData ensures we are
                 // blitting to a valid section of the fragments partitioned
@@ -126,6 +127,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     fragments.blit_part(buf_idx, LayoutFragmentData::PodParents as usize, pod_parents, 0);
                     fragments.blit_part(buf_idx, LayoutFragmentData::PodWeights as usize, pod_weights, 0);
                     fragments.blit_part_padded(buf_idx, LayoutFragmentData::PodOffsets as usize, pod_offsets, 0, 4);
+                    fragments.blit_part(buf_idx, LayoutFragmentData::PodStates as usize, pod_states, 0);
                 }
             }
 

@@ -31,6 +31,10 @@ layout(std430, binding = 2) readonly buffer POD_Offsets
 {
     vec4 pod_offsets[];
 };
+layout(std430, binding = 3) readonly buffer POD_States
+{
+    uint pod_states[];
+};
 
 layout(std430, binding = 6) readonly buffer IMap_Nodes
 {
@@ -98,8 +102,8 @@ void main() {
     vec4 r3 = pod_nodes_rotors[i3];
 
     vec3 local = model;
-    vec4 rotation_lbs = normalize((r0 * w0) + (r1 * w1) + (r2 * w2) + (r3 * w3));
-    local = rotateQuat(local, rotation_lbs);
+    //vec4 rotation_lbs = normalize((r0 * w0) + (r1 * w1) + (r2 * w2) + (r3 * w3));
+    //local = rotateQuat(local, rotation_lbs);
 
     // linear-blend-skinning for positions
     vec3 p0 = pod_nodes_positions[i0].xyz;
@@ -113,10 +117,12 @@ void main() {
 
     vec4 world = vec4(local + fragment_pos, 1.0);
     fs_world = world.xyz;
-    fs_normal = rotateQuat(normal, rotation_lbs);
+    fs_normal = normal;
     fs_color = vec4(vec3(0.35), 1.0);
 
-    gl_Position = u_projection * u_view * world;
+    uint state = pod_states[fragment_id];
+
+    gl_Position = u_projection * u_view * world * float(state);
 }
 
 vec4 mulQuat(vec4 q0, vec4 q1) {
