@@ -39,11 +39,17 @@ pub fn create_structure_lattice(
     let bottom_r_b = lattice.node(Node::new(o + glam::vec3(w, 0.0, -d), MASS).with_fixed(true));
     let bottom_r_f = lattice.node(Node::new(o + glam::vec3(w, 0.0, d), MASS).with_fixed(true));
     let bottom_l_f = lattice.node(Node::new(o + glam::vec3(-w, 0.0, d), MASS).with_fixed(true));
+    let mid = lattice.node(Node::new(o + glam::vec3(0.0, 0.0, 0.0), MASS).with_fixed(true));
     {
         lattice.link_nodes(bottom_l_b, bottom_r_b, STRONG_LINK);
         lattice.link_nodes(bottom_r_b, bottom_r_f, STRONG_LINK);
         lattice.link_nodes(bottom_r_f, bottom_l_f, STRONG_LINK);
         lattice.link_nodes(bottom_l_f, bottom_l_b, STRONG_LINK);
+
+        lattice.link_nodes(bottom_l_b, mid, STRONG_LINK);
+        lattice.link_nodes(bottom_r_b, mid, STRONG_LINK);
+        lattice.link_nodes(bottom_r_f, mid, STRONG_LINK);
+        lattice.link_nodes(bottom_l_f, mid, STRONG_LINK);
     }
 
     // back_left, back_right, front_right, front_left
@@ -104,7 +110,7 @@ pub fn create_structure_lattice(
             lattice.link_nodes(c_back, last_top[1], MID_LINK);
         }
 
-        // "floor"
+        // floors with no intermediate center point
         lattice.link_nodes(back_left, front_right, WEAK_LINK);
         lattice.link_nodes(back_right, front_left, WEAK_LINK);
 

@@ -119,7 +119,7 @@ impl RotorSystem {
                 let relatives_id = unsafe { self.relatives.get_indirect_unchecked(rotor.relative) };
                 let relatives = &self.relatives.contiguous()[relatives_id as usize];
 
-                let mut q = glam::Quat::IDENTITY;
+                let mut q = glam::Quat::default();
                 basis.iter().zip(relatives).for_each(|(&basis, &rel)| {
                     let mut r = glam::Quat::from_rotation_arc(basis, rel);
                     // invert sign of quaternion r if rotation is on opposite

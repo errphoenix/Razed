@@ -102,8 +102,8 @@ void main() {
     vec4 r3 = pod_nodes_rotors[i3];
 
     vec3 local = model;
-    //vec4 rotation_lbs = normalize((r0 * w0) + (r1 * w1) + (r2 * w2) + (r3 * w3));
-    //local = rotateQuat(local, rotation_lbs);
+    vec4 rotation_lbs = normalize((r0 * w0) + (r1 * w1) + (r2 * w2) + (r3 * w3));
+    local = rotateQuat(local, rotation_lbs);
 
     // linear-blend-skinning for positions
     vec3 p0 = pod_nodes_positions[i0].xyz;
