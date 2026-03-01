@@ -259,7 +259,7 @@ impl FragmentSystem {
                     .for_each(|(cell, (id, weight))| {
                         *id = node_hash.get(&cell).copied().unwrap_or_default();
                         let point = positions[owners[*id as usize] as usize];
-                        *weight = 1.0 / voxel.distance(point);
+                        *weight = 1.0 / voxel.distance(point).powf(4.0);
                     });
 
                 let w_t = weights.iter().fold(0f32, |t, &v| t + v);
