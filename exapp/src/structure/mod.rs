@@ -19,7 +19,7 @@ pub fn create_structure_lattice(
     // include 4 anchor nodes of the building
     let total_node_count = FLOOR_NODE_COUNT * floors as usize + 4;
 
-    const MASS: f32 = 150.0;
+    const MASS: f32 = 100.0;
 
     const VERY_STIFF_COMPL: f32 = 0.1e-6;
     const STIFF_COMPL: f32 = 0.2e-5;
@@ -69,10 +69,10 @@ pub fn create_structure_lattice(
 
         // top loop
         {
-            lattice.link_nodes(back_left, back_right, STRONG_LINK);
-            lattice.link_nodes(back_right, front_right, STRONG_LINK);
-            lattice.link_nodes(front_right, front_left, STRONG_LINK);
-            lattice.link_nodes(front_left, back_left, STRONG_LINK);
+            lattice.link_nodes(back_left, back_right, MID_LINK);
+            lattice.link_nodes(back_right, front_right, MID_LINK);
+            lattice.link_nodes(front_right, front_left, MID_LINK);
+            lattice.link_nodes(front_left, back_left, MID_LINK);
         }
         // pillars
         {

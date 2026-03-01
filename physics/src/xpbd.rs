@@ -486,8 +486,8 @@ impl XpbdSolver {
         self.broken_links.clear();
 
         if self.allow_breaking {
-            const LAMBDA_STRAIN_THRESHOLD: f32 = 62_000.0;
-            const LAMBDA_COMPRESSION_THRESHOLD: f32 = -24_000.0;
+            const LAMBDA_STRAIN_THRESHOLD: f32 = 52_000.0;
+            const LAMBDA_COMPRESSION_THRESHOLD: f32 = -20_000.0;
 
             for (handle, lambda) in links.handles().iter().zip(links.lambda_slice()) {
                 let force_strain = *lambda / self.h2;
