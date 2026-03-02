@@ -183,8 +183,8 @@ impl FragmentSystem {
         &self.disabled_frags_frame
     }
 
-    const LATTICE_SPATIAL_RESOLUTION: u32 = 1;
-    const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 2;
+    const LATTICE_SPATIAL_RESOLUTION: u32 = 4;
+    const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 20;
 
     /// Generate new fragments from a [`VoxelGrid`] and `lattice`.
     ///

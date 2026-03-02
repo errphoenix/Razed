@@ -97,8 +97,8 @@ void main() {
     vec3 p3 = pod_nodes_positions[i3].xyz;
 
     // world position before calibration
-    vec3 fragment_base_position = p0 * w0 + p1 * w1 + p2 * w2 + p3 * w3;
     vec3 fragment_offset = pod_offsets[fragment_id].xyz;
+    vec3 fragment_base_position = p0 * w0 + p1 * w1 + p2 * w2 + p3 * w3;
 
     vec3 dir0 = normalize(p0 - fragment_base_position);
     vec3 dir1 = normalize(p1 - fragment_base_position);
@@ -116,19 +116,29 @@ void main() {
     if (i2 == 0) nv2 = 0.0;
     if (i3 == 0) nv3 = 0.0;
 
-    // align
+    // apply
     w0 += nv0;
     w1 += nv1;
     w2 += nv2;
     w3 += nv3;
+    float w_t = w0 + w1 + w2 + w3;
+    w0 /= w_t;
+    w1 /= w_t;
+    w2 /= w_t;
+    w3 /= w_t;
 
     vec3 fragment_position = p0 * w0 + p1 * w1 + p2 * w2 + p3 * w3;
+    fragment_position = fragment_base_position;
     vec3 local = model + fragment_position;
 
     vec4 world = vec4(local + fragment_offset, 1.0);
     fs_world = world.xyz;
     fs_normal = normal;
     fs_color = vec4(vec3(0.35), 1.0);
+
+    vec3 color_dbg = dir0 * w0 + dir1 * w1 + dir2 * w2 + dir3 * w3;
+    color_dbg = (color_dbg * 0.5 + 0.5) * abs(color_dbg);
+    fs_color = vec4(color_dbg, 1.0);
 
     uint state = pod_states[fragment_id];
     gl_Position = u_projection * u_view * world * float(state);
