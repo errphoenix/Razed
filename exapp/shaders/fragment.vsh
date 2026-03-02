@@ -102,8 +102,8 @@ void main() {
     vec4 r3 = pod_nodes_rotors[i3];
 
     vec3 local = model;
-    vec4 rotation_lbs = normalize((r0 * w0) + (r1 * w1) + (r2 * w2) + (r3 * w3));
-    local = rotateQuat(local, rotation_lbs);
+    //vec4 rotation_lbs = normalize((r0 * w0) + (r1 * w1) + (r2 * w2) + (r3 * w3));
+    //local = rotateQuat(local, rotation_lbs);
 
     // linear-blend-skinning for positions
     vec3 p0 = pod_nodes_positions[i0].xyz;
@@ -111,18 +111,36 @@ void main() {
     vec3 p2 = pod_nodes_positions[i2].xyz;
     vec3 p3 = pod_nodes_positions[i3].xyz;
 
-    vec3 fragment_base = pod_offsets[fragment_id].xyz;
-    vec3 fragment_offset = p0 * w0 + p1 * w1 + p2 * w2 + p3 * w3;
-    vec3 fragment_pos = fragment_base + fragment_offset;
+    // world position before calibration
+    vec3 fragment_base_position = p0 * w0 + p1 * w1 + p2 * w2 + p3 * w3;
+    vec3 fragment_offset = pod_offsets[fragment_id].xyz;
 
-    vec4 world = vec4(local + fragment_pos, 1.0);
+    // vertex weight calibration
+    // follows weight compute formula in structure::fragment
+    vec3 model_p0 = model - (fragment_base_position + fragment_offset);
+    vec3 model_s0 = sign(model_p0);
+
+    float i_s = -min(model_s0.x, min(model_s0.y, model_s0.z)); // either -1, or 1, or 0
+    float w_offset = 1.0 / pow(model_p0.x * model_p0.x + model_p0.y * model_p0.y + model_p0.z * model_p0.z, 2.0);
+    float i_wt = w0 + w1 + w2 + w3;
+    w_offset /= i_wt;
+
+    // align
+    w0 += w_offset;
+    w1 += w_offset;
+    w2 += w_offset;
+    w3 += w_offset;
+
+    vec3 fragment_position = p0 * w0 + p1 * w1 + p2 * w2 + p3 * w3;
+
+    vec4 world = vec4(local + fragment_position + fragment_offset, 1.0);
     fs_world = world.xyz;
     fs_normal = normal;
     fs_color = vec4(vec3(0.35), 1.0);
 
     uint state = pod_states[fragment_id];
 
-    gl_Position = u_projection * u_view * world * float(state);
+    gl_Position = u_projection * u_view * world;
 }
 
 vec4 mulQuat(vec4 q0, vec4 q1) {

@@ -184,7 +184,7 @@ impl FragmentSystem {
     }
 
     const LATTICE_SPATIAL_RESOLUTION: u32 = 1;
-    const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 4;
+    const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 2;
 
     /// Generate new fragments from a [`VoxelGrid`] and `lattice`.
     ///
@@ -259,7 +259,7 @@ impl FragmentSystem {
                     .for_each(|(cell, (id, weight))| {
                         *id = node_hash.get(&cell).copied().unwrap_or_default();
                         let point = positions[owners[*id as usize] as usize];
-                        *weight = 1.0 / voxel.distance(point).powf(4.0);
+                        *weight = 1.0 / voxel.distance_squared(point);
                     });
 
                 let w_t = weights.iter().fold(0f32, |t, &v| t + v);
