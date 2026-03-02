@@ -57,17 +57,6 @@ out vec3 fs_world;
 out vec3 fs_normal;
 out vec4 fs_color;
 
-vec4 mulQuat(vec4 q0, vec4 q1);
-
-vec3 rotateQuat(vec3 p, vec4 q) {
-    vec4 q_conj = vec4(-q.x, -q.y, -q.z, q.w);
-    vec4 p4 = vec4(p, 1.0);
-
-    vec4 r = mulQuat(q, p4);
-    r = mulQuat(r, q_conj);
-    return r.xyz;
-}
-
 // debug cube
 const uint MESH_ID = 0;
 
@@ -101,10 +90,6 @@ void main() {
     vec4 r2 = pod_nodes_rotors[i2];
     vec4 r3 = pod_nodes_rotors[i3];
 
-    vec3 local = model;
-    //vec4 rotation_lbs = normalize((r0 * w0) + (r1 * w1) + (r2 * w2) + (r3 * w3));
-    //local = rotateQuat(local, rotation_lbs);
-
     // linear-blend-skinning for positions
     vec3 p0 = pod_nodes_positions[i0].xyz;
     vec3 p1 = pod_nodes_positions[i1].xyz;
@@ -115,39 +100,36 @@ void main() {
     vec3 fragment_base_position = p0 * w0 + p1 * w1 + p2 * w2 + p3 * w3;
     vec3 fragment_offset = pod_offsets[fragment_id].xyz;
 
-    // vertex weight calibration
-    // follows weight compute formula in structure::fragment
-    vec3 model_p0 = model - (fragment_base_position + fragment_offset);
-    vec3 model_s0 = sign(model_p0);
+    vec3 dir0 = normalize(p0 - fragment_base_position);
+    vec3 dir1 = normalize(p1 - fragment_base_position);
+    vec3 dir2 = normalize(p2 - fragment_base_position);
+    vec3 dir3 = normalize(p3 - fragment_base_position);
 
-    float i_s = -min(model_s0.x, min(model_s0.y, model_s0.z)); // either -1, or 1, or 0
-    float w_offset = 1.0 / pow(model_p0.x * model_p0.x + model_p0.y * model_p0.y + model_p0.z * model_p0.z, 2.0);
-    float i_wt = w0 + w1 + w2 + w3;
-    w_offset /= i_wt;
+    float nv0 = dot(model, dir0);
+    float nv1 = dot(model, dir1);
+    float nv2 = dot(model, dir2);
+    float nv3 = dot(model, dir3);
+
+    // avoid degenerate nodes' weights (todo)
+    if (i0 == 0) nv0 = 0.0;
+    if (i1 == 0) nv1 = 0.0;
+    if (i2 == 0) nv2 = 0.0;
+    if (i3 == 0) nv3 = 0.0;
 
     // align
-    w0 += w_offset;
-    w1 += w_offset;
-    w2 += w_offset;
-    w3 += w_offset;
+    w0 += nv0;
+    w1 += nv1;
+    w2 += nv2;
+    w3 += nv3;
 
     vec3 fragment_position = p0 * w0 + p1 * w1 + p2 * w2 + p3 * w3;
+    vec3 local = model + fragment_position;
 
-    vec4 world = vec4(local + fragment_position + fragment_offset, 1.0);
+    vec4 world = vec4(local + fragment_offset, 1.0);
     fs_world = world.xyz;
     fs_normal = normal;
     fs_color = vec4(vec3(0.35), 1.0);
 
     uint state = pod_states[fragment_id];
-
-    gl_Position = u_projection * u_view * world;
-}
-
-vec4 mulQuat(vec4 q0, vec4 q1) {
-    vec4 r;
-    r.x = (q0.w * q1.x) + (q0.x * q1.w) + (q0.y * q1.z) - (q0.z * q1.y);
-    r.y = (q0.w * q1.y) - (q0.x * q1.z) + (q0.y * q1.w) + (q0.z * q1.x);
-    r.z = (q0.w * q1.z) + (q0.x * q1.y) - (q0.y * q1.x) + (q0.z * q1.w);
-    r.w = (q0.w * q1.w) - (q0.x * q1.x) - (q0.y * q1.y) - (q0.z * q1.z);
-    return r;
+    gl_Position = u_projection * u_view * world * float(state);
 }
