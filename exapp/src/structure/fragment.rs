@@ -49,18 +49,19 @@ ethel::table_spec! {
 pub struct FragmentSystem {
     fragments: FragmentsRowTable,
 
-    // sparse map of node ID to sequence of fragment IDs
+    /// sparse map of node ID to sequence of fragment IDs
     node_map: Vec<Vec<u32>>,
 
-    // alltime accumulated set of disabled node IDs; avoids dedup op
+    /// alltime accumulated set of disabled node IDs; avoids dedup op
     disabled_nodes: FxHashSet<u32>,
 
-    // alltime accumulated set of disable fragment IDs; avoids dedup op
-    // these are the fragments' indirect indices (stable)
+    /// alltime accumulated set of disable fragment IDs; avoids dedup op
+    /// these are the fragments' indirect indices (stable)
     disabled_frags_alltime: FxHashSet<u32>,
-    // per-frame list of disabled fragment IDs
-    // these are the fragments' direct indices (unstable)
-    disabled_frags_frame: Vec<u32>,
+
+    /// per-frame list of disabled fragment IDs and an indirect node
+    /// these are the fragments' direct indices (unstable)
+    disabled_frags_frame: Vec<(u32, u32)>,
 }
 
 impl Default for FragmentSystem {
@@ -129,10 +130,13 @@ impl FragmentSystem {
         self.node_map.clear();
     }
 
+    /// Synchronise (stable II) `broken_ids` of constraints with fragments state.
     pub fn handle_constraint_break(&mut self, broken_ids: &[u32], constraints: &LinksRowTable) {
+        const MINIMUM_THRESHOLD: u32 = 1;
+
         self.disabled_frags_frame.clear();
         {
-            let f_handles = self.fragments.handles();
+            //let f_handles = self.fragments.handles();
             let relations = constraints.relation_slice();
 
             for broken in broken_ids {
@@ -140,13 +144,13 @@ impl FragmentSystem {
                 let LinkNodes(a, b) = *unsafe { relations.get_unchecked(index as usize) };
 
                 if self.disabled_nodes.insert(a) {
-                    for &frag_id in &self.node_map[a as usize] {
-                        if frag_id == 0 {
+                    for frag_id in &self.node_map[a as usize] {
+                        if *frag_id == 0 {
                             continue;
                         }
-                        if self.disabled_frags_alltime.insert(frag_id) {
-                            let index = *unsafe { f_handles.get_unchecked(frag_id as usize) };
-                            self.disabled_frags_frame.push(index);
+                        if self.disabled_frags_alltime.insert(*frag_id) {
+                            let index = unsafe { self.fragments.get_indirect_unchecked(*frag_id) };
+                            self.disabled_frags_frame.push((index, a));
                         }
                     }
                 }
@@ -156,35 +160,62 @@ impl FragmentSystem {
                             continue;
                         }
                         if self.disabled_frags_alltime.insert(frag_id) {
-                            let index = *unsafe { f_handles.get_unchecked(frag_id as usize) };
-                            self.disabled_frags_frame.push(index);
+                            let index = unsafe { self.fragments.get_indirect_unchecked(frag_id) };
+                            self.disabled_frags_frame.push((index, b));
                         }
                     }
                 }
             }
         }
 
-        let states = self.fragments.state_mut_slice();
-        self.disabled_frags_frame.iter().for_each(|&frag_id| {
-            *unsafe { states.get_unchecked_mut(frag_id as usize) } = FragmentState::Debris;
-        });
+        // validate disabled fragments and invalidate relations
+        let (parents, weights, _, states, _, _, _, _) = self.fragments.split_mut();
+        for (frag_idx, node_id) in self.disabled_frags_frame.drain(..) {
+            let parents = unsafe { parents.alpha.get_unchecked_mut(frag_idx as usize) };
+            let weights = unsafe { weights.alpha.get_unchecked_mut(frag_idx as usize) };
+
+            parents
+                .iter_mut()
+                .zip(weights.iter_mut())
+                .for_each(|(id, weight)| {
+                    if *id == node_id {
+                        *id = 0;
+                        *weight = 0.0;
+                    }
+                });
+
+            // recalibrate weights
+            let w_t = weights.iter().fold(0f32, |v0, vi| v0 + *vi);
+            for w in weights {
+                *w /= w_t;
+            }
+
+            let active_count = parents.iter().filter(|id| **id != 0).count();
+            if active_count as u32 <= MINIMUM_THRESHOLD {
+                let state = unsafe { states.alpha.get_unchecked_mut(frag_idx as usize) };
+                *state = FragmentState::Debris;
+            }
+        }
     }
 
     /// Return a slice containing the *direct indices* of all fragments
     /// disabled in the last frame.
     ///
+    /// Each entry is a tuple that contains the fragment index first, then the
+    /// node ID it was broken off of.
+    ///
     /// Note: this returns **direct indices**; these are the direct element
     /// indices inside of the fragments table. These are not stable handles.
     ///
-    /// These are unstable and may change from one frame to another; they are
+    /// These are unstable and may be invalidated on the next frame; they are
     /// intended for use only during the same frame this was populated in and
     /// before any operation that might add/remove elements to the table.
-    pub fn frame_disabled_frags_direct(&self) -> &[u32] {
+    pub fn frame_disabled_frags_direct(&self) -> &[(u32, u32)] {
         &self.disabled_frags_frame
     }
 
-    const LATTICE_SPATIAL_RESOLUTION: u32 = 4;
-    const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 20;
+    const LATTICE_SPATIAL_RESOLUTION: u32 = 8;
+    const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 24;
 
     /// Generate new fragments from a [`VoxelGrid`] and `lattice`.
     ///
@@ -220,8 +251,13 @@ impl FragmentSystem {
             let cell = node_hash.cell_at(voxel);
 
             #[cfg(not(debug_assertions))]
-            let _ =
-                node_hash.nearest_cells(cell, 4, Self::VOXEL_NEIGHBOR_QUERY_RADIUS, &mut near_buf);
+            let _ = node_hash.nearest_cells(
+                cell,
+                4,
+                Self::VOXEL_NEIGHBOR_QUERY_RADIUS,
+                &mut near_buf,
+                false,
+            );
 
             #[cfg(debug_assertions)]
             {
@@ -230,6 +266,7 @@ impl FragmentSystem {
                     4,
                     Self::VOXEL_NEIGHBOR_QUERY_RADIUS,
                     &mut near_buf,
+                    false,
                 ) {
                     tracing::event!(
                         name: "structure.fragment.build.query.err_maybe_miss",
