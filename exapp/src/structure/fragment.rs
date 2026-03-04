@@ -480,9 +480,9 @@ impl VoxelGrid {
         let hvh = vh / 2;
         let hvd = vd / 2;
 
-        for x in -hvw..hvw {
-            for y in -hvh..hvh {
-                for z in -hvd..hvd {
+        for x in -hvw..=hvw {
+            for y in -hvh..=hvh {
+                for z in -hvd..=hvd {
                     let cell = VoxelCell { x, y, z };
                     if (self.generator)(cell) {
                         let position = glam::vec3(
