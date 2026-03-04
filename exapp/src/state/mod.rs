@@ -296,7 +296,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             });
         }
 
-        const WIND_FORCE: f32 = 1.0;
+        const WIND_FORCE: f32 = 4.0;
         self.xpbd
             .apply_forces_batched(glam::vec3(WIND_FORCE, -9.81, WIND_FORCE));
 
