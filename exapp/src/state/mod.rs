@@ -296,7 +296,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             });
         }
 
-        const WIND_FORCE: f32 = 4.0;
+        const WIND_FORCE: f32 = 2.0;
         self.xpbd
             .apply_forces_batched(glam::vec3(WIND_FORCE, -9.81, WIND_FORCE));
 
@@ -306,8 +306,8 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 .handle_constraint_break(broken_links, self.xpbd.links());
 
             let broken_frags = self.fragments.frame_disabled_frags_direct();
-            for &broken in broken_frags {
-                let renderable_id = *unsafe { self.frag_map.get_unchecked(broken as usize) };
+            for &(frag_index, _) in broken_frags {
+                let renderable_id = *unsafe { self.frag_map.get_unchecked(frag_index as usize) };
                 let entity_id = self.renderables[renderable_id as usize].data_handle;
                 let e_index = unsafe { self.entity_data.get_indirect_unchecked(entity_id) };
                 let pos = unsafe {

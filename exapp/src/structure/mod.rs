@@ -21,9 +21,9 @@ pub fn create_structure_lattice(
 
     const MASS: f32 = 150.0;
 
-    const VERY_STIFF_COMPL: f32 = 0.1e-6;
-    const STIFF_COMPL: f32 = 0.1e-5;
-    const SOFT_COMPL: f32 = 0.25e-3;
+    const VERY_STIFF_COMPL: f32 = 0.15e-7;
+    const STIFF_COMPL: f32 = 0.5e-5;
+    const SOFT_COMPL: f32 = 0.35e-4;
 
     const STRONG_LINK: XpbdLinkOptions = XpbdLinkOptions::new(VERY_STIFF_COMPL);
     const MID_LINK: XpbdLinkOptions = XpbdLinkOptions::new(STIFF_COMPL);
@@ -122,29 +122,12 @@ pub fn create_structure_lattice(
             lattice.link_nodes(center_front, last_top[5], MID_LINK);
             lattice.link_nodes(center_left, last_top[7], MID_LINK);
 
+            // central spline
             lattice.link_nodes(origin, last_top[8], WEAK_LINK);
         }
 
         // side diagonals
         {
-            // lattice.link_nodes(back_left, last_top[1], MID_LINK);
-            // lattice.link_nodes(last_top[1], back_right, MID_LINK);
-            // lattice.link_nodes(back_right, last_top[3], MID_LINK);
-            // lattice.link_nodes(last_top[3], front_right, MID_LINK);
-            // lattice.link_nodes(front_right, last_top[5], MID_LINK);
-            // lattice.link_nodes(last_top[5], front_left, MID_LINK);
-            // lattice.link_nodes(front_left, last_top[7], MID_LINK);
-            // lattice.link_nodes(last_top[7], back_left, MID_LINK);
-
-            // lattice.link_nodes(center_back, last_top[0], MID_LINK);
-            // lattice.link_nodes(last_top[2], center_back, MID_LINK);
-            // lattice.link_nodes(center_right, last_top[2], MID_LINK);
-            // lattice.link_nodes(last_top[4], center_right, MID_LINK);
-            // lattice.link_nodes(center_front, last_top[4], MID_LINK);
-            // lattice.link_nodes(last_top[6], center_front, MID_LINK);
-            // lattice.link_nodes(center_left, last_top[6], MID_LINK);
-            // lattice.link_nodes(last_top[0], center_left, MID_LINK);
-
             lattice.link_nodes(back_left, last_top[2], MID_LINK);
             lattice.link_nodes(back_right, last_top[0], MID_LINK);
 
@@ -158,38 +141,15 @@ pub fn create_structure_lattice(
             lattice.link_nodes(front_left, last_top[0], MID_LINK);
         }
 
-        // side cross
-        // {
-        //     lattice.link_nodes(c_left, back_left, MID_LINK);
-        //     lattice.link_nodes(c_left, front_left, MID_LINK);
-        //     lattice.link_nodes(c_left, last_top[0], MID_LINK);
-        //     lattice.link_nodes(c_left, last_top[3], MID_LINK);
-
-        //     lattice.link_nodes(c_right, back_right, MID_LINK);
-        //     lattice.link_nodes(c_right, front_right, MID_LINK);
-        //     lattice.link_nodes(c_right, last_top[1], MID_LINK);
-        //     lattice.link_nodes(c_right, last_top[2], MID_LINK);
-
-        //     lattice.link_nodes(c_front, front_left, MID_LINK);
-        //     lattice.link_nodes(c_front, front_right, MID_LINK);
-        //     lattice.link_nodes(c_front, last_top[2], MID_LINK);
-        //     lattice.link_nodes(c_front, last_top[3], MID_LINK);
-
-        //     lattice.link_nodes(c_back, back_right, MID_LINK);
-        //     lattice.link_nodes(c_back, back_left, MID_LINK);
-        //     lattice.link_nodes(c_back, last_top[0], MID_LINK);
-        //     lattice.link_nodes(c_back, last_top[1], MID_LINK);
-        // }
-
         // floor diagonal and cross with intermediate
         {
             // lattice.link_nodes(back_left, front_right, WEAK_LINK);
             // lattice.link_nodes(front_left, back_right, WEAK_LINK);
 
-            lattice.link_nodes(back_left, origin, WEAK_LINK);
-            lattice.link_nodes(front_right, origin, WEAK_LINK);
-            lattice.link_nodes(back_right, origin, WEAK_LINK);
-            lattice.link_nodes(front_left, origin, WEAK_LINK);
+            // lattice.link_nodes(back_left, origin, WEAK_LINK);
+            // lattice.link_nodes(front_right, origin, WEAK_LINK);
+            // lattice.link_nodes(back_right, origin, WEAK_LINK);
+            // lattice.link_nodes(front_left, origin, WEAK_LINK);
 
             lattice.link_nodes(center_left, origin, WEAK_LINK);
             lattice.link_nodes(center_right, origin, WEAK_LINK);

@@ -282,7 +282,7 @@ pub struct LatticeIds {
 
 pub const DEFAULT_SOLVE_ITERATIONS: u32 = 8;
 pub const DEFAULT_SUB_STEPS: u32 = 4;
-pub const DAMPING: f32 = 0.996;
+pub const DAMPING: f32 = 0.9965;
 
 ethel::table_spec! {
     struct Nodes {
@@ -486,7 +486,7 @@ impl XpbdSolver {
         self.broken_links.clear();
 
         if self.allow_breaking {
-            const LAMBDA_STRAIN_THRESHOLD: f32 = 52_000.0;
+            const LAMBDA_STRAIN_THRESHOLD: f32 = 15_000.0;
             const LAMBDA_COMPRESSION_THRESHOLD: f32 = -20_000.0;
 
             for (handle, lambda) in links.handles().iter().zip(links.lambda_slice()) {
@@ -584,8 +584,8 @@ impl XpbdSolver {
 
     #[inline]
     fn apply_ground_constraint(&self, node_data: &mut NodesRowTable) {
-        const RESTITUTION: f32 = 0.4;
-        const FRICTION: f32 = 0.2;
+        const RESTITUTION: f32 = 0.5;
+        const FRICTION: f32 = 0.4;
 
         let ground_level = self.ground_level.unwrap_or_default();
         let (n_pos, c_pos, _, _, _, velocity) = node_data.split_mut();
