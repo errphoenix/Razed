@@ -171,7 +171,7 @@ impl FragmentSystem {
 
         // validate disabled fragments and invalidate relations
         let (parents, weights, _, states, _, _, _, _) = self.fragments.split_mut();
-        for (frag_idx, node_id) in self.disabled_frags_frame.drain(..) {
+        self.disabled_frags_frame.retain(|&(frag_idx, node_id)| {
             let parents = unsafe { parents.alpha.get_unchecked_mut(frag_idx as usize) };
             let weights = unsafe { weights.alpha.get_unchecked_mut(frag_idx as usize) };
 
@@ -195,8 +195,11 @@ impl FragmentSystem {
             if active_count as u32 <= MINIMUM_THRESHOLD {
                 let state = unsafe { states.alpha.get_unchecked_mut(frag_idx as usize) };
                 *state = FragmentState::Debris;
+                false
+            } else {
+                true
             }
-        }
+        });
     }
 
     /// Return a slice containing the *direct indices* of all fragments
