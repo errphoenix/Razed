@@ -27,9 +27,9 @@ layout(std430, binding = 1) readonly buffer POD_Weights
 {
     vec4 pod_weights[];
 };
-layout(std430, binding = 2) readonly buffer POD_Offsets
+layout(std430, binding = 2) readonly buffer POD_BindPose
 {
-    vec4 pod_offsets[];
+    vec4 pod_bind_pose[];
 };
 layout(std430, binding = 3) readonly buffer POD_States
 {
@@ -45,7 +45,9 @@ layout(std430, binding = 7) readonly buffer POD_Nodes_Positions
     // cpu physics data is vec3; padded to vec4 during upload
     vec4 pod_nodes_positions[];
 };
+layout(std430, binding = 8) readonly buffer POD_Nodes_BindPose
 {
+    vec4 pod_nodes_bind_pose[];
 };
 
 uniform mat4 u_projection;
@@ -71,6 +73,7 @@ void main() {
     uint fragment_id = gl_InstanceID + 1;
     uvec4 parents = pod_parents[fragment_id];
     vec4 weights = pod_weights[fragment_id];
+    vec3 bind_pose = pod_bind_pose[fragment_id].xyz;
 
     // common ids and weights gather
     uint i0 = imap_nodes[parents.x];
@@ -88,49 +91,23 @@ void main() {
     vec3 p2 = pod_nodes_positions[i2].xyz;
     vec3 p3 = pod_nodes_positions[i3].xyz;
 
-    // world position before calibration
-    vec3 fragment_offset = pod_offsets[fragment_id].xyz;
-    vec3 fragment_base_position = p0 * w0 + p1 * w1 + p2 * w2 + p3 * w3;
+    vec3 b0 = pod_nodes_bind_pose[i0].xyz;
+    vec3 b1 = pod_nodes_bind_pose[i1].xyz;
+    vec3 b2 = pod_nodes_bind_pose[i2].xyz;
+    vec3 b3 = pod_nodes_bind_pose[i3].xyz;
 
-    vec3 dir0 = normalize(p0 - fragment_base_position);
-    vec3 dir1 = normalize(p1 - fragment_base_position);
-    vec3 dir2 = normalize(p2 - fragment_base_position);
-    vec3 dir3 = normalize(p3 - fragment_base_position);
+    vec3 v0 = p0 + (model - b0);
+    vec3 v1 = p1 + (model - b1);
+    vec3 v2 = p2 + (model - b2);
+    vec3 v3 = p3 + (model - b3);
 
-    float nv0 = dot(model, dir0);
-    float nv1 = dot(model, dir1);
-    float nv2 = dot(model, dir2);
-    float nv3 = dot(model, dir3);
+    vec3 deform = w0 * v0 + w1 * v1 + w2 * v2 + w3 * v3;
+    vec3 local = model + deform;
 
-    // avoid degenerate nodes' weights (todo)
-    if (i0 == 0) nv0 = 0.0;
-    if (i1 == 0) nv1 = 0.0;
-    if (i2 == 0) nv2 = 0.0;
-    if (i3 == 0) nv3 = 0.0;
-
-    // apply
-    w0 += nv0;
-    w1 += nv1;
-    w2 += nv2;
-    w3 += nv3;
-    float w_t = w0 + w1 + w2 + w3;
-    w0 /= w_t;
-    w1 /= w_t;
-    w2 /= w_t;
-    w3 /= w_t;
-
-    vec3 fragment_position = p0 * w0 + p1 * w1 + p2 * w2 + p3 * w3;
-    fragment_position = fragment_base_position;
-    vec3 local = model + fragment_position;
-
-    vec4 world = vec4(local + fragment_offset, 1.0);
+    vec4 world = vec4(local + bind_pose, 1.0);
     fs_world = world.xyz;
     fs_normal = normal;
-    fs_color = vec4(vec3(0.35), 1.0);
-
-    vec3 color_dbg = dir0 * w0 + dir1 * w1 + dir2 * w2 + dir3 * w3;
-    color_dbg = (color_dbg * 0.5 + 0.5) * abs(color_dbg);
-    fs_color = vec4(color_dbg, 1.0);
+    fs_color = vec4(vec3(0.5), 1.0);
 
     uint state = pod_states[fragment_id];
     gl_Position = u_projection * u_view * world * float(state);

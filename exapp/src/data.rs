@@ -85,7 +85,7 @@ layout_buffer! {
 }
 
 pub const FRAGMENTS_ALLOC: usize = 16384;
-pub const FRAGMENTS_DATA_PARTS: usize = 6;
+pub const FRAGMENTS_DATA_PARTS: usize = 7;
 
 layout_buffer! {
     const FragmentData: FRAGMENTS_DATA_PARTS, {
@@ -99,7 +99,7 @@ layout_buffer! {
             bind 1;
             shader 1;
         };
-        enum PodOffsets: FRAGMENTS_ALLOC => {
+        enum PodBindPose: FRAGMENTS_ALLOC => {
             type glam::Vec4;
             bind 2;
             shader 2;
@@ -119,6 +119,11 @@ layout_buffer! {
             type [f32; 4];
             bind 5;
             shader 7;
+        };
+        enum PodNodesBindPose: XPBD_NODES_ALLOC => {
+            type [f32; 4];
+            bind 6;
+            shader 8;
         };
     }
 }

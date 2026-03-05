@@ -41,6 +41,9 @@ pub struct State {
     lattice: LatticeSystem,
     fragments: FragmentSystem,
 
+    /// Parallel to NodesRowTable of LatticeSystem
+    lattice_bind_pose: Vec<glam::Vec3>,
+
     /// Mapping between fragment direct index and the **RENDERABLE** index
     frag_map: Vec<u32>,
 
@@ -60,7 +63,7 @@ impl Default for State {
             lattice: LatticeSystem::new(XpbdSolver::new(
                 XpbdOptions::default().with_ground_level(Some(GROUND_LEVEL)),
             )),
-
+            lattice_bind_pose: Default::default(),
             fragments: Default::default(),
             renderables: Default::default(),
             mesh_ids: Default::default(),
@@ -111,9 +114,10 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
 
                 let imap_nodes = self.lattice.nodes().handles();
                 let pod_nodes_positions = self.lattice.nodes().current_pos_slice();
+                let pod_nodes_bind_pose = &self.lattice_bind_pose;
                 let pod_parents = self.fragments.table().parents_slice();
                 let pod_weights = self.fragments.table().influence_slice();
-                let pod_offsets = self.fragments.table().rest_offset_slice();
+                let pod_bind_pose = self.fragments.table().bind_world_slice();
                 let pod_states = self.fragments.table().state_slice();
 
                 // SAFETY: the use of LayoutFragmentData ensures we are
@@ -122,9 +126,10 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 unsafe {
                     fragments.blit_part(buf_idx, LayoutFragmentData::ImapNodes as usize, imap_nodes, 0);
                     fragments.blit_part_padded(buf_idx, LayoutFragmentData::PodNodesPositions as usize, pod_nodes_positions, 0, 4);
+                    fragments.blit_part_padded(buf_idx, LayoutFragmentData::PodNodesBindPose as usize, pod_nodes_bind_pose, 0, 4);
                     fragments.blit_part(buf_idx, LayoutFragmentData::PodParents as usize, pod_parents, 0);
                     fragments.blit_part(buf_idx, LayoutFragmentData::PodWeights as usize, pod_weights, 0);
-                    fragments.blit_part_padded(buf_idx, LayoutFragmentData::PodOffsets as usize, pod_offsets, 0, 4);
+                    fragments.blit_part(buf_idx, LayoutFragmentData::PodBindPose as usize, pod_bind_pose, 0);
                     fragments.blit_part(buf_idx, LayoutFragmentData::PodStates as usize, pod_states, 0);
                 }
             }
@@ -399,6 +404,16 @@ impl State {
         if self.frag_map.is_empty() {
             self.frag_map.push(0);
         }
+
+        // load initial node positions as bind pose
+        if self.lattice_bind_pose.is_empty() {
+            self.lattice_bind_pose.push(Default::default());
+        }
+        // cut off length to leave l0..l1 range to blank state
+        self.lattice_bind_pose.resize(l0, Default::default());
+
+        let new_positions = &self.lattice.nodes().current_pos_slice()[l0..l1];
+        self.lattice_bind_pose.extend(new_positions);
 
         // todo: CLEANUP THIS UGLY PIECE OF SHIT
         let owners = &self

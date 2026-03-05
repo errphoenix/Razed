@@ -34,7 +34,8 @@ ethel::table_spec! {
     struct Fragments {
         parents: [u32; 4];
         influence: [f32; 4];
-        rest_offset: glam::Vec3;
+        // bind pose world position
+        bind_world: glam::Vec4;
 
         state: FragmentState;
         health: f32; // also acts as mass in Debris state
@@ -286,9 +287,8 @@ impl FragmentSystem {
                 continue;
             }
 
-            let (parents, weights, mut rest_offset) = {
+            let (parents, weights) = {
                 let (mut parents, mut weights) = ([0u32; 4], [0f32; 4]);
-                let mut rest_offset = glam::Vec3::ZERO;
 
                 near_buf
                     .drain(..n_count)
@@ -302,23 +302,13 @@ impl FragmentSystem {
                 let w_t = weights.iter().fold(0f32, |t, &v| t + v);
                 weights.iter_mut().for_each(|v| *v /= w_t);
 
-                parents
-                    .iter()
-                    .zip(&weights)
-                    .take(n_count)
-                    .for_each(|(&parent, &weight)| {
-                        let point = positions[owners[parent as usize] as usize];
-                        rest_offset += point * weight;
-                    });
-
-                (parents, weights, rest_offset)
+                (parents, weights)
             };
-            rest_offset = voxel - rest_offset;
 
             let handle = self.fragments.put((
                 parents,
                 weights,
-                rest_offset,
+                glam::vec4(voxel.x, voxel.y, voxel.z, 1f32),
                 FragmentState::Attached,
                 100.0, //todo; health
                 voxel,
