@@ -6,7 +6,7 @@ use crate::{
     data::{
         FrameDataBuffers, LayoutEntityData, LayoutFragmentData, LayoutXpbdDebugData, Renderable,
     },
-    state::physics::XpbdSystem,
+    state::physics::LatticeSystem,
     structure::{
         self, FragmentSystem,
         fragment::{VoxelGrid, VoxelGridOptions},
@@ -38,13 +38,13 @@ pub struct State {
     mesh_ids: Vec<ethel::mesh::Id>,
 
     entity_data: EntityDataRowTable,
-    xpbd: XpbdSystem,
+    lattice: LatticeSystem,
     fragments: FragmentSystem,
 
     /// Mapping between fragment direct index and the **RENDERABLE** index
     frag_map: Vec<u32>,
 
-    /// Selected xpbd link id
+    /// Selected lattice link id
     selection: Option<u32>,
 
     camera: camera::Orbital,
@@ -57,7 +57,7 @@ const CAMERA_PITCH_CLAMP: std::ops::Range<f32> =
 impl Default for State {
     fn default() -> Self {
         Self {
-            xpbd: XpbdSystem::new(XpbdSolver::new(
+            lattice: LatticeSystem::new(XpbdSolver::new(
                 XpbdOptions::default().with_ground_level(Some(GROUND_LEVEL)),
             )),
 
@@ -109,8 +109,8 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             {
                 let fragments = &storage.fragments;
 
-                let imap_nodes = self.xpbd.nodes().handles();
-                let pod_nodes_positions = self.xpbd.nodes().current_pos_slice();
+                let imap_nodes = self.lattice.nodes().handles();
+                let pod_nodes_positions = self.lattice.nodes().current_pos_slice();
                 let pod_parents = self.fragments.table().parents_slice();
                 let pod_weights = self.fragments.table().influence_slice();
                 let pod_offsets = self.fragments.table().rest_offset_slice();
@@ -183,15 +183,15 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 }
 
                 let xpbd_dbg = &storage.xpbd_debug;
-                let constraints = self.xpbd.links().relation_slice();
-                let imap_nodes = self.xpbd.nodes().handles();
-                let pod_nodes = self.xpbd.nodes().current_pos_slice();
+                let constraints = self.lattice.links().relation_slice();
+                let imap_nodes = self.lattice.nodes().handles();
+                let pod_nodes = self.lattice.nodes().current_pos_slice();
                 let selected_link = {
                     let handle = self.selection.unwrap_or_default();
-                    self.xpbd.links().get_indirect(handle).unwrap_or_default()
+                    self.lattice.links().get_indirect(handle).unwrap_or_default()
                 };
 
-                let node_count = self.xpbd.links().len() as u32;
+                let node_count = self.lattice.links().len() as u32;
                 storage.xpbd_debug_link_count.store(node_count, Ordering::Release);
 
                 const VEC3_VEC4_PADDING: usize = 4;
@@ -239,7 +239,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             if let Some(selected) = self.selection.take()
                 && input.keys().key_pressed(janus::input::KeyCode::Delete)
             {
-                self.xpbd.break_constraint(selected);
+                self.lattice.break_constraint(selected);
             }
 
             let cursor = input.cursor().current_f32();
@@ -257,15 +257,15 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
 
             let mouse_ray = ::physics::Ray::new(view_point.position, mouse_world_dir);
 
-            let node_positions = self.xpbd.nodes().current_pos_slice();
-            let constraints = self.xpbd.links().relation_view();
+            let node_positions = self.lattice.nodes().current_pos_slice();
+            let constraints = self.lattice.links().relation_view();
             let mut closest = None::<f32>;
 
             for (i, ::physics::xpbd::LinkNodes(a, b)) in constraints.into_iter().enumerate() {
                 const RAY_SIZE: f32 = 0.05;
 
-                let a_i = unsafe { self.xpbd.nodes().get_indirect_unchecked(*a) };
-                let b_i = unsafe { self.xpbd.nodes().get_indirect_unchecked(*b) };
+                let a_i = unsafe { self.lattice.nodes().get_indirect_unchecked(*a) };
+                let b_i = unsafe { self.lattice.nodes().get_indirect_unchecked(*b) };
                 let a_p = *unsafe { node_positions.get_unchecked(a_i as usize) };
                 let b_p = *unsafe { node_positions.get_unchecked(b_i as usize) };
 
@@ -277,7 +277,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     }
 
                     closest = Some(t);
-                    let id = *unsafe { self.xpbd.links().handles().get_unchecked(i) };
+                    let id = *unsafe { self.lattice.links().handles().get_unchecked(i) };
                     self.selection = Some(id as u32);
                 }
             }
@@ -295,13 +295,13 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         }
 
         const WIND_FORCE: f32 = 2.0;
-        self.xpbd
+        self.lattice
             .apply_forces_batched(glam::vec3(WIND_FORCE, -9.81, WIND_FORCE));
 
         {
-            let broken_links = self.xpbd.frame_broken_links();
+            let broken_links = self.lattice.frame_broken_links();
             self.fragments
-                .handle_constraint_break(broken_links, self.xpbd.links());
+                .handle_constraint_break(broken_links, self.lattice.links());
 
             let broken_frags = self.fragments.frame_disabled_frags_direct();
             for &(frag_index, _) in broken_frags {
@@ -318,7 +318,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             }
         }
 
-        self.xpbd.update(delta);
+        self.lattice.update(delta);
 
         // random demo
         if input.keys().key_pressed(janus::input::KeyCode::KeyH) {
@@ -387,9 +387,9 @@ impl State {
         voxel_grid: &VoxelGrid,
         lattice: XpbdLatticeBuilder,
     ) -> LatticeIds {
-        let l0 = self.xpbd.nodes().handles().len();
-        let lattice_map = self.xpbd.import_lattice(lattice);
-        let l1 = self.xpbd.nodes().handles().len();
+        let l0 = self.lattice.nodes().handles().len();
+        let lattice_map = self.lattice.import_lattice(lattice);
+        let l1 = self.lattice.nodes().handles().len();
 
         if l0 == l1 {
             return lattice_map;
@@ -402,15 +402,15 @@ impl State {
 
         // todo: CLEANUP THIS UGLY PIECE OF SHIT
         let owners = &self
-            .xpbd
+            .lattice
             .nodes()
             .slots_map()
             .iter()
             .map(|v| v.saturating_sub(l0 as u32))
             .collect::<Vec<_>>();
 
-        let handles = &self.xpbd.nodes().handles()[l0..l1];
-        let positions = &self.xpbd.nodes().current_pos_slice()[l0..l1];
+        let handles = &self.lattice.nodes().handles()[l0..l1];
+        let positions = &self.lattice.nodes().current_pos_slice()[l0..l1];
 
         let l0 = self.fragments.table().handles().len();
         self.fragments

@@ -3,14 +3,14 @@ use janus::context::DeltaTime;
 use physics::xpbd::{LinksRowTable, NodesRowTable, XpbdLatticeBuilder, XpbdSolver};
 
 #[derive(Debug, Default)]
-pub struct XpbdSystem {
+pub struct LatticeSystem {
     nodes: NodesRowTable,
     links: LinksRowTable,
 
     solver: XpbdSolver,
 }
 
-impl XpbdSystem {
+impl LatticeSystem {
     pub fn new(solver: XpbdSolver) -> Self {
         Self {
             solver,
