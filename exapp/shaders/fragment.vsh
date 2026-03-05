@@ -84,25 +84,46 @@ void main() {
     float w1 = weights.y;
     float w2 = weights.z;
     float w3 = weights.w;
-
-    // linear-blend-skinning for positions
     vec3 p0 = pod_nodes_positions[i0].xyz;
     vec3 p1 = pod_nodes_positions[i1].xyz;
     vec3 p2 = pod_nodes_positions[i2].xyz;
     vec3 p3 = pod_nodes_positions[i3].xyz;
+
+    vec3 center = p0 * w0 + p1 * w1 + p2 * w2 + p3 * w3;
+    vec3 dir0 = normalize(p0 - center);
+    vec3 dir1 = normalize(p1 - center);
+    vec3 dir2 = normalize(p2 - center);
+    vec3 dir3 = normalize(p3 - center);
+
+    vec3 vd = normalize(model);
+    float align0 = max(0.0, dot(vd, dir0));
+    float align1 = max(0.0, dot(vd, dir1));
+    float align2 = max(0.0, dot(vd, dir2));
+    float align3 = max(0.0, dot(vd, dir3));
+
+    float vw0 = w0 * (1.0 + align0);
+    float vw1 = w1 * (1.0 + align1);
+    float vw2 = w2 * (1.0 + align2);
+    float vw3 = w3 * (1.0 + align3);
+
+    float vwt = vw0 + vw1 + vw2 + vw3;
+    vw0 /= vwt;
+    vw1 /= vwt;
+    vw2 /= vwt;
+    vw3 /= vwt;
 
     vec3 b0 = pod_nodes_bind_pose[i0].xyz;
     vec3 b1 = pod_nodes_bind_pose[i1].xyz;
     vec3 b2 = pod_nodes_bind_pose[i2].xyz;
     vec3 b3 = pod_nodes_bind_pose[i3].xyz;
 
-    vec3 v0 = p0 + (model - b0);
-    vec3 v1 = p1 + (model - b1);
-    vec3 v2 = p2 + (model - b2);
-    vec3 v3 = p3 + (model - b3);
+    vec3 deform = vec3(0.0);
+    deform += vw0 * (p0 + model - b0);
+    deform += vw1 * (p1 + model - b1);
+    deform += vw2 * (p2 + model - b2);
+    deform += vw3 * (p3 + model - b3);
 
-    vec3 deform = w0 * v0 + w1 * v1 + w2 * v2 + w3 * v3;
-    vec3 local = model + deform;
+    vec3 local = deform;
 
     vec4 world = vec4(local + bind_pose, 1.0);
     fs_world = world.xyz;
