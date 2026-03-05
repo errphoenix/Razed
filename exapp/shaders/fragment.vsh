@@ -45,9 +45,7 @@ layout(std430, binding = 7) readonly buffer POD_Nodes_Positions
     // cpu physics data is vec3; padded to vec4 during upload
     vec4 pod_nodes_positions[];
 };
-layout(std430, binding = 8) readonly buffer POD_Nodes_Rotors
 {
-    vec4 pod_nodes_rotors[];
 };
 
 uniform mat4 u_projection;
@@ -83,12 +81,6 @@ void main() {
     float w1 = weights.y;
     float w2 = weights.z;
     float w3 = weights.w;
-
-    // linear-blend-skinning for rotations
-    vec4 r0 = pod_nodes_rotors[i0];
-    vec4 r1 = pod_nodes_rotors[i1];
-    vec4 r2 = pod_nodes_rotors[i2];
-    vec4 r3 = pod_nodes_rotors[i3];
 
     // linear-blend-skinning for positions
     vec3 p0 = pod_nodes_positions[i0].xyz;

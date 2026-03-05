@@ -8,7 +8,7 @@ out vec4 outColor;
 
 uniform vec3 u_camera_forward;
 
-const float LIGHT_AMBIENT = 0.1;
+const float LIGHT_AMBIENT = 0.5;
 
 void main() {
     vec4 albedo = fs_color;
