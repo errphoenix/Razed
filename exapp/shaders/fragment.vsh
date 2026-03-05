@@ -128,7 +128,7 @@ void main() {
     vec4 world = vec4(local + bind_pose, 1.0);
     fs_world = world.xyz;
     fs_normal = normal;
-    fs_color = vec4(vec3(0.5), 1.0);
+    fs_color = vec4(vec3(0.8), 1.0);
 
     uint state = pod_states[fragment_id];
     gl_Position = u_projection * u_view * world * float(state);
