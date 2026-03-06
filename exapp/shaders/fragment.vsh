@@ -88,23 +88,22 @@ void main() {
     vec3 p1 = pod_nodes_positions[i1].xyz;
     vec3 p2 = pod_nodes_positions[i2].xyz;
     vec3 p3 = pod_nodes_positions[i3].xyz;
+    vec3 b0 = pod_nodes_bind_pose[i0].xyz;
+    vec3 b1 = pod_nodes_bind_pose[i1].xyz;
+    vec3 b2 = pod_nodes_bind_pose[i2].xyz;
+    vec3 b3 = pod_nodes_bind_pose[i3].xyz;
 
-    vec3 center = p0 * w0 + p1 * w1 + p2 * w2 + p3 * w3;
-    vec3 dir0 = normalize(p0 - center);
-    vec3 dir1 = normalize(p1 - center);
-    vec3 dir2 = normalize(p2 - center);
-    vec3 dir3 = normalize(p3 - center);
+    vec3 w_rest = bind_pose + model;
 
-    vec3 vd = normalize(model);
-    float align0 = max(0.0, dot(vd, dir0));
-    float align1 = max(0.0, dot(vd, dir1));
-    float align2 = max(0.0, dot(vd, dir2));
-    float align3 = max(0.0, dot(vd, dir3));
+    float d0 = distance(w_rest, b0) + 0.0001;
+    float d1 = distance(w_rest, b1) + 0.0001;
+    float d2 = distance(w_rest, b2) + 0.0001;
+    float d3 = distance(w_rest, b3) + 0.0001;
 
-    float vw0 = w0 * (1.0 + align0);
-    float vw1 = w1 * (1.0 + align1);
-    float vw2 = w2 * (1.0 + align2);
-    float vw3 = w3 * (1.0 + align3);
+    float vw0 = 1.0 / (d0 * d0);
+    float vw1 = 1.0 / (d1 * d1);
+    float vw2 = 1.0 / (d2 * d2);
+    float vw3 = 1.0 / (d3 * d3);
 
     float vwt = vw0 + vw1 + vw2 + vw3;
     vw0 /= vwt;
@@ -112,20 +111,13 @@ void main() {
     vw2 /= vwt;
     vw3 /= vwt;
 
-    vec3 b0 = pod_nodes_bind_pose[i0].xyz;
-    vec3 b1 = pod_nodes_bind_pose[i1].xyz;
-    vec3 b2 = pod_nodes_bind_pose[i2].xyz;
-    vec3 b3 = pod_nodes_bind_pose[i3].xyz;
-
     vec3 deform = vec3(0.0);
-    deform += vw0 * (p0 + model - b0);
-    deform += vw1 * (p1 + model - b1);
-    deform += vw2 * (p2 + model - b2);
-    deform += vw3 * (p3 + model - b3);
+    deform += vw0 * (p0 - b0);
+    deform += vw1 * (p1 - b1);
+    deform += vw2 * (p2 - b2);
+    deform += vw3 * (p3 - b3);
 
-    vec3 local = deform;
-
-    vec4 world = vec4(local + bind_pose, 1.0);
+    vec4 world = vec4(deform + w_rest, 1.0);
     fs_world = world.xyz;
     fs_normal = normal;
     fs_color = vec4(vec3(0.8), 1.0);
