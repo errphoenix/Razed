@@ -103,9 +103,16 @@ impl LatticeSystem {
         (&mut self.nodes, &mut self.links)
     }
 
+    /// See [`physics::xpbd::XpbdSolver::broken_links`].
     #[inline]
     pub fn frame_broken_links(&self) -> &[u32] {
         self.solver.broken_links()
+    }
+
+    /// See [`physics::xpbd::XpbdSolver::degenerate_nodes`].
+    #[inline]
+    pub fn frame_degenerate_nodes(&self) -> &[u32] {
+        self.solver.degenerate_nodes()
     }
 
     #[inline]

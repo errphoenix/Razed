@@ -131,15 +131,34 @@ impl FragmentSystem {
         self.node_map.clear();
     }
 
-    /// Synchronise (stable II) `broken_ids` of constraints with fragments state.
-    pub fn handle_constraint_break(&mut self, broken_ids: &[u32], constraints: &LinksRowTable) {
-        const MINIMUM_THRESHOLD: u32 = 1;
+    /// Synchronise (stable II) `broken_ids` of constraints and
+    /// [`degenerate_nodes`] with fragments state.
+    pub fn handle_constraint_break(
+        &mut self,
+        broken_ids: &[u32],
+        degenerate_nodes: &[u32],
+        constraints: &LinksRowTable,
+    ) {
+        const MINIMUM_THRESHOLD: u32 = 2;
 
         self.disabled_frags_frame.clear();
-        {
-            //let f_handles = self.fragments.handles();
-            let relations = constraints.relation_slice();
+        for &degen in degenerate_nodes {
+            if self.disabled_nodes.insert(degen) {
+                for &frag_id in &self.node_map[degen as usize] {
+                    if frag_id == 0 {
+                        continue;
+                    }
 
+                    if self.disabled_frags_alltime.insert(frag_id) {
+                        let idx = unsafe { self.fragments.get_indirect_unchecked(frag_id) };
+                        self.disabled_frags_frame.push((idx, degen));
+                    }
+                }
+            }
+        }
+
+        {
+            let relations = constraints.relation_slice();
             for broken in broken_ids {
                 let index = unsafe { constraints.get_indirect_unchecked(*broken) };
                 let LinkNodes(a, b) = *unsafe { relations.get_unchecked(index as usize) };

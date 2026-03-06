@@ -313,9 +313,16 @@ pub struct XpbdSolver {
     substeps: u32,
     h: f32,
     h2: f32,
+
     allow_breaking: bool,
+    clear_degenerate_nodes: bool,
     ground_level: Option<f32>,
+
     broken_links: Vec<u32>,
+    degenerate_nodes: Vec<u32>,
+
+    /// Maps a node indirect index (stable) to number of active constraints
+    frame_constraint_map: Vec<u32>,
 }
 
 impl Default for XpbdSolver {
@@ -325,9 +332,15 @@ impl Default for XpbdSolver {
             substeps: DEFAULT_SUB_STEPS,
             h: 0.0,
             h2: 0.0,
-            ground_level: None,
+
             allow_breaking: true,
+            clear_degenerate_nodes: true,
+            ground_level: None,
+
             broken_links: Vec::with_capacity(32),
+            degenerate_nodes: Vec::with_capacity(32),
+
+            frame_constraint_map: Vec::new(),
         }
     }
 }
@@ -337,6 +350,7 @@ pub struct XpbdOptions {
     pub iterations: u32,
     pub substeps: u32,
     pub allow_breaking: bool,
+    pub clear_degenerate_nodes: bool,
     pub ground_level: Option<f32>,
 }
 
@@ -345,12 +359,14 @@ impl XpbdOptions {
         iterations: u32,
         substeps: u32,
         allow_breaking: bool,
+        clear_degenerate_nodes: bool,
         ground_level: Option<f32>,
     ) -> Self {
         Self {
             iterations,
             substeps,
             allow_breaking,
+            clear_degenerate_nodes,
             ground_level,
         }
     }
@@ -360,6 +376,7 @@ impl XpbdOptions {
             iterations,
             substeps: self.substeps,
             allow_breaking: self.allow_breaking,
+            clear_degenerate_nodes: self.clear_degenerate_nodes,
             ground_level: self.ground_level,
         }
     }
@@ -369,6 +386,7 @@ impl XpbdOptions {
             substeps,
             iterations: self.iterations,
             allow_breaking: self.allow_breaking,
+            clear_degenerate_nodes: self.clear_degenerate_nodes,
             ground_level: self.ground_level,
         }
     }
@@ -378,6 +396,7 @@ impl XpbdOptions {
             allow_breaking: breaking,
             iterations: self.iterations,
             substeps: self.substeps,
+            clear_degenerate_nodes: self.clear_degenerate_nodes,
             ground_level: self.ground_level,
         }
     }
@@ -388,6 +407,7 @@ impl XpbdOptions {
             iterations: self.iterations,
             substeps: self.substeps,
             allow_breaking: self.allow_breaking,
+            clear_degenerate_nodes: self.clear_degenerate_nodes,
         }
     }
 }
@@ -398,6 +418,7 @@ impl Default for XpbdOptions {
             iterations: DEFAULT_SOLVE_ITERATIONS,
             substeps: DEFAULT_SUB_STEPS,
             allow_breaking: true,
+            clear_degenerate_nodes: true,
             ground_level: None,
         }
     }
@@ -411,9 +432,15 @@ impl XpbdSolver {
             h2: 0.0,
             iterations: options.iterations,
             substeps: options.substeps,
+
             allow_breaking: options.allow_breaking,
+            clear_degenerate_nodes: options.clear_degenerate_nodes,
             ground_level: options.ground_level,
+
             broken_links: Vec::with_capacity(32 * options.allow_breaking as usize),
+            degenerate_nodes: Vec::with_capacity(32 * options.clear_degenerate_nodes as usize),
+
+            frame_constraint_map: Vec::new(),
         }
     }
 
@@ -458,6 +485,23 @@ impl XpbdSolver {
         self.broken_links.push(link_id);
     }
 
+    /// Returns a slice over the degenerate nodes computed during the last
+    /// step.
+    ///
+    /// This is reset at the beginning of every step. Degenerate nodes IDs
+    /// are accumulated every sub-step.
+    ///
+    /// # Panics
+    /// Will panic if the XPBD solver's `clear_degenerate_flag` flag is `false`.
+    pub fn degenerate_nodes(&self) -> &[u32] {
+        assert!(
+            self.clear_degenerate_nodes,
+            "cannot query degenerate nodes: clear_degenerate_nodes flag for XPBD is set to false"
+        );
+
+        &self.degenerate_nodes
+    }
+
     /// Returns a slice over the constraint IDs that were broken in the last
     /// step.
     ///
@@ -477,17 +521,58 @@ impl XpbdSolver {
 
     #[inline]
     pub fn step(&mut self, nodes: &mut NodesRowTable, links: &mut LinksRowTable) {
-        self.broken_links.iter().for_each(|&handle| {
-            links.free(handle);
-        });
+        if self.clear_degenerate_nodes {
+            self.degenerate_nodes.clear();
 
-        // clear last frame, allow external systems to act from
-        // accumulated broken links
-        self.broken_links.clear();
+            let relations = links.relation_view();
+            let count = relations.alpha.len();
+
+            self.frame_constraint_map.fill(0u32);
+            self.frame_constraint_map.resize(count, 0u32);
+
+            for &LinkNodes(a, b) in relations {
+                *unsafe { self.frame_constraint_map.get_unchecked_mut(a as usize) } += 1;
+                *unsafe { self.frame_constraint_map.get_unchecked_mut(b as usize) } += 1;
+            }
+        }
 
         if self.allow_breaking {
-            const LAMBDA_STRAIN_THRESHOLD: f32 = 15_000.0;
-            const LAMBDA_COMPRESSION_THRESHOLD: f32 = -20_000.0;
+            self.broken_links.iter().for_each(|&handle| {
+                if self.clear_degenerate_nodes {
+                    let id = unsafe { links.get_indirect_unchecked(handle) };
+                    let &LinkNodes(a, b) = unsafe { links.relation.get_unchecked(id as usize) };
+
+                    // delete node if this deleted constraint was their last
+                    // else, only keep tracking count: constraints are only
+                    // recounted at the start of the next step, but multiple
+                    // constraints to the same node might break in one step.
+                    {
+                        let ca = unsafe { self.frame_constraint_map.get_unchecked_mut(a as usize) };
+                        if *ca == 1 {
+                            // nodes.free(*ca);
+                            self.degenerate_nodes.push(*ca);
+                        } else {
+                            *ca -= 1;
+                        }
+                        let cb = unsafe { self.frame_constraint_map.get_unchecked_mut(b as usize) };
+                        if *cb == 1 {
+                            // nodes.free(*cb);
+                            self.degenerate_nodes.push(*cb);
+                        } else {
+                            *cb -= 1;
+                        }
+                    }
+                }
+
+                links.free(handle);
+            });
+
+            // clear last frame, this is only done at this point to allow
+            // external systems to act on accumulated broken links
+            self.broken_links.clear();
+
+            const LAMBDA_STRAIN_THRESHOLD: f32 = 14_000.0;
+            const LAMBDA_COMPRESSION_THRESHOLD: f32 = -15_000.0;
 
             for (handle, lambda) in links.handles().iter().zip(links.lambda_slice()) {
                 let force_strain = *lambda / self.h2;

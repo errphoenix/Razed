@@ -304,9 +304,11 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             .apply_forces_batched(glam::vec3(WIND_FORCE, -9.81, WIND_FORCE));
 
         {
-            let broken_links = self.lattice.frame_broken_links();
-            self.fragments
-                .handle_constraint_break(broken_links, self.lattice.links());
+            self.fragments.handle_constraint_break(
+                self.lattice.frame_broken_links(),
+                self.lattice.frame_degenerate_nodes(),
+                self.lattice.links(),
+            );
 
             let broken_frags = self.fragments.frame_disabled_frags_direct();
             for &(frag_index, _) in broken_frags {
@@ -332,15 +334,17 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             const WIDTH: f32 = 10.0;
             const HEIGHT: f32 = 4.0;
             const DEPTH: f32 = 10.0;
-            const FLOORS: u32 = 8;
+            const FLOORS: u32 = 6;
             const TOTAL_HEIGHT: f32 = HEIGHT * FLOORS as f32;
 
             let center = glam::vec3(vp.position.x, GROUND_LEVEL, vp.position.z);
 
             let lattice = structure::create_structure_lattice(center, WIDTH, HEIGHT, DEPTH, FLOORS);
 
+            const INNER_SPACE: i32 = 4;
+
             let mut voxel_grid = VoxelGrid::new(
-                |_| true,
+                |cell| cell.x.abs() > INNER_SPACE || cell.z.abs() > INNER_SPACE,
                 VoxelGridOptions::default()
                     .with_width(WIDTH)
                     .with_height(TOTAL_HEIGHT)
