@@ -8,7 +8,7 @@ out vec4 outColor;
 
 uniform vec3 u_camera_forward;
 
-const float LIGHT_AMBIENT = 0.01;
+const float LIGHT_AMBIENT = 0.25;
 
 void main() {
     vec4 albedo = fs_color;
@@ -22,6 +22,7 @@ void main() {
     // basic directional light (camera source)
     vec3 light_dir = -u_camera_forward;
     float diffuse = dot(light_dir, normal);
+    diffuse *= diffuse;
 
     float light_factor = LIGHT_AMBIENT + diffuse;
 

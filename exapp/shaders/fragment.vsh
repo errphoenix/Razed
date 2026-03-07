@@ -69,7 +69,7 @@ void main() {
     uint index = offset + gl_VertexID;
 
     Vertex vertex = vertex_storage[index];
-    vec3 model = vertex.position.xyz;
+    vec3 model = vertex.position.xyz * 0.5;
     vec3 normal = normalize(vertex.normal.xyz);
 
     // account for degenerate 0
