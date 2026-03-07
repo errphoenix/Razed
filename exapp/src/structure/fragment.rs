@@ -1,3 +1,4 @@
+use crate::data::FRAGMENTS_PARENTS_COUNT;
 use ethel::state::data::{
     Column,
     hash::{Cell, FxSpatialHash, SpatialResolution},
@@ -32,8 +33,8 @@ pub enum FragmentState {
 
 ethel::table_spec! {
     struct Fragments {
-        parents: [u32; 4];
-        influence: [f32; 4];
+        parents: [u32; FRAGMENTS_PARENTS_COUNT];
+        influence: [f32; FRAGMENTS_PARENTS_COUNT];
         // bind pose world position
         bind_world: glam::Vec4;
 
@@ -237,8 +238,8 @@ impl FragmentSystem {
         &self.disabled_frags_frame
     }
 
-    const LATTICE_SPATIAL_RESOLUTION: u32 = 8;
-    const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 24;
+    const LATTICE_SPATIAL_RESOLUTION: u32 = 2;
+    const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 8;
 
     /// Generate new fragments from a [`VoxelGrid`] and `lattice`.
     ///
@@ -267,7 +268,7 @@ impl FragmentSystem {
             self.node_map.push(Vec::<u32>::new());
         }
 
-        let mut near_buf = Vec::with_capacity(4);
+        let mut near_buf = Vec::with_capacity(FRAGMENTS_PARENTS_COUNT);
         let voxels = grid.voxels().values();
         let mut i = 0;
         for &voxel in voxels {
@@ -276,7 +277,7 @@ impl FragmentSystem {
             #[cfg(not(debug_assertions))]
             let _ = node_hash.nearest_cells(
                 cell,
-                4,
+                FRAGMENTS_PARENTS_COUNT as u32,
                 Self::VOXEL_NEIGHBOR_QUERY_RADIUS,
                 &mut near_buf,
                 false,
@@ -286,7 +287,7 @@ impl FragmentSystem {
             {
                 if let Err(rem) = node_hash.nearest_cells(
                     cell,
-                    4,
+                    FRAGMENTS_PARENTS_COUNT as u32,
                     Self::VOXEL_NEIGHBOR_QUERY_RADIUS,
                     &mut near_buf,
                     false,
@@ -299,18 +300,21 @@ impl FragmentSystem {
                 }
             }
 
-            let n_count = near_buf.len().min(4);
-            if n_count == 0 {
-                tracing::event!(
-                    name: "structure.fragment.build.query.skip_voxel",
-                    tracing::Level::WARN,
-                    "Skipping voxel {cell:?}: no nearby nodes in spatial hash."
-                );
-                continue;
-            }
+            let n_count = near_buf.len().min(FRAGMENTS_PARENTS_COUNT);
+            // if n_count < FRAGMENTS_PARENTS_COUNT {
+            //     tracing::event!(
+            //         name: "structure.fragment.build.query.skip_voxel",
+            //         tracing::Level::WARN,
+            //         "Skipping voxel {cell:?}: not enough {n_count} nearby nodes found."
+            //     );
+            //     continue;
+            // }
 
             let (parents, weights) = {
-                let (mut parents, mut weights) = ([0u32; 4], [0f32; 4]);
+                let (mut parents, mut weights) = (
+                    [0u32; FRAGMENTS_PARENTS_COUNT],
+                    [0f32; FRAGMENTS_PARENTS_COUNT],
+                );
 
                 near_buf
                     .drain(..n_count)

@@ -86,16 +86,17 @@ layout_buffer! {
 
 pub const FRAGMENTS_ALLOC: usize = 16384;
 pub const FRAGMENTS_DATA_PARTS: usize = 7;
+pub const FRAGMENTS_PARENTS_COUNT: usize = 8;
 
 layout_buffer! {
     const FragmentData: FRAGMENTS_DATA_PARTS, {
         enum PodParents: FRAGMENTS_ALLOC => {
-            type [u32; 4];
+            type [u32; FRAGMENTS_PARENTS_COUNT];
             bind 0;
             shader 0;
         };
         enum PodWeights: FRAGMENTS_ALLOC => {
-            type [f32; 4];
+            type [f32; FRAGMENTS_PARENTS_COUNT];
             bind 1;
             shader 1;
         };

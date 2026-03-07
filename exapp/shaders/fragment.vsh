@@ -19,14 +19,17 @@ layout(std430, binding = 11) readonly buffer MeshMetadata {
     Metadata metadata[];
 };
 
+// bidimensional array of parenting nodes to support 8 parents per fragment.
+// each entry is a 2-sized array of vec4, contiguous in memory
 layout(std430, binding = 0) readonly buffer POD_Parents
 {
-    uvec4 pod_parents[];
+    uvec4 pod_parents[][2];
 };
 layout(std430, binding = 1) readonly buffer POD_Weights
 {
-    vec4 pod_weights[];
+    vec4 pod_weights[][2];
 };
+
 layout(std430, binding = 2) readonly buffer POD_BindPose
 {
     vec4 pod_bind_pose[];
@@ -71,27 +74,46 @@ void main() {
 
     // account for degenerate 0
     uint fragment_id = gl_InstanceID + 1;
-    uvec4 parents = pod_parents[fragment_id];
-    vec4 weights = pod_weights[fragment_id];
+    uvec4[2] parents = pod_parents[fragment_id];
+    vec4[2] weights = pod_weights[fragment_id];
     vec3 bind_pose = pod_bind_pose[fragment_id].xyz;
 
     // common ids and weights gather
-    uint i0 = imap_nodes[parents.x];
-    uint i1 = imap_nodes[parents.y];
-    uint i2 = imap_nodes[parents.z];
-    uint i3 = imap_nodes[parents.w];
-    float w0 = weights.x;
-    float w1 = weights.y;
-    float w2 = weights.z;
-    float w3 = weights.w;
+    uint i0 = imap_nodes[parents[0].x];
+    uint i1 = imap_nodes[parents[0].y];
+    uint i2 = imap_nodes[parents[0].z];
+    uint i3 = imap_nodes[parents[0].w];
+    uint i4 = imap_nodes[parents[1].x];
+    uint i5 = imap_nodes[parents[1].y];
+    uint i6 = imap_nodes[parents[1].z];
+    uint i7 = imap_nodes[parents[1].w];
+
+    float w0 = weights[0].x;
+    float w1 = weights[0].y;
+    float w2 = weights[0].z;
+    float w3 = weights[0].w;
+    float w4 = weights[1].x;
+    float w5 = weights[1].y;
+    float w6 = weights[1].z;
+    float w7 = weights[1].w;
+
     vec3 p0 = pod_nodes_positions[i0].xyz;
     vec3 p1 = pod_nodes_positions[i1].xyz;
     vec3 p2 = pod_nodes_positions[i2].xyz;
     vec3 p3 = pod_nodes_positions[i3].xyz;
+    vec3 p4 = pod_nodes_positions[i4].xyz;
+    vec3 p5 = pod_nodes_positions[i5].xyz;
+    vec3 p6 = pod_nodes_positions[i6].xyz;
+    vec3 p7 = pod_nodes_positions[i7].xyz;
+
     vec3 b0 = pod_nodes_bind_pose[i0].xyz;
     vec3 b1 = pod_nodes_bind_pose[i1].xyz;
     vec3 b2 = pod_nodes_bind_pose[i2].xyz;
     vec3 b3 = pod_nodes_bind_pose[i3].xyz;
+    vec3 b4 = pod_nodes_bind_pose[i4].xyz;
+    vec3 b5 = pod_nodes_bind_pose[i5].xyz;
+    vec3 b6 = pod_nodes_bind_pose[i6].xyz;
+    vec3 b7 = pod_nodes_bind_pose[i7].xyz;
 
     vec3 w_rest = bind_pose + model;
 
@@ -99,23 +121,39 @@ void main() {
     float d1 = distance(w_rest, b1) + 0.0001;
     float d2 = distance(w_rest, b2) + 0.0001;
     float d3 = distance(w_rest, b3) + 0.0001;
+    float d4 = distance(w_rest, b4) + 0.0001;
+    float d5 = distance(w_rest, b5) + 0.0001;
+    float d6 = distance(w_rest, b6) + 0.0001;
+    float d7 = distance(w_rest, b7) + 0.0001;
 
     float vw0 = 1.0 / (d0 * d0);
     float vw1 = 1.0 / (d1 * d1);
     float vw2 = 1.0 / (d2 * d2);
     float vw3 = 1.0 / (d3 * d3);
+    float vw4 = 1.0 / (d4 * d4);
+    float vw5 = 1.0 / (d5 * d5);
+    float vw6 = 1.0 / (d6 * d6);
+    float vw7 = 1.0 / (d7 * d7);
 
-    float vwt = vw0 + vw1 + vw2 + vw3;
+    float vwt = vw0 + vw1 + vw2 + vw3 + vw4 + vw5 + vw6 + vw7;
     vw0 /= vwt;
     vw1 /= vwt;
     vw2 /= vwt;
     vw3 /= vwt;
+    vw4 /= vwt;
+    vw5 /= vwt;
+    vw6 /= vwt;
+    vw7 /= vwt;
 
     vec3 deform = vec3(0.0);
     deform += vw0 * (p0 - b0);
     deform += vw1 * (p1 - b1);
     deform += vw2 * (p2 - b2);
     deform += vw3 * (p3 - b3);
+    deform += vw4 * (p4 - b4);
+    deform += vw5 * (p5 - b5);
+    deform += vw6 * (p6 - b6);
+    deform += vw7 * (p7 - b7);
 
     vec4 world = vec4(deform + w_rest, 1.0);
     fs_world = world.xyz;
