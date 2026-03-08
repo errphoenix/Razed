@@ -94,6 +94,13 @@ pub fn create_structure_lattice(
         let center_right = lattice.node(Node::new(o + glam::vec3(w, ceiling_y, 0.0), MASS));
         let center_front = lattice.node(Node::new(o + glam::vec3(0.0, ceiling_y, d), MASS));
         let center_back = lattice.node(Node::new(o + glam::vec3(0.0, ceiling_y, -d), MASS));
+
+        let half_y = ceiling_y - (height * 0.5);
+        let middle_back = lattice.node(Node::new(o + glam::vec3(0.0, half_y, -d), MASS));
+        let middle_front = lattice.node(Node::new(o + glam::vec3(0.0, half_y, d), MASS));
+        let middle_right = lattice.node(Node::new(o + glam::vec3(w, half_y, 0.0), MASS));
+        let middle_left = lattice.node(Node::new(o + glam::vec3(-w, half_y, 0.0), MASS));
+
         let origin = lattice.node(Node::new(o + glam::vec3(0.0, ceiling_y, 0.0), MASS));
 
         // top loop
@@ -112,49 +119,57 @@ pub fn create_structure_lattice(
         }
         // pillars
         {
-            lattice.link_nodes(back_left, last_top[0], WEAK_LINK);
-            lattice.link_nodes(back_right, last_top[2], WEAK_LINK);
-            lattice.link_nodes(front_right, last_top[4], WEAK_LINK);
-            lattice.link_nodes(front_left, last_top[6], WEAK_LINK);
+            lattice.link_nodes(back_left, last_top[0], STRONG_LINK);
+            lattice.link_nodes(back_right, last_top[2], STRONG_LINK);
+            lattice.link_nodes(front_right, last_top[4], STRONG_LINK);
+            lattice.link_nodes(front_left, last_top[6], STRONG_LINK);
 
-            lattice.link_nodes(center_back, last_top[1], STRONG_LINK);
-            lattice.link_nodes(center_right, last_top[3], STRONG_LINK);
-            lattice.link_nodes(center_front, last_top[5], STRONG_LINK);
-            lattice.link_nodes(center_left, last_top[7], STRONG_LINK);
+            // lattice.link_nodes(center_back, last_top[1], STRONG_LINK);
+            // lattice.link_nodes(center_right, last_top[3], STRONG_LINK);
+            // lattice.link_nodes(center_front, last_top[5], STRONG_LINK);
+            // lattice.link_nodes(center_left, last_top[7], STRONG_LINK);
 
             // central spline
-            lattice.link_nodes(origin, last_top[8], STRONG_LINK);
+            // lattice.link_nodes(origin, last_top[8], STRONG_LINK);
         }
 
         // side diagonals
         {
-            lattice.link_nodes(back_left, last_top[2], MID_LINK);
-            lattice.link_nodes(back_right, last_top[0], MID_LINK);
+            lattice.link_nodes(back_left, middle_back, MID_LINK);
+            lattice.link_nodes(back_right, middle_back, MID_LINK);
+            lattice.link_nodes(middle_back, last_top[2], MID_LINK);
+            lattice.link_nodes(middle_back, last_top[0], MID_LINK);
 
-            lattice.link_nodes(front_right, last_top[2], MID_LINK);
-            lattice.link_nodes(back_right, last_top[4], MID_LINK);
+            lattice.link_nodes(front_right, middle_right, MID_LINK);
+            lattice.link_nodes(back_right, middle_right, MID_LINK);
+            lattice.link_nodes(middle_right, last_top[2], MID_LINK);
+            lattice.link_nodes(middle_right, last_top[4], MID_LINK);
 
-            lattice.link_nodes(front_left, last_top[4], MID_LINK);
-            lattice.link_nodes(front_right, last_top[6], MID_LINK);
+            lattice.link_nodes(front_left, middle_front, MID_LINK);
+            lattice.link_nodes(front_right, middle_front, MID_LINK);
+            lattice.link_nodes(middle_front, last_top[4], MID_LINK);
+            lattice.link_nodes(middle_front, last_top[6], MID_LINK);
 
-            lattice.link_nodes(back_left, last_top[6], MID_LINK);
-            lattice.link_nodes(front_left, last_top[0], MID_LINK);
+            lattice.link_nodes(back_left, middle_left, MID_LINK);
+            lattice.link_nodes(front_left, middle_left, MID_LINK);
+            lattice.link_nodes(middle_left, last_top[6], MID_LINK);
+            lattice.link_nodes(middle_left, last_top[0], MID_LINK);
         }
 
         // floor diagonal and cross with intermediate
         {
-            // lattice.link_nodes(back_left, front_right, WEAK_LINK);
-            // lattice.link_nodes(front_left, back_right, WEAK_LINK);
+            lattice.link_nodes(back_left, front_right, WEAK_LINK);
+            lattice.link_nodes(front_left, back_right, WEAK_LINK);
 
             // lattice.link_nodes(back_left, origin, WEAK_LINK);
             // lattice.link_nodes(front_right, origin, WEAK_LINK);
             // lattice.link_nodes(back_right, origin, WEAK_LINK);
             // lattice.link_nodes(front_left, origin, WEAK_LINK);
 
-            lattice.link_nodes(center_left, origin, STRONG_LINK);
-            lattice.link_nodes(center_right, origin, STRONG_LINK);
-            lattice.link_nodes(center_front, origin, STRONG_LINK);
-            lattice.link_nodes(center_back, origin, STRONG_LINK);
+            // lattice.link_nodes(center_left, origin, STRONG_LINK);
+            // lattice.link_nodes(center_right, origin, STRONG_LINK);
+            // lattice.link_nodes(center_front, origin, STRONG_LINK);
+            // lattice.link_nodes(center_back, origin, STRONG_LINK);
         }
 
         last_top = [

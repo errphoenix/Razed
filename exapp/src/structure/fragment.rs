@@ -6,6 +6,8 @@ use ethel::state::data::{
 use physics::xpbd::{LinkNodes, LinksRowTable};
 use rustc_hash::FxHashSet;
 
+const MIN_CLUSTER_SIZE: u32 = 5;
+
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FragmentState {
@@ -140,8 +142,6 @@ impl FragmentSystem {
         degenerate_nodes: &[u32],
         constraints: &LinksRowTable,
     ) {
-        const MINIMUM_THRESHOLD: u32 = 2;
-
         self.disabled_frags_frame.clear();
         for &degen in degenerate_nodes {
             if self.disabled_nodes.insert(degen) {
@@ -212,7 +212,7 @@ impl FragmentSystem {
             }
 
             let active_count = parents.iter().filter(|id| **id != 0).count();
-            if active_count as u32 <= MINIMUM_THRESHOLD {
+            if active_count < MIN_CLUSTER_SIZE as usize {
                 let state = unsafe { states.alpha.get_unchecked_mut(frag_idx as usize) };
                 *state = FragmentState::Debris;
                 false
@@ -238,8 +238,8 @@ impl FragmentSystem {
         &self.disabled_frags_frame
     }
 
-    const LATTICE_SPATIAL_RESOLUTION: u32 = 2;
-    const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 8;
+    const LATTICE_SPATIAL_RESOLUTION: u32 = 1;
+    const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 4;
 
     /// Generate new fragments from a [`VoxelGrid`] and `lattice`.
     ///
@@ -301,14 +301,14 @@ impl FragmentSystem {
             }
 
             let n_count = near_buf.len().min(FRAGMENTS_PARENTS_COUNT);
-            // if n_count < FRAGMENTS_PARENTS_COUNT {
-            //     tracing::event!(
-            //         name: "structure.fragment.build.query.skip_voxel",
-            //         tracing::Level::WARN,
-            //         "Skipping voxel {cell:?}: not enough {n_count} nearby nodes found."
-            //     );
-            //     continue;
-            // }
+            if n_count < MIN_CLUSTER_SIZE as usize {
+                tracing::event!(
+                    name: "structure.fragment.build.query.skip_voxel",
+                    tracing::Level::WARN,
+                    "Skipping voxel {cell:?}: not enough {n_count} nearby nodes found."
+                );
+                continue;
+            }
 
             let (parents, weights) = {
                 let (mut parents, mut weights) = (
@@ -322,7 +322,8 @@ impl FragmentSystem {
                     .for_each(|(cell, (id, weight))| {
                         *id = node_hash.get(&cell).copied().unwrap_or_default();
                         let point = positions[owners[*id as usize] as usize];
-                        *weight = 1.0 / voxel.distance_squared(point);
+                        let ds = voxel.distance_squared(point);
+                        *weight = 1.0 / (ds * ds);
                     });
 
                 let w_t = weights.iter().fold(0f32, |t, &v| t + v);
