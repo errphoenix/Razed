@@ -241,14 +241,19 @@ impl FragmentSystem {
     const LATTICE_SPATIAL_RESOLUTION: u32 = 1;
     const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 4;
 
-    /// Generate new fragments from a [`VoxelGrid`] and `lattice`.
+    /// Generate new fragments from a [`VoxelGrid`] and raw lattice data.
     ///
     /// The `voxels` [`VoxelGrid`] is expected to have been built previously
     /// with [`VoxelGrid::build`].
     ///
-    /// The `lattice` slices indicate the node IDs and node positions. These
-    /// must be parallel to one another: each node ID must correspond to its
-    /// node's position at the same index.
+    /// The `(owners, handles, positions)` tuple parameter refer, in order, to
+    /// the following Node table data of any [`NodesRowTable`]:
+    /// * `owners` as in the collection of sparse slot indices as returned from
+    ///   [`ethel::state::data::SparseSlot::slots_map`].
+    /// * `handles` as in the data parallel collection of inverse owner indices
+    ///   for each table element, may be returned by a method of the same naem.
+    /// * `positions` the data slice of positions for each node parallel to
+    ///   `handles`.
     pub fn generate_fragments(
         &mut self,
         grid: &VoxelGrid,
@@ -300,7 +305,29 @@ impl FragmentSystem {
                 }
             }
 
+            {
+                let cell_world = node_hash.approx_point_at(cell);
+
+                near_buf.sort_by(|c0, c1| {
+                    let id0 = node_hash.get(c0).expect("query populated neighbour cell");
+                    let id1 = node_hash.get(c1).expect("query populated neighbour cell");
+
+                    let ii0 = owners[*id0 as usize];
+                    let ii1 = owners[*id1 as usize];
+                    let p0 = positions[ii0 as usize];
+                    let p1 = positions[ii1 as usize];
+
+                    let l0 = p0 - cell_world;
+                    let l1 = p1 - cell_world;
+
+                    l0.length_squared()
+                        .partial_cmp(&l1.length_squared())
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+            }
+
             let n_count = near_buf.len().min(FRAGMENTS_PARENTS_COUNT);
+
             // if n_count < MIN_CLUSTER_SIZE as usize {
             //     tracing::event!(
             //         name: "structure.fragment.build.query.skip_voxel",
