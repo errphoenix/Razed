@@ -341,7 +341,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
 
             let lattice = structure::create_structure_lattice(center, WIDTH, HEIGHT, DEPTH, FLOORS);
 
-            const INNER_SPACE: i32 = 4;
+            const INNER_SPACE: i32 = 3;
 
             let mut voxel_grid = VoxelGrid::new(
                 |cell| cell.x.abs() > INNER_SPACE || cell.z.abs() > INNER_SPACE,
@@ -350,9 +350,11 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     .with_height(TOTAL_HEIGHT)
                     .with_depth(DEPTH),
             );
-            voxel_grid.build(center + glam::vec3(0f32, TOTAL_HEIGHT * 0.5, 0f32));
+            //voxel_grid.repopulate(center + glam::vec3(0f32, TOTAL_HEIGHT * 0.5, 0f32));
+            voxel_grid.repopulate();
 
-            self.register_structure(&voxel_grid, lattice);
+            let center = center + glam::vec3(0.0, TOTAL_HEIGHT * 0.5, 0.0);
+            self.register_structure(center, &voxel_grid, lattice);
         }
 
         const CAMERA_KEY: janus::input::KeyCode = janus::input::KeyCode::Tab;
@@ -393,6 +395,7 @@ impl State {
 
     pub fn register_structure(
         &mut self,
+        origin: glam::Vec3,
         voxel_grid: &VoxelGrid,
         lattice: XpbdLatticeBuilder,
     ) -> LatticeIds {
@@ -433,7 +436,7 @@ impl State {
 
         let l0 = self.fragments.table().handles().len();
         self.fragments
-            .generate_fragments(voxel_grid, (owners, handles, positions));
+            .generate_fragments(origin, voxel_grid, (owners, handles, positions));
         let l1 = self.fragments.table().handles().len();
 
         // currently unnecessary

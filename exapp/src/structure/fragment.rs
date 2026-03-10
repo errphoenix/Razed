@@ -6,7 +6,7 @@ use ethel::state::data::{
 use physics::xpbd::{LinkNodes, LinksRowTable};
 use rustc_hash::FxHashSet;
 
-const MIN_CLUSTER_SIZE: u32 = 5;
+const MIN_CLUSTER_SIZE: u32 = 6;
 
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -256,6 +256,7 @@ impl FragmentSystem {
     ///   `handles`.
     pub fn generate_fragments(
         &mut self,
+        origin: glam::Vec3,
         grid: &VoxelGrid,
         (owners, handles, positions): (&[u32], &[u32], &[glam::Vec3]),
     ) {
@@ -274,15 +275,17 @@ impl FragmentSystem {
         }
 
         let mut near_buf = Vec::with_capacity(FRAGMENTS_PARENTS_COUNT);
-        let voxels = grid.voxels().values();
+        let mut world_points = vec![glam::Vec3::ZERO; grid.count()];
+
+        grid.to_world(origin, &mut world_points);
         let mut i = 0;
-        for &voxel in voxels {
+        for voxel in world_points {
             let cell = node_hash.cell_at(voxel);
 
             #[cfg(not(debug_assertions))]
             let _ = node_hash.nearest_cells(
                 cell,
-                FRAGMENTS_PARENTS_COUNT as u32,
+                FRAGMENTS_PARENTS_COUNT as u32 * 2,
                 Self::VOXEL_NEIGHBOR_QUERY_RADIUS,
                 &mut near_buf,
                 false,
@@ -380,33 +383,6 @@ impl FragmentSystem {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct VoxelCell {
-    pub x: i32,
-    pub y: i32,
-    pub z: i32,
-}
-
-impl From<Cell> for VoxelCell {
-    fn from(value: Cell) -> Self {
-        VoxelCell {
-            x: value.x,
-            y: value.y,
-            z: value.z,
-        }
-    }
-}
-
-impl Into<Cell> for VoxelCell {
-    fn into(self) -> Cell {
-        Cell {
-            x: self.x,
-            y: self.y,
-            z: self.z,
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct VoxelGridOptions {
     width: f32,
@@ -468,25 +444,40 @@ impl VoxelGridOptions {
     }
 }
 
-pub type VoxelGridFn = fn(VoxelCell) -> bool;
-pub type VoxelOffsetFn = fn(VoxelCell) -> glam::Vec3;
+pub type VoxelGridFn = fn(Cell) -> bool;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct VoxelIndex(i32);
+
+impl VoxelIndex {
+    pub fn as_i32(&self) -> i32 {
+        self.0
+    }
+}
+
+impl From<VoxelIndex> for i32 {
+    fn from(value: VoxelIndex) -> Self {
+        value.0
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct VoxelGrid {
     generator: VoxelGridFn,
-    offset_fn: VoxelOffsetFn,
     options: VoxelGridOptions,
 
-    voxels: std::collections::HashMap<VoxelCell, glam::Vec3>,
+    voxels: FxSpatialHash<VoxelIndex>,
 }
 
 impl Default for VoxelGrid {
     fn default() -> Self {
+        let options = VoxelGridOptions::default();
+        let voxels = FxSpatialHash::new(SpatialResolution::new(options.density as u32));
+
         Self {
             generator: |_| true,
-            offset_fn: |_| glam::Vec3::ZERO,
-            options: VoxelGridOptions::default(),
-            voxels: Default::default(),
+            options,
+            voxels,
         }
     }
 }
@@ -496,24 +487,52 @@ impl VoxelGrid {
         Self {
             generator,
             options,
-            ..Default::default()
+            voxels: FxSpatialHash::new(SpatialResolution::new(options.density as u32)),
         }
     }
 
-    pub fn with_offsets(
-        generator: VoxelGridFn,
-        options: VoxelGridOptions,
-        offset_fn: VoxelOffsetFn,
-    ) -> Self {
-        Self {
-            generator,
-            options,
-            offset_fn,
-            ..Default::default()
+    pub fn voxel_index(&self, cell: Cell) -> VoxelIndex {
+        let my = (self.options.height * self.options.density as f32).round() as i32;
+        let mz = (self.options.depth * self.options.density as f32).round() as i32;
+
+        VoxelIndex(cell.x * my * mz + cell.y * mz + cell.z)
+    }
+
+    pub fn point_from_id(&self, index: VoxelIndex) -> glam::Vec3 {
+        let index = index.as_i32() as f32;
+        let my = self.options.height * self.options.density as f32;
+        let mz = self.options.depth * self.options.density as f32;
+
+        let yz = my * mz;
+        let rem = index % yz;
+
+        let px = index / yz;
+        let py = rem / mz;
+        let pz = rem % mz;
+
+        glam::vec3(px, py, pz)
+    }
+
+    pub fn cell_from_id(&self, index: VoxelIndex) -> Cell {
+        let index = index.as_i32();
+        let my = (self.options.height * self.options.density as f32).round() as i32;
+        let mz = (self.options.depth * self.options.density as f32).round() as i32;
+
+        let yz = my * mz;
+        let rem = index % yz;
+
+        let cx = index / yz;
+        let cy = rem / mz;
+        let cz = rem % mz;
+
+        Cell {
+            x: cx,
+            y: cy,
+            z: cz,
         }
     }
 
-    pub fn build(&mut self, center: glam::Vec3) {
+    pub fn repopulate(&mut self) {
         self.voxels.clear();
 
         let vw = (self.options.density as f32 * self.options.width) as i32;
@@ -527,22 +546,23 @@ impl VoxelGrid {
         for x in -hvw..=hvw {
             for y in -hvh..=hvh {
                 for z in -hvd..=hvd {
-                    let cell = VoxelCell { x, y, z };
+                    let cell = Cell { x, y, z };
                     if (self.generator)(cell) {
-                        let position = glam::vec3(
-                            (cell.x as f32 / vw as f32) * self.options.width,
-                            (cell.y as f32 / vh as f32) * self.options.height,
-                            (cell.z as f32 / vd as f32) * self.options.depth,
-                        );
-                        let offset = (self.offset_fn)(cell);
-                        self.voxels.insert(cell, center + position + offset);
+                        self.voxels.put(cell, self.voxel_index(cell));
                     }
                 }
             }
         }
     }
 
-    pub fn get_voxel(&self, cell: VoxelCell) -> Option<glam::Vec3> {
+    pub fn to_world(&self, origin: glam::Vec3, world: &mut [glam::Vec3]) {
+        self.voxels
+            .elements()
+            .zip(world)
+            .for_each(|(&id, world)| *world = self.point_from_id(id) + origin);
+    }
+
+    pub fn get(&self, cell: Cell) -> Option<VoxelIndex> {
         self.voxels.get(&cell).copied()
     }
 
@@ -550,11 +570,7 @@ impl VoxelGrid {
         &self.options
     }
 
-    pub fn options_mut(&mut self) -> &mut VoxelGridOptions {
-        &mut self.options
-    }
-
-    pub fn voxels(&self) -> &std::collections::HashMap<VoxelCell, glam::Vec3> {
+    pub fn voxels(&self) -> &FxSpatialHash<VoxelIndex> {
         &self.voxels
     }
 
