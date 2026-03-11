@@ -342,7 +342,6 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             let lattice = structure::create_structure_lattice(center, WIDTH, HEIGHT, DEPTH, FLOORS);
 
             const INNER_SPACE: i32 = 3;
-
             let mut voxel_grid = VoxelGrid::new(
                 |cell| cell.x.abs() > INNER_SPACE || cell.z.abs() > INNER_SPACE,
                 VoxelGridOptions::default()

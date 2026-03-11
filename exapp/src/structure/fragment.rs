@@ -285,7 +285,7 @@ impl FragmentSystem {
             #[cfg(not(debug_assertions))]
             let _ = node_hash.nearest_cells(
                 cell,
-                FRAGMENTS_PARENTS_COUNT as u32 * 2,
+                FRAGMENTS_PARENTS_COUNT as u32,
                 Self::VOXEL_NEIGHBOR_QUERY_RADIUS,
                 &mut near_buf,
                 false,
@@ -347,13 +347,14 @@ impl FragmentSystem {
                 );
 
                 near_buf
-                    .drain(..n_count)
+                    .drain(..)
+                    .take(n_count)
                     .zip(&mut parents.iter_mut().zip(&mut weights))
                     .for_each(|(cell, (id, weight))| {
                         *id = node_hash.get(&cell).copied().unwrap_or_default();
                         let point = positions[owners[*id as usize] as usize];
                         let ds = voxel.distance_squared(point);
-                        *weight = 1.0 / (ds * ds);
+                        *weight = 1.0 / (ds + f32::EPSILON);
                     });
 
                 let w_t = weights.iter().fold(0f32, |t, &v| t + v);
@@ -492,43 +493,93 @@ impl VoxelGrid {
     }
 
     pub fn voxel_index(&self, cell: Cell) -> VoxelIndex {
-        let my = (self.options.height * self.options.density as f32).round() as i32;
-        let mz = (self.options.depth * self.options.density as f32).round() as i32;
+        let x_offset = (self.options.width * self.options.density as f32).round() as i32;
+        let y_offset = (self.options.height * self.options.density as f32).round() as i32;
+        let z_offset = (self.options.depth * self.options.density as f32).round() as i32;
 
-        VoxelIndex(cell.x * my * mz + cell.y * mz + cell.z)
+        #[cfg(debug_assertions)]
+        {
+            let x_bounds = x_offset / 2;
+            let y_bounds = y_offset / 2;
+            let z_bounds = z_offset / 2;
+
+            debug_assert!(
+                cell.x >= -x_bounds && cell.x <= x_bounds,
+                "Cell is out of bounds on X axis for bounds [{}; {}]: got {}",
+                -x_bounds,
+                x_bounds,
+                cell.x
+            );
+            debug_assert!(
+                cell.y >= -y_bounds && cell.y <= y_bounds,
+                "Cell is out of bounds on Y axis for bounds [{}; {}]: got {}",
+                -y_bounds,
+                y_bounds,
+                cell.y
+            );
+            debug_assert!(
+                cell.z >= -z_bounds && cell.z <= z_bounds,
+                "Cell is out of bounds on Z axis for bounds [{}; {}]: got {}",
+                -z_bounds,
+                z_bounds,
+                cell.z
+            );
+        }
+
+        let cell = Cell {
+            x: cell.x + x_offset / 2,
+            y: cell.y + y_offset / 2,
+            z: cell.z + z_offset / 2,
+        };
+
+        VoxelIndex(cell.x * y_offset * z_offset + cell.y * z_offset + cell.z)
     }
 
+    /// Transform an [`index`] to a point in space.
+    ///
+    /// The returned point corresponds to the center of the
+    /// [`Voxel/Cell`](Cell) represented by `index`.
+    ///
+    /// The returned point is in the [`VoxelGrid's](VoxelGrid) local space,
+    /// with Vec3(0,0,0) located at its centre.
     pub fn point_from_id(&self, index: VoxelIndex) -> glam::Vec3 {
-        let index = index.as_i32() as f32;
-        let my = self.options.height * self.options.density as f32;
-        let mz = self.options.depth * self.options.density as f32;
-
-        let yz = my * mz;
-        let rem = index % yz;
-
-        let px = index / yz;
-        let py = rem / mz;
-        let pz = rem % mz;
-
-        glam::vec3(px, py, pz)
+        let cell = self.cell_from_id(index);
+        glam::vec3(
+            (cell.x as f32 + 0.5) / self.options.density as f32,
+            (cell.y as f32 + 0.5) / self.options.density as f32,
+            (cell.z as f32 + 0.5) / self.options.density as f32,
+        )
     }
 
+    /// Decode a [`Cell`] within an [`index`].
+    ///
+    /// This is in the [`VoxelGrid's`](VoxelGrid) local space and units, with
+    /// Cell(0,0,0) located at its centre.
+    ///
+    /// This is not to be used in combination with other [`VoxelGrid`]s or
+    /// world-space operations, unless you can guarantee:
+    /// * They are in the same space with the same origin
+    /// * If it is another [`VoxelGrid`], they must use the same spatial
+    ///   resolution.
+    ///
+    /// Also see [`VoxelGrid::point_from_id`].
     pub fn cell_from_id(&self, index: VoxelIndex) -> Cell {
         let index = index.as_i32();
-        let my = (self.options.height * self.options.density as f32).round() as i32;
-        let mz = (self.options.depth * self.options.density as f32).round() as i32;
+        let x_offset = (self.options.width * self.options.density as f32).round() as i32;
+        let y_offset = (self.options.height * self.options.density as f32).round() as i32;
+        let z_offset = (self.options.depth * self.options.density as f32).round() as i32;
 
-        let yz = my * mz;
+        let yz = y_offset * z_offset;
         let rem = index % yz;
 
         let cx = index / yz;
-        let cy = rem / mz;
-        let cz = rem % mz;
+        let cy = rem / z_offset;
+        let cz = rem % z_offset;
 
         Cell {
-            x: cx,
-            y: cy,
-            z: cz,
+            x: cx - x_offset / 2,
+            y: cy - y_offset / 2,
+            z: cz - z_offset / 2,
         }
     }
 
