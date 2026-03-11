@@ -10,6 +10,7 @@ pub struct Renderer {
     xpbd_dbg_shader: ShaderHandle,
     line_dbg_shader: ShaderHandle,
     frags_shader: ShaderHandle,
+    deform_dbg_shader: ShaderHandle,
 }
 
 impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
@@ -40,6 +41,11 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             .uniform_vec3_glam("u_camera_forward", cam_forward);
         self.base_shader.uniform_mat4_glam("u_view", view_mat);
         self.base_shader.uniform_mat4_glam("u_projection", *proj);
+
+        self.deform_dbg_shader.bind();
+        self.deform_dbg_shader.uniform_mat4_glam("u_view", view_mat);
+        self.deform_dbg_shader
+            .uniform_mat4_glam("u_projection", *proj);
 
         self.frags_shader.bind();
         self.frags_shader
@@ -80,6 +86,14 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 janus::gl::DrawArrays(janus::gl::LINES, 0, 6);
             }
         }
+        {
+            self.deform_dbg_shader.bind();
+            let count = *frame_data.deform_debug_count;
+            unsafe {
+                janus::gl::DrawArraysInstanced(janus::gl::POINTS, 0, 1, count as i32);
+            }
+        }
+
     }
 
     fn init_resources(&mut self, _resolution: ethel::render::Resolution) {
@@ -104,5 +118,10 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         let mut vsh = std::io::BufReader::new(VSH_FRAG_SOURCE);
         let mut fsh = std::io::BufReader::new(FSH_BASE_SOURCE);
         self.frags_shader = ShaderHandle::new(&mut vsh, &mut fsh);
+
+        const VSH_DEFORM_SOURCE: &[u8] = include_bytes!("../shaders/fragment.vsh");
+        let mut vsh = std::io::BufReader::new(VSH_DEFORM_SOURCE);
+        let mut fsh = std::io::BufReader::new(FSH_SOLID_SOURCE);
+        self.deform_dbg_shader = ShaderHandle::new(&mut vsh, &mut fsh)
     }
 }

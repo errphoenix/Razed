@@ -2,7 +2,7 @@ use std::sync::{Arc, atomic::AtomicU32};
 
 use ethel::{
     DrawCommand, layout_buffer, layout_mesh_buffer,
-    render::buffer::{PartitionedTriBuffer, TriBuffer},
+    render::buffer::{InitStrategy, PartitionedTriBuffer, TriBuffer},
 };
 
 pub const RENDER_STORAGE_PARTS: usize = 8;
@@ -129,6 +129,8 @@ layout_buffer! {
     }
 }
 
+pub const DEFORM_DEBUG_ALLOC: usize = 4096;
+
 #[derive(Debug, Default)]
 pub struct FrameDataBuffers {
     pub command: TriBuffer<DrawCommand>,
@@ -137,6 +139,9 @@ pub struct FrameDataBuffers {
 
     pub xpbd_debug: PartitionedTriBuffer<4>,
     pub xpbd_debug_link_count: Arc<AtomicU32>,
+
+    pub deform_debug: TriBuffer<glam::Vec4>,
+    pub deform_debug_count: Arc<u32>,
 }
 
 impl FrameDataBuffers {
@@ -150,14 +155,22 @@ impl FrameDataBuffers {
         let fragment_data = PartitionedTriBuffer::new(LayoutFragmentData::create());
         LayoutFragmentData::initialise_partitions(&fragment_data);
 
+        let deform_debug = TriBuffer::new(
+            DEFORM_DEBUG_ALLOC,
+            InitStrategy::FillWith(|| glam::Vec4::NAN),
+        );
+
         Self {
             command: TriBuffer::zeroed(COMMAND_QUEUE_ALLOC),
 
             scene: scene_data_buffer,
-            xpbd_debug: xpbd_visualiser,
             fragments: fragment_data,
 
+            xpbd_debug: xpbd_visualiser,
             xpbd_debug_link_count: Arc::new(AtomicU32::new(0)),
+
+            deform_debug,
+            deform_debug_count: Arc::new(0),
         }
     }
 }

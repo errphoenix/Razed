@@ -1,3 +1,4 @@
+pub mod deforms;
 pub mod fragment;
 
 use physics::xpbd::{XpbdLatticeBuilder, XpbdLinkOptions, XpbdNodeOptions as Node};
