@@ -1,10 +1,100 @@
 pub mod deforms;
 pub mod fragment;
 
-use physics::xpbd::{XpbdLatticeBuilder, XpbdLinkOptions, XpbdNodeOptions as Node};
+use ethel::state::data::SparseSlot;
+use physics::xpbd::{NodesRowTable, XpbdLatticeBuilder, XpbdLinkOptions, XpbdNodeOptions as Node};
 
 #[allow(unused_imports)]
 pub use fragment::{FragmentState, FragmentSystem};
+
+#[derive(Debug, Clone, Copy)]
+pub struct LatticeView<'nodes> {
+    pub sparse_ids: &'nodes [u32],
+    pub positions: &'nodes [glam::Vec3],
+    pub handles: &'nodes [u32],
+}
+
+impl<'nodes> LatticeView<'nodes> {
+    pub fn from(nodes: &'nodes NodesRowTable) -> Self {
+        Self {
+            sparse_ids: nodes.slots_map(),
+            positions: nodes.current_pos_slice(),
+            handles: nodes.handles(),
+        }
+    }
+
+    /// Returns the node position and handle (reverse indirect ID) of the given
+    /// node.
+    ///
+    /// # Panics
+    /// Will panic if `indirect_id` is out-of-bounds to the sparse IDs map.
+    pub fn query(&self, indirect_id: u32) -> (glam::Vec3, u32) {
+        let direct_index = self.sparse_ids[indirect_id as usize] as usize;
+        let position = self.positions[direct_index];
+        let handle = self.handles[direct_index];
+        (position, handle)
+    }
+
+    /// Returns the node position and handle (reverse indirect ID) of the given
+    /// node.
+    ///
+    /// # Panics
+    /// Will panic if `indirect_id` is out-of-bounds to the sparse IDs map.
+    ///
+    /// # Safety
+    /// This operation is safe as long as `indirect_id` is guaranteed to be
+    /// a valid indirect index.
+    pub unsafe fn query_unchecked(&self, indirect_id: u32) -> (glam::Vec3, u32) {
+        let direct_index = *unsafe { self.sparse_ids.get_unchecked(indirect_id as usize) } as usize;
+        let position = *unsafe { self.positions.get_unchecked(direct_index) };
+        let handle = *unsafe { self.handles.get_unchecked(direct_index) };
+        (position, handle)
+    }
+
+    /// Returns the node position of the given node.
+    ///
+    /// # Panics
+    /// Will panic if `indirect_id` is out-of-bounds to the sparse IDs map.
+    pub fn position(&self, indirect_id: u32) -> glam::Vec3 {
+        let direct_index = self.sparse_ids[indirect_id as usize] as usize;
+        self.positions[direct_index]
+    }
+
+    /// Returns the node position of the given node.
+    ///
+    /// # Panics
+    /// Will panic if `indirect_id` is out-of-bounds to the sparse IDs map.
+    ///
+    /// # Safety
+    /// This operation is safe as long as `indirect_id` is guaranteed to be
+    /// a valid indirect index.
+    pub unsafe fn position_unchecked(&self, indirect_id: u32) -> glam::Vec3 {
+        let direct_index = *unsafe { self.sparse_ids.get_unchecked(indirect_id as usize) } as usize;
+        *unsafe { self.positions.get_unchecked(direct_index) }
+    }
+
+    /// Returns the handle (reverse indirect ID) of the given node.
+    ///
+    /// # Panics
+    /// Will panic if `indirect_id` is out-of-bounds to the sparse IDs map.
+    pub fn handle(&self, indirect_id: u32) -> u32 {
+        let direct_index = self.sparse_ids[indirect_id as usize] as usize;
+        self.handles[direct_index]
+    }
+
+    /// Returns the handle (reverse indirect ID) of the given node.
+    ///
+    /// # Panics
+    /// Will panic if `indirect_id` is out-of-bounds to the sparse IDs map.
+    ///
+    /// # Safety
+    /// This operation is safe as long as `indirect_id` is guaranteed to be
+    /// a valid indirect index.
+    pub unsafe fn handle_unchecked(&self, indirect_id: u32) -> u32 {
+        let direct_index = *unsafe { self.sparse_ids.get_unchecked(indirect_id as usize) } as usize;
+        *unsafe { self.handles.get_unchecked(direct_index) }
+    }
+}
 
 // height is per floor, not total building; todo: docs
 pub fn create_structure_lattice(

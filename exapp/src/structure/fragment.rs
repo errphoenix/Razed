@@ -386,10 +386,10 @@ impl FragmentSystem {
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct VoxelGridOptions {
-    width: f32,
-    height: f32,
-    depth: f32,
-    density: i32,
+    pub width: f32,
+    pub height: f32,
+    pub depth: f32,
+    pub density: i32,
 }
 
 impl Default for VoxelGridOptions {
@@ -627,5 +627,21 @@ impl VoxelGrid {
 
     pub fn count(&self) -> usize {
         self.voxels.len()
+    }
+
+    /// Returns the maximum amount of cells along each X, Y, Z plane.
+    ///
+    /// This value depends on the width, height, depth, and density options
+    /// specified in [`VoxelGridOptions`].
+    pub fn cell_bounds(&self) -> (i32, i32, i32) {
+        let w = self.options.width;
+        let h = self.options.height;
+        let d = self.options.depth;
+        let i = self.options.density;
+        (
+            (w * i as f32).round() as i32,
+            (h * i as f32).round() as i32,
+            (d * i as f32).round() as i32,
+        )
     }
 }

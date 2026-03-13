@@ -349,7 +349,6 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     .with_height(TOTAL_HEIGHT)
                     .with_depth(DEPTH),
             );
-            //voxel_grid.repopulate(center + glam::vec3(0f32, TOTAL_HEIGHT * 0.5, 0f32));
             voxel_grid.repopulate();
 
             let center = center + glam::vec3(0.0, TOTAL_HEIGHT * 0.5, 0.0);
