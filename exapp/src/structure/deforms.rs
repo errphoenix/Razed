@@ -92,6 +92,7 @@ struct DeformPoint {
 
 impl DeformPoint {
     pub const CONTROL_POINT_MAX_RANGE: u32 = 16;
+    pub const RIGIDITY: f32 = 4.0;
 
     fn new(
         point: glam::Vec3,
@@ -126,7 +127,7 @@ impl DeformPoint {
                 let dist_sq = point.distance_squared(position) + f32::EPSILON;
 
                 controls[c] = node;
-                offsets[c] = 1.0 / dist_sq;
+                offsets[c] = 1.0 / dist_sq.powf(Self::RIGIDITY);
 
                 c = i;
             });
