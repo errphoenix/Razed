@@ -87,7 +87,13 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             }
         }
         {
+            const DEFORM_POINTS_SSBO: usize = 0;
+
             self.deform_dbg_shader.bind();
+            frame_data
+                .deform_debug
+                .bind_shader_storage(buf_idx, DEFORM_POINTS_SSBO);
+
             let count = frame_data.deform_debug_count.load(Ordering::Acquire);
             unsafe {
                 janus::gl::PointSize(5.0);
@@ -120,7 +126,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         let mut fsh = std::io::BufReader::new(FSH_BASE_SOURCE);
         self.frags_shader = ShaderHandle::new(&mut vsh, &mut fsh);
 
-        const VSH_DEFORM_SOURCE: &[u8] = include_bytes!("../shaders/fragment.vsh");
+        const VSH_DEFORM_SOURCE: &[u8] = include_bytes!("../shaders/cage.vsh");
         let mut vsh = std::io::BufReader::new(VSH_DEFORM_SOURCE);
         let mut fsh = std::io::BufReader::new(FSH_SOLID_SOURCE);
         self.deform_dbg_shader = ShaderHandle::new(&mut vsh, &mut fsh)

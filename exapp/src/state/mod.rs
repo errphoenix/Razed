@@ -257,9 +257,6 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
     ) {
         view_point.sync().unwrap();
 
-        let lattice = LatticeView::from(self.lattice.nodes());
-        self.deforms.deform(&lattice);
-
         if !input.cursor_options().grabbed {
             screen.sync().unwrap();
 
@@ -348,7 +345,6 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         }
 
         self.lattice.update(delta);
-
         let lattice = LatticeView::from(self.lattice.nodes());
         self.deforms.deform(&lattice);
 
