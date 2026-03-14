@@ -78,7 +78,7 @@ impl DeformSystem {
         let vox = fragments.voxels();
         let (mx, my, mz) = fragments.cell_bounds();
 
-        let total = mx * my * mz + mx * my + mz;
+        let total = mx * my * mz + mx + my + mz;
         let mut points = Vec::<DeformPoint>::with_capacity(total as usize);
         let mut near_buf = Vec::<Cell>::with_capacity(CONTROL_POINTS_COUNT);
 
