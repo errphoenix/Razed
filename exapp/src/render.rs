@@ -2,7 +2,10 @@ use std::sync::atomic::Ordering;
 
 use ethel::{render::command::GpuCommandDispatch, shader::ShaderHandle};
 
-use crate::data::FrameDataBuffers;
+use crate::{
+    data::{FrameDataBuffers, LayoutXpbdDebugData},
+    structure::deforms,
+};
 
 #[derive(Debug, Default)]
 pub struct Renderer {
@@ -11,6 +14,7 @@ pub struct Renderer {
     line_dbg_shader: ShaderHandle,
     frags_shader: ShaderHandle,
     deform_dbg_shader: ShaderHandle,
+    deform_dbg_ctl_shader: ShaderHandle,
 }
 
 impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
@@ -45,6 +49,12 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         self.deform_dbg_shader.bind();
         self.deform_dbg_shader.uniform_mat4_glam("u_view", view_mat);
         self.deform_dbg_shader
+            .uniform_mat4_glam("u_projection", *proj);
+
+        self.deform_dbg_ctl_shader.bind();
+        self.deform_dbg_ctl_shader
+            .uniform_mat4_glam("u_view", view_mat);
+        self.deform_dbg_ctl_shader
             .uniform_mat4_glam("u_projection", *proj);
 
         self.frags_shader.bind();
@@ -88,6 +98,9 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         }
         {
             const DEFORM_POINTS_SSBO: usize = 0;
+            const DEFORM_CONTROLS_SSBO: usize = 1;
+            const DEFORM_NODES_IMAP_SSBO: usize = 2;
+            const DEFORM_NODES_POS_SSBO: usize = 3;
 
             self.deform_dbg_shader.bind();
             frame_data
@@ -98,6 +111,30 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             unsafe {
                 janus::gl::PointSize(5.0);
                 janus::gl::DrawArraysInstanced(janus::gl::POINTS, 0, 1, count as i32);
+            }
+
+            self.deform_dbg_ctl_shader.bind();
+            frame_data
+                .deform_debug
+                .bind_shader_storage(buf_idx, DEFORM_POINTS_SSBO);
+            frame_data
+                .deform_debug_controls
+                .bind_shader_storage(buf_idx, DEFORM_CONTROLS_SSBO);
+
+            frame_data.xpbd_debug.bind_shader_storage_single(
+                buf_idx,
+                LayoutXpbdDebugData::ImapNodes as usize,
+                Some(DEFORM_NODES_IMAP_SSBO as u32),
+            );
+            frame_data.xpbd_debug.bind_shader_storage_single(
+                buf_idx,
+                LayoutXpbdDebugData::PodNodes as usize,
+                Some(DEFORM_NODES_POS_SSBO as u32),
+            );
+
+            let control_counts = count * deforms::CONTROL_POINTS_COUNT as u32;
+            unsafe {
+                janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 2, control_counts as i32);
             }
         }
 
@@ -129,6 +166,11 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         const VSH_DEFORM_SOURCE: &[u8] = include_bytes!("../shaders/cage.vsh");
         let mut vsh = std::io::BufReader::new(VSH_DEFORM_SOURCE);
         let mut fsh = std::io::BufReader::new(FSH_SOLID_SOURCE);
-        self.deform_dbg_shader = ShaderHandle::new(&mut vsh, &mut fsh)
+        self.deform_dbg_shader = ShaderHandle::new(&mut vsh, &mut fsh);
+
+        const VSH_DEFORM_LINKS_SOURCE: &[u8] = include_bytes!("../shaders/cage_ctl.vsh");
+        let mut vsh = std::io::BufReader::new(VSH_DEFORM_LINKS_SOURCE);
+        let mut fsh = std::io::BufReader::new(FSH_SOLID_SOURCE);
+        self.deform_dbg_ctl_shader = ShaderHandle::new(&mut vsh, &mut fsh);
     }
 }

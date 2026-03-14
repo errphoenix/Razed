@@ -5,6 +5,8 @@ use ethel::{
     render::buffer::{InitStrategy, PartitionedTriBuffer, TriBuffer},
 };
 
+use crate::structure::deforms::{self, ControlPoint};
+
 pub const RENDER_STORAGE_PARTS: usize = 8;
 pub const ENTITY_ALLOCATION: usize = 8192;
 pub const COMMAND_QUEUE_ALLOC: usize = 2048;
@@ -141,6 +143,7 @@ pub struct FrameDataBuffers {
     pub xpbd_debug_link_count: Arc<AtomicU32>,
 
     pub deform_debug: TriBuffer<glam::Vec4>,
+    pub deform_debug_controls: TriBuffer<[ControlPoint; deforms::CONTROL_POINTS_COUNT]>,
     pub deform_debug_count: Arc<AtomicU32>,
 }
 
@@ -159,6 +162,10 @@ impl FrameDataBuffers {
             DEFORM_DEBUG_ALLOC,
             InitStrategy::FillWith(|| glam::Vec4::NAN),
         );
+        let deform_debug_controls = TriBuffer::new(
+            DEFORM_DEBUG_ALLOC,
+            InitStrategy::FillWith(|| [ControlPoint::default(); deforms::CONTROL_POINTS_COUNT]),
+        );
 
         Self {
             command: TriBuffer::zeroed(COMMAND_QUEUE_ALLOC),
@@ -170,6 +177,7 @@ impl FrameDataBuffers {
             xpbd_debug_link_count: Arc::new(AtomicU32::new(0)),
 
             deform_debug,
+            deform_debug_controls,
             deform_debug_count: Arc::new(AtomicU32::new(0)),
         }
     }

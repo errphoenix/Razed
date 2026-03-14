@@ -114,6 +114,7 @@ impl DeformSystem {
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ControlPoint {
     pub id: u32,
