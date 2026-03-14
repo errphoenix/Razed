@@ -8,7 +8,8 @@ use crate::{
     },
     state::physics::LatticeSystem,
     structure::{
-        self, FragmentSystem,
+        self, FragmentSystem, LatticeView,
+        deforms::DeformSystem,
         fragment::{VoxelGrid, VoxelGridOptions},
     },
 };
@@ -17,7 +18,10 @@ use ethel::{
     render::{ScreenSpace, command::DrawArraysIndirectCommand},
     state::{
         camera,
-        data::{Column, SparseSlot},
+        data::{
+            Column, SparseSlot,
+            hash::{FxSpatialHash, SpatialResolution},
+        },
     },
 };
 use tracing::event;
@@ -40,6 +44,7 @@ pub struct State {
     entity_data: EntityDataRowTable,
     lattice: LatticeSystem,
     fragments: FragmentSystem,
+    deforms: DeformSystem,
 
     /// Parallel to NodesRowTable of LatticeSystem
     lattice_bind_pose: Vec<glam::Vec3>,
@@ -65,6 +70,7 @@ impl Default for State {
             )),
             lattice_bind_pose: Default::default(),
             fragments: Default::default(),
+            deforms: Default::default(),
             renderables: Default::default(),
             mesh_ids: Default::default(),
             entity_data: Default::default(),
@@ -109,6 +115,9 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         frame_boundary.cross(|section, storage| {
             let buf_idx = section.as_index();
 
+            const VEC3_VEC4_PADDING: usize = 4;
+
+            // fragments upload
             {
                 let fragments = &storage.fragments;
 
@@ -125,8 +134,8 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 // buffer.
                 unsafe {
                     fragments.blit_part(buf_idx, LayoutFragmentData::ImapNodes as usize, imap_nodes, 0);
-                    fragments.blit_part_padded(buf_idx, LayoutFragmentData::PodNodesPositions as usize, pod_nodes_positions, 0, 4);
-                    fragments.blit_part_padded(buf_idx, LayoutFragmentData::PodNodesBindPose as usize, pod_nodes_bind_pose, 0, 4);
+                    fragments.blit_part_padded(buf_idx, LayoutFragmentData::PodNodesPositions as usize, pod_nodes_positions, 0, VEC3_VEC4_PADDING);
+                    fragments.blit_part_padded(buf_idx, LayoutFragmentData::PodNodesBindPose as usize, pod_nodes_bind_pose, 0, VEC3_VEC4_PADDING);
                     fragments.blit_part(buf_idx, LayoutFragmentData::PodParents as usize, pod_parents, 0);
                     fragments.blit_part(buf_idx, LayoutFragmentData::PodWeights as usize, pod_weights, 0);
                     fragments.blit_part(buf_idx, LayoutFragmentData::PodBindPose as usize, pod_bind_pose, 0);
@@ -134,6 +143,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 }
             }
 
+            // standard scene upload
             {
                 let scene = &storage.scene;
 
@@ -186,7 +196,10 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                         0,
                     );
                 }
+            }
 
+            // lattice debug upload
+            {
                 let xpbd_dbg = &storage.xpbd_debug;
                 let constraints = self.lattice.links().relation_slice();
                 let imap_nodes = self.lattice.nodes().handles();
@@ -199,8 +212,6 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 let node_count = self.lattice.links().len() as u32;
                 storage.xpbd_debug_link_count.store(node_count, Ordering::Release);
 
-                const VEC3_VEC4_PADDING: usize = 4;
-
                 // SAFETY: the use of LayoutXpbdDebugData ensures we are
                 // blitting to a valid section of the xpbd_dbg partitioned
                 // buffer.
@@ -210,6 +221,14 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     xpbd_dbg.blit_part_padded(buf_idx, LayoutXpbdDebugData::PodNodes as usize, pod_nodes, 0, VEC3_VEC4_PADDING);
                     xpbd_dbg.blit_part(buf_idx, LayoutXpbdDebugData::ISelected as usize, &[selected_link], 0);
                 }
+            }
+
+            // cage deforms debug upload
+            {
+                let deform_dbg = &storage.deform_debug;
+                let deform_points = self.deforms.data().deformed_slice();
+                deform_dbg.blit_section_padded(buf_idx, deform_points, 0, VEC3_VEC4_PADDING);
+                storage.deform_debug_count.store(self.deforms.data().len() as u32, Ordering::Release);
             }
 
             {
@@ -327,6 +346,9 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
 
         self.lattice.update(delta);
 
+        let lattice = LatticeView::from(self.lattice.nodes());
+        self.deforms.deform(&lattice);
+
         // random demo
         if input.keys().key_pressed(janus::input::KeyCode::KeyH) {
             let vp = view_point.get();
@@ -338,7 +360,6 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             const TOTAL_HEIGHT: f32 = HEIGHT * FLOORS as f32;
 
             let center = glam::vec3(vp.position.x, GROUND_LEVEL, vp.position.z);
-
             let lattice = structure::create_structure_lattice(center, WIDTH, HEIGHT, DEPTH, FLOORS);
 
             const INNER_SPACE: i32 = 3;
@@ -447,6 +468,12 @@ impl State {
             let e_id = self.create_renderable(0, position, Default::default(), glam::Vec3::ONE);
             self.frag_map.push(e_id);
         }
+
+        let lattice = LatticeView::from_range(self.lattice.nodes(), l0, l1 - l0);
+        let mut node_hash = FxSpatialHash::new(SpatialResolution::new(2));
+        node_hash.dump_soa(lattice.positions, lattice.handles);
+        self.deforms
+            .generate_points(voxel_grid, &node_hash, &lattice);
 
         // debug render of nodes
         // for &node_id in &lattice_map.nodes {

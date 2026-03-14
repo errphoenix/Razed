@@ -33,6 +33,14 @@ impl DeformSystem {
         }
     }
 
+    pub fn data(&self) -> &DeformsRowTable {
+        &self.data
+    }
+
+    pub fn data_mut(&mut self) -> &mut DeformsRowTable {
+        &mut self.data
+    }
+
     pub fn deform(&mut self, lattice: &LatticeView) {
         let (deforms, pose, controllers, binds) = self.data.split_mut();
         for (deforms, pose, controllers, binds) in deforms.join(pose).join(controllers).join(binds)

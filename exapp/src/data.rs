@@ -141,7 +141,7 @@ pub struct FrameDataBuffers {
     pub xpbd_debug_link_count: Arc<AtomicU32>,
 
     pub deform_debug: TriBuffer<glam::Vec4>,
-    pub deform_debug_count: Arc<u32>,
+    pub deform_debug_count: Arc<AtomicU32>,
 }
 
 impl FrameDataBuffers {
@@ -170,7 +170,7 @@ impl FrameDataBuffers {
             xpbd_debug_link_count: Arc::new(AtomicU32::new(0)),
 
             deform_debug,
-            deform_debug_count: Arc::new(0),
+            deform_debug_count: Arc::new(AtomicU32::new(0)),
         }
     }
 }
