@@ -10,10 +10,10 @@ pub const CONTROL_POINTS_COUNT: usize = 8;
 ethel::table_spec! {
     struct Deforms {
         deformed: glam::Vec3; // current deformed points
+        pose: glam::Vec3; // the base points of the bind pose
 
-        bind: glam::Vec3; // the base points of the bind pose
-        controllers: [u32; CONTROL_POINTS_COUNT];
-        offsets: [f32; CONTROL_POINTS_COUNT];
+        controllers: [ControlPoint; CONTROL_POINTS_COUNT];
+        binds: [glam::Vec3; CONTROL_POINTS_COUNT];
     }
 }
 
@@ -30,6 +30,30 @@ impl DeformSystem {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             data: DeformsRowTable::with_capacity(capacity),
+        }
+    }
+
+    pub fn deform(&mut self, lattice: &LatticeView) {
+        let (deforms, pose, controllers, binds) = self.data.split_mut();
+        for (deforms, pose, controllers, binds) in deforms.join(pose).join(controllers).join(binds)
+        {
+            *deforms = glam::Vec3::ZERO;
+            controllers.iter().zip(binds.iter()).for_each(
+                |(&ControlPoint { id, weight }, &bind)| {
+                    if id == 0 {
+                        return;
+                    }
+
+                    // SAFETY:
+                    // we assume the indirect index is always valid
+                    let position = unsafe { lattice.position_unchecked(id) };
+                    let delta = position - bind;
+
+                    *deforms += delta * weight;
+                },
+            );
+
+            *deforms += *pose;
         }
     }
 
@@ -75,7 +99,7 @@ impl DeformSystem {
         let r0 = self.data.len();
         points.drain(..).for_each(|deform| {
             self.data
-                .put((deform.point, deform.point, deform.controls, deform.offsets));
+                .put((deform.point, deform.point, deform.controllers, deform.binds));
         });
         let r1 = self.data.len();
 
@@ -83,11 +107,17 @@ impl DeformSystem {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ControlPoint {
+    pub id: u32,
+    pub weight: f32,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct DeformPoint {
     point: glam::Vec3,
-    controls: [u32; CONTROL_POINTS_COUNT],
-    offsets: [f32; CONTROL_POINTS_COUNT],
+    controllers: [ControlPoint; CONTROL_POINTS_COUNT],
+    binds: [glam::Vec3; CONTROL_POINTS_COUNT],
 }
 
 impl DeformPoint {
@@ -110,8 +140,8 @@ impl DeformPoint {
         );
 
         let mut c = 0;
-        let mut controls = [0u32; CONTROL_POINTS_COUNT];
-        let mut offsets = [0f32; CONTROL_POINTS_COUNT];
+        let mut controllers = [ControlPoint::default(); CONTROL_POINTS_COUNT];
+        let mut binds = [glam::Vec3::ZERO; CONTROL_POINTS_COUNT];
 
         near_buf
             .drain(..)
@@ -126,16 +156,19 @@ impl DeformPoint {
                 let position = unsafe { lattice.position_unchecked(node) };
                 let dist_sq = point.distance_squared(position) + f32::EPSILON;
 
-                controls[c] = node;
-                offsets[c] = 1.0 / dist_sq.powf(Self::RIGIDITY);
+                binds[c] = position;
+                controllers[c] = ControlPoint {
+                    id: node,
+                    weight: 1.0 / dist_sq.powf(Self::RIGIDITY),
+                };
 
                 c = i;
             });
 
         Self {
             point,
-            controls,
-            offsets,
+            controllers,
+            binds,
         }
     }
 }

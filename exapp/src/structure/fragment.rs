@@ -6,7 +6,7 @@ use ethel::state::data::{
 use physics::xpbd::{LinkNodes, LinksRowTable};
 use rustc_hash::FxHashSet;
 
-const MIN_CLUSTER_SIZE: u32 = 6;
+const MIN_CLUSTER_SIZE: u32 = 7;
 
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -238,8 +238,8 @@ impl FragmentSystem {
         &self.disabled_frags_frame
     }
 
-    const LATTICE_SPATIAL_RESOLUTION: u32 = 1;
-    const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 4;
+    const LATTICE_SPATIAL_RESOLUTION: u32 = 2;
+    const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 10;
 
     /// Generate new fragments from a [`VoxelGrid`] and raw lattice data.
     ///
@@ -331,14 +331,14 @@ impl FragmentSystem {
 
             let n_count = near_buf.len().min(FRAGMENTS_PARENTS_COUNT);
 
-            // if n_count < MIN_CLUSTER_SIZE as usize {
-            //     tracing::event!(
-            //         name: "structure.fragment.build.query.skip_voxel",
-            //         tracing::Level::WARN,
-            //         "Skipping voxel {cell:?}: not enough {n_count} nearby nodes found."
-            //     );
-            //     continue;
-            // }
+            if n_count < MIN_CLUSTER_SIZE as usize {
+                tracing::event!(
+                    name: "structure.fragment.build.query.skip_voxel",
+                    tracing::Level::WARN,
+                    "Skipping voxel {cell:?}: not enough {n_count} nearby nodes found."
+                );
+                continue;
+            }
 
             let (parents, weights) = {
                 let (mut parents, mut weights) = (
