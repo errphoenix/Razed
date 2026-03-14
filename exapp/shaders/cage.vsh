@@ -12,6 +12,6 @@ uniform mat4 u_view;
 
 void main() {
     vec3 point = pod_points[gl_InstanceID].xyz;
-    fs_color = vec4(1.0, 1.0, 0.0, 1.0);
+    fs_color = vec4(1.0, 0.0, 1.0, 1.0);
     gl_Position = point;
 }

@@ -67,7 +67,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         let frags = &frame_data.fragments;
         frags.bind_shader_storage(buf_idx);
         let cmds = &frame_data.command;
-        GpuCommandDispatch::from_view(cmds.view_section(buf_idx)).dispatch();
+        //GpuCommandDispatch::from_view(cmds.view_section(buf_idx)).dispatch();
 
         {
             self.xpbd_dbg_shader.bind();
@@ -88,8 +88,9 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         }
         {
             self.deform_dbg_shader.bind();
-            let count = *frame_data.deform_debug_count;
+            let count = frame_data.deform_debug_count.load(Ordering::Acquire);
             unsafe {
+                janus::gl::PointSize(5.0);
                 janus::gl::DrawArraysInstanced(janus::gl::POINTS, 0, 1, count as i32);
             }
         }

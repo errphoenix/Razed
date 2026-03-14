@@ -43,9 +43,8 @@ impl DeformSystem {
 
     pub fn deform(&mut self, lattice: &LatticeView) {
         let (deforms, pose, controllers, binds) = self.data.split_mut();
-        for (deforms, pose, controllers, binds) in deforms.join(pose).join(controllers).join(binds)
-        {
-            *deforms = glam::Vec3::ZERO;
+        for (deform, pose, controllers, binds) in deforms.join(pose).join(controllers).join(binds) {
+            *deform = glam::Vec3::ZERO;
             controllers.iter().zip(binds.iter()).for_each(
                 |(&ControlPoint { id, weight }, &bind)| {
                     if id == 0 {
@@ -57,11 +56,11 @@ impl DeformSystem {
                     let position = unsafe { lattice.position_unchecked(id) };
                     let delta = position - bind;
 
-                    *deforms += delta * weight;
+                    *deform += delta * weight;
                 },
             );
 
-            *deforms += *pose;
+            *deform += *pose;
         }
     }
 
@@ -169,6 +168,15 @@ impl DeformPoint {
                     id: node,
                     weight: 1.0 / dist_sq.powf(Self::RIGIDITY),
                 };
+
+                let w_t = controllers
+                    .iter()
+                    .fold(0f32, |w_t, ControlPoint { weight: w, .. }| w_t + *w);
+                controllers
+                    .iter_mut()
+                    .for_each(|ControlPoint { weight, .. }| {
+                        *weight /= w_t;
+                    });
 
                 c = i;
             });
