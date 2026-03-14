@@ -615,7 +615,7 @@ impl XpbdSolver {
         let p_pos = &mut nodes.predicted_pos;
         let forces = &mut nodes.forces;
 
-        for i in 0..node_count {
+        for i in 1..node_count {
             let x = c_pos[i];
             let f = std::mem::take(&mut forces[i]);
             let v = velocity[i];
