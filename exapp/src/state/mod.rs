@@ -426,6 +426,12 @@ impl State {
             return lattice_map;
         }
 
+        let lattice = LatticeView::from_range(self.lattice.nodes(), l0, l1 - l0);
+        let mut node_hash = FxSpatialHash::new(SpatialResolution::new(2));
+        node_hash.dump_soa(lattice.positions, lattice.handles);
+        self.deforms
+            .generate_points(voxel_grid, &node_hash, &lattice);
+
         // handle degenerate
         if self.frag_map.is_empty() {
             self.frag_map.push(0);
@@ -468,12 +474,6 @@ impl State {
             let e_id = self.create_renderable(0, position, Default::default(), glam::Vec3::ONE);
             self.frag_map.push(e_id);
         }
-
-        let lattice = LatticeView::from_range(self.lattice.nodes(), l0, l1 - l0);
-        let mut node_hash = FxSpatialHash::new(SpatialResolution::new(2));
-        node_hash.dump_soa(lattice.positions, lattice.handles);
-        self.deforms
-            .generate_points(voxel_grid, &node_hash, &lattice);
 
         // debug render of nodes
         // for &node_id in &lattice_map.nodes {
