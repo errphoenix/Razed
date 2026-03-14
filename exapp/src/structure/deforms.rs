@@ -88,13 +88,13 @@ impl DeformSystem {
 
             let mut other = center;
             let cell = fragments.cell_from_id(voxel);
-            if cell.x >= mx / 2 {
+            if cell.x >= mx / 2 - 1 {
                 other += hu * glam::Vec3::X;
             }
-            if cell.y >= mx / 2 {
+            if cell.y >= my / 2 - 1 {
                 other += hu * glam::Vec3::Y;
             }
-            if cell.z >= mx / 2 {
+            if cell.z >= mz / 2 - 1 {
                 other += hu * glam::Vec3::Z;
             }
 
@@ -139,6 +139,7 @@ impl DeformPoint {
         lattice: &LatticeView,
         near_buf: &mut Vec<Cell>,
     ) -> Self {
+        near_buf.clear();
         let max_range = Self::CONTROL_POINT_MAX_RANGE * node_hash.resolution.get();
         let _ = node_hash.nearest_cells(
             node_hash.cell_at(point),
@@ -163,12 +164,12 @@ impl DeformPoint {
                 // we assume node_hash has been loaded with the nodes of
                 // lattice, thus all handles are valid.
                 let position = unsafe { lattice.position_unchecked(node) };
-                let dist_sq = point.distance_squared(position) + f32::EPSILON;
+                let dist = point.distance(position) + f32::EPSILON;
 
                 binds[c] = position;
                 controllers[c] = ControlPoint {
                     id: node,
-                    weight: 1.0 / dist_sq.powf(Self::RIGIDITY),
+                    weight: 1.0 / dist.powf(Self::RIGIDITY),
                 };
 
                 let w_t = controllers
