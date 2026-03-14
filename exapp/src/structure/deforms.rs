@@ -66,6 +66,7 @@ impl DeformSystem {
 
     pub fn generate_points(
         &mut self,
+        origin: glam::Vec3,
         fragments: &VoxelGrid,
         node_hash: &FxSpatialHash<u32>,
         lattice: &LatticeView,
@@ -82,7 +83,7 @@ impl DeformSystem {
         let mut near_buf = Vec::<Cell>::with_capacity(CONTROL_POINTS_COUNT);
 
         for &voxel in vox.elements() {
-            let center = fragments.point_from_id(voxel);
+            let center = fragments.point_from_id(voxel) + origin;
             let corner = center - hu;
 
             let mut other = center;
