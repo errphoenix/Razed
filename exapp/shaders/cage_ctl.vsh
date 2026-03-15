@@ -46,10 +46,10 @@ void main() {
     vec3 node_pos = pod_nodes_positions[node_id].xyz;
 
     vec3 point = mix(deform_point, node_pos, float(end));
-    // force to NaN (discard) if degenerate node ID
     point /= min(1.0, float(node_id));
 
     fs_color = vec4(0.0, 0.0, 1.0, 1.0);
+    fs_color += vec4(1.0, 0.0, 0.0, 0.0) * (1.0 - min(1.0, float(node_id)));
 
     gl_Position = u_projection * u_view * vec4(point, 1.0);
 }

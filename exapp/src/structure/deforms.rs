@@ -8,6 +8,7 @@ use ethel::state::data::{
 use crate::structure::{LatticeView, fragment::VoxelGrid};
 
 pub const CONTROL_POINTS_COUNT: usize = 8;
+pub const CONTROL_POINT_CONSTRAIN_THRESHOLD: f32 = 0.2;
 
 ethel::table_spec! {
     struct Deforms {
@@ -64,6 +65,72 @@ impl DeformSystem {
 
             *deform += *pose;
         }
+    }
+
+    pub fn constrain(&mut self, lattice: &LatticeView) {
+        let mut weights_buf = [0f32; CONTROL_POINTS_COUNT];
+        let mut flagged = Vec::<u32>::new(); // todo: do not alloc
+
+        // invalidate control points constraint weights
+        {
+            let mut i = 0;
+            let (deforms, _, controllers, _) = self.data.split_mut();
+            for (deform, controllers) in deforms.join(controllers) {
+                for i in 0..CONTROL_POINTS_COUNT {
+                    let controller_id = *&unsafe { controllers.get_unchecked(i) }.id;
+                    if controller_id == 0 {
+                        continue;
+                    }
+
+                    let position = unsafe { lattice.position_unchecked(controller_id) };
+                    let dist_sq = deform.distance_squared(position) + f32::EPSILON;
+                    weights_buf[i] = 1.0 / dist_sq.powf(DeformPoint::RIGIDITY);
+                }
+
+                let w_t = weights_buf.iter().fold(0f32, |t, v| t + v);
+                weights_buf.iter_mut().for_each(|w| *w /= w_t);
+
+                controllers.iter_mut().zip(weights_buf).for_each(
+                    |(ControlPoint { id, weight }, current_weight)| {
+                        let constraint = (current_weight - *weight).abs();
+                        if constraint > CONTROL_POINT_CONSTRAIN_THRESHOLD {
+                            *id = 0;
+                            *weight = 0f32;
+                            flagged.push(i);
+                        }
+                    },
+                );
+
+                weights_buf.fill(0f32);
+                i += 1;
+            }
+        }
+
+        // resolve indirect indices of invalidated deforms
+        flagged.iter_mut().for_each(|indirect| {
+            *indirect = unsafe { self.data.get_indirect_unchecked(*indirect) }
+        });
+
+        // recompute invalidated control points
+        let (_, pose, controllers, binds) = self.data.split_mut();
+        flagged.drain(..).for_each(|direct| {
+            let pose = *unsafe { pose.alpha.get_unchecked(direct as usize) };
+            let bind = *unsafe { binds.alpha.get_unchecked(direct as usize) };
+            let controllers = unsafe { controllers.alpha.get_unchecked_mut(direct as usize) };
+
+            controllers
+                .iter_mut()
+                .zip(bind)
+                .for_each(|(ControlPoint { weight, .. }, bind)| {
+                    let dist_sq = pose.distance_squared(bind) + f32::EPSILON;
+                    *weight = 1.0 / dist_sq.powf(DeformPoint::RIGIDITY);
+                });
+
+            let w_t = controllers.iter().fold(0f32, |t, v| t + v.weight);
+            controllers
+                .iter_mut()
+                .for_each(|ControlPoint { weight, .. }| *weight /= w_t);
+        });
     }
 
     pub fn generate_points(
@@ -135,7 +202,7 @@ struct DeformPoint {
 
 impl DeformPoint {
     pub const CONTROL_POINT_MAX_RANGE: u32 = 16;
-    pub const RIGIDITY: f32 = 4.0;
+    pub const RIGIDITY: f32 = 2.0;
 
     fn new(
         point: glam::Vec3,
@@ -168,7 +235,7 @@ impl DeformPoint {
                 // we assume node_hash has been loaded with the nodes of
                 // lattice, thus all handles are valid.
                 let position = unsafe { lattice.position_unchecked(node) };
-                let dist = point.distance(position) + f32::EPSILON;
+                let dist = point.distance_squared(position) + f32::EPSILON;
 
                 binds[c] = position;
                 controllers[c] = ControlPoint {
