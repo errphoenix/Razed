@@ -493,15 +493,13 @@ impl VoxelGrid {
     }
 
     pub fn voxel_index(&self, cell: Cell) -> VoxelIndex {
-        let x_offset = (self.options.width * self.options.density as f32).round() as i32;
-        let y_offset = (self.options.height * self.options.density as f32).round() as i32;
-        let z_offset = (self.options.depth * self.options.density as f32).round() as i32;
+        let (dim_x, dim_y, dim_z) = self.dimensions();
 
         #[cfg(debug_assertions)]
         {
-            let x_bounds = x_offset / 2;
-            let y_bounds = y_offset / 2;
-            let z_bounds = z_offset / 2;
+            let x_bounds = dim_x / 2;
+            let y_bounds = dim_y / 2;
+            let z_bounds = dim_z / 2;
 
             debug_assert!(
                 cell.x >= -x_bounds && cell.x <= x_bounds,
@@ -527,12 +525,12 @@ impl VoxelGrid {
         }
 
         let cell = Cell {
-            x: cell.x + x_offset / 2,
-            y: cell.y + y_offset / 2,
-            z: cell.z + z_offset / 2,
+            x: cell.x + dim_x / 2,
+            y: cell.y + dim_y / 2,
+            z: cell.z + dim_z / 2,
         };
 
-        VoxelIndex(cell.x * y_offset * z_offset + cell.y * z_offset + cell.z)
+        VoxelIndex(cell.x * dim_y * dim_z + cell.y * dim_z + cell.z)
     }
 
     /// Transform an [`index`] to a point in space.
@@ -565,30 +563,26 @@ impl VoxelGrid {
     /// Also see [`VoxelGrid::point_from_id`].
     pub fn cell_from_id(&self, index: VoxelIndex) -> Cell {
         let index = index.as_i32();
-        let x_offset = (self.options.width * self.options.density as f32).round() as i32;
-        let y_offset = (self.options.height * self.options.density as f32).round() as i32;
-        let z_offset = (self.options.depth * self.options.density as f32).round() as i32;
+        let (dim_x, dim_y, dim_z) = self.dimensions();
 
-        let yz = y_offset * z_offset;
-        let rem = index % yz;
+        let yz = dim_y * dim_z;
 
         let cx = index / yz;
-        let cy = rem / z_offset;
-        let cz = rem % z_offset;
+        let rem = index % yz;
+        let cy = rem / dim_z;
+        let cz = rem % dim_z;
 
         Cell {
-            x: cx - x_offset / 2,
-            y: cy - y_offset / 2,
-            z: cz - z_offset / 2,
+            x: cx - dim_x / 2,
+            y: cy - dim_y / 2,
+            z: cz - dim_z / 2,
         }
     }
 
     pub fn repopulate(&mut self) {
         self.voxels.clear();
 
-        let vw = (self.options.density as f32 * self.options.width) as i32;
-        let vh = (self.options.density as f32 * self.options.height) as i32;
-        let vd = (self.options.density as f32 * self.options.depth) as i32;
+        let (vw, vh, vd) = self.dimensions();
 
         let hvw = vw / 2;
         let hvh = vh / 2;
@@ -633,7 +627,7 @@ impl VoxelGrid {
     ///
     /// This value depends on the width, height, depth, and density options
     /// specified in [`VoxelGridOptions`].
-    pub fn cell_bounds(&self) -> (i32, i32, i32) {
+    pub fn dimensions(&self) -> (i32, i32, i32) {
         let w = self.options.width;
         let h = self.options.height;
         let d = self.options.depth;

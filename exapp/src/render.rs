@@ -110,7 +110,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             let count = frame_data.deform_debug_count.load(Ordering::Acquire) - 1;
             unsafe {
                 janus::gl::PointSize(5.0);
-                janus::gl::DrawArraysInstanced(janus::gl::POINTS, 0, 1, count as i32);
+                janus::gl::DrawArrays(janus::gl::POINTS, 0, count as i32);
             }
 
             self.deform_dbg_ctl_shader.bind();

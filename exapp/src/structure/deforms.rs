@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use ethel::state::data::{
     Column,
     hash::{Cell, FxSpatialHash},
@@ -71,37 +73,38 @@ impl DeformSystem {
         node_hash: &FxSpatialHash<u32>,
         lattice: &LatticeView,
     ) -> std::ops::Range<usize> {
-        let i = fragments.options().density;
-        // half-unit for center-to-corner offset
-        let hu = 0.5 / i as f32;
-
         let vox = fragments.voxels();
-        let (mx, my, mz) = fragments.cell_bounds();
+        let (mx, my, mz) = fragments.dimensions();
 
         let total = mx * my * mz + mx + my + mz;
+        let mut unique_cells = HashSet::<Cell>::with_capacity(total as usize);
+        for &voxel in vox.cells() {
+            for x in 0..1 {
+                for y in 0..1 {
+                    for z in 0..1 {
+                        let cell = Cell {
+                            x: voxel.x + x,
+                            y: voxel.y + y,
+                            z: voxel.z + z,
+                        };
+                        unique_cells.insert(cell);
+                    }
+                }
+            }
+        }
+
         let mut points = Vec::<DeformPoint>::with_capacity(total as usize);
         let mut near_buf = Vec::<Cell>::with_capacity(CONTROL_POINTS_COUNT);
+        let hu = fragments.options().density as f32 * 0.5;
 
-        for &voxel in vox.elements() {
-            let center = fragments.point_from_id(voxel) + origin;
-            let corner = center - hu;
+        for cell in unique_cells.iter() {
+            let point = glam::vec3(
+                (cell.x / fragments.options().density) as f32 + hu,
+                (cell.y / fragments.options().density) as f32 + hu,
+                (cell.z / fragments.options().density) as f32 + hu,
+            ) + origin;
 
-            let mut other = center;
-            let cell = fragments.cell_from_id(voxel);
-            if cell.x >= mx / 2 - 1 {
-                other += hu * glam::Vec3::X;
-            }
-            if cell.y >= my / 2 - 1 {
-                other += hu * glam::Vec3::Y;
-            }
-            if cell.z >= mz / 2 - 1 {
-                other += hu * glam::Vec3::Z;
-            }
-
-            points.push(DeformPoint::new(corner, node_hash, lattice, &mut near_buf));
-            if other != center {
-                points.push(DeformPoint::new(other, node_hash, lattice, &mut near_buf));
-            }
+            points.push(DeformPoint::new(point, node_hash, lattice, &mut near_buf));
         }
 
         let r0 = self.data.len();
@@ -110,19 +113,20 @@ impl DeformSystem {
                 .put((deform.point, deform.point, deform.controllers, deform.binds));
         });
         let r1 = self.data.len();
+        println!("done; {} deform points", r1 - r0);
 
         r0..r1
     }
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct ControlPoint {
     pub id: u32,
     pub weight: f32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct DeformPoint {
     point: glam::Vec3,
     controllers: [ControlPoint; CONTROL_POINTS_COUNT],
@@ -172,16 +176,16 @@ impl DeformPoint {
                     weight: 1.0 / dist.powf(Self::RIGIDITY),
                 };
 
-                let w_t = controllers
-                    .iter()
-                    .fold(0f32, |w_t, ControlPoint { weight: w, .. }| w_t + *w);
-                controllers
-                    .iter_mut()
-                    .for_each(|ControlPoint { weight, .. }| {
-                        *weight /= w_t;
-                    });
-
                 c = i;
+            });
+
+        let w_t = controllers
+            .iter()
+            .fold(0f32, |w_t, ControlPoint { weight: w, .. }| w_t + *w);
+        controllers
+            .iter_mut()
+            .for_each(|ControlPoint { weight, .. }| {
+                *weight /= w_t;
             });
 
         Self {
