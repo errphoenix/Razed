@@ -76,15 +76,15 @@ impl DeformSystem {
             let mut i = 0;
             let (deforms, _, controllers, _) = self.data.split_mut();
             for (deform, controllers) in deforms.join(controllers) {
-                for i in 0..CONTROL_POINTS_COUNT {
-                    let controller_id = *&unsafe { controllers.get_unchecked(i) }.id;
+                for j in 0..CONTROL_POINTS_COUNT {
+                    let controller_id = *&unsafe { controllers.get_unchecked(j) }.id;
                     if controller_id == 0 {
                         continue;
                     }
 
                     let position = unsafe { lattice.position_unchecked(controller_id) };
                     let dist_sq = deform.distance_squared(position) + f32::EPSILON;
-                    weights_buf[i] = 1.0 / dist_sq.powf(DeformPoint::RIGIDITY);
+                    weights_buf[j] = 1.0 / dist_sq.powf(DeformPoint::RIGIDITY);
                 }
 
                 let w_t = weights_buf.iter().fold(0f32, |t, v| t + v);
@@ -112,24 +112,38 @@ impl DeformSystem {
         });
 
         // recompute invalidated control points
-        let (_, pose, controllers, binds) = self.data.split_mut();
+        // this retains all deforms for which total weight equals to 0 to be
+        // deleted in the next pass.
+        {
+            let (_, pose, controllers, binds) = self.data.split_mut();
+            flagged.retain(|&direct| {
+                let pose = *unsafe { pose.alpha.get_unchecked(direct as usize) };
+                let bind = *unsafe { binds.alpha.get_unchecked(direct as usize) };
+                let controllers = unsafe { controllers.alpha.get_unchecked_mut(direct as usize) };
+
+                controllers
+                    .iter_mut()
+                    .zip(bind)
+                    .for_each(|(ControlPoint { weight, .. }, bind)| {
+                        let dist_sq = pose.distance_squared(bind) + f32::EPSILON;
+                        *weight = 1.0 / dist_sq.powf(DeformPoint::RIGIDITY);
+                    });
+
+                let w_t = controllers.iter().fold(0f32, |t, v| t + v.weight);
+                controllers
+                    .iter_mut()
+                    .for_each(|ControlPoint { weight, .. }| *weight /= w_t);
+
+                !controllers.iter().any(|ctl| ctl.id != 0)
+            });
+        }
+
+        // delete dead deforms
         flagged.drain(..).for_each(|direct| {
-            let pose = *unsafe { pose.alpha.get_unchecked(direct as usize) };
-            let bind = *unsafe { binds.alpha.get_unchecked(direct as usize) };
-            let controllers = unsafe { controllers.alpha.get_unchecked_mut(direct as usize) };
-
-            controllers
-                .iter_mut()
-                .zip(bind)
-                .for_each(|(ControlPoint { weight, .. }, bind)| {
-                    let dist_sq = pose.distance_squared(bind) + f32::EPSILON;
-                    *weight = 1.0 / dist_sq.powf(DeformPoint::RIGIDITY);
-                });
-
-            let w_t = controllers.iter().fold(0f32, |t, v| t + v.weight);
-            controllers
-                .iter_mut()
-                .for_each(|ControlPoint { weight, .. }| *weight /= w_t);
+            if direct != 0 {
+                let indirect = *unsafe { self.data.handles().get_unchecked(direct as usize) };
+                self.data.free(indirect);
+            }
         });
     }
 
