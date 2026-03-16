@@ -134,14 +134,18 @@ impl DeformSystem {
                     .iter_mut()
                     .for_each(|ControlPoint { weight, .. }| *weight /= w_t);
 
-                !controllers.iter().any(|ctl| ctl.id != 0)
+                controllers.iter().all(|ctl| ctl.id == 0)
             });
         }
 
+        // resolve direct indices to stable indirect indices
+        flagged.iter_mut().for_each(|direct| {
+            *direct = *unsafe { self.data.handles().get_unchecked(*direct as usize) }
+        });
+
         // delete dead deforms
-        flagged.drain(..).for_each(|direct| {
-            if direct != 0 {
-                let indirect = *unsafe { self.data.handles().get_unchecked(direct as usize) };
+        flagged.drain(..).for_each(|indirect| {
+            if indirect != 0 {
                 self.data.free(indirect);
             }
         });

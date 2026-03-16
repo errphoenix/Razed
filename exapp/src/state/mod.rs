@@ -352,6 +352,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         self.lattice.update(delta);
         let lattice = LatticeView::from(self.lattice.nodes());
         self.deforms.deform(&lattice);
+        self.deforms.constrain(&lattice);
 
         // random demo
         if input.keys().key_pressed(janus::input::KeyCode::KeyH) {
