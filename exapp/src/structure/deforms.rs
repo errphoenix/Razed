@@ -90,13 +90,18 @@ impl DeformSystem {
                 let w_t = weights_buf.iter().fold(0f32, |t, v| t + v);
                 weights_buf.iter_mut().for_each(|w| *w /= w_t);
 
+                let mut b = false;
+
                 controllers.iter_mut().zip(weights_buf).for_each(
                     |(ControlPoint { id, weight }, current_weight)| {
                         let constraint = (current_weight - *weight).abs();
                         if constraint > CONTROL_POINT_CONSTRAIN_THRESHOLD {
                             *id = 0;
                             *weight = 0f32;
-                            flagged.push(i);
+                            b = true;
+                            if !b {
+                                flagged.push(i);
+                            }
                         }
                     },
                 );
