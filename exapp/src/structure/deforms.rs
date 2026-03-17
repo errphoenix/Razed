@@ -77,7 +77,8 @@ impl DeformSystem {
             let (deforms, _, controllers, _) = self.data.split_mut();
             for (deform, controllers) in deforms.join(controllers) {
                 for j in 0..CONTROL_POINTS_COUNT {
-                    let controller_id = *&unsafe { controllers.get_unchecked(j) }.id;
+                    //let controller_id = *&unsafe { controllers.get_unchecked(j) }.id;
+                    let controller_id = controllers[j].id;
                     if controller_id == 0 {
                         continue;
                     }
@@ -113,7 +114,7 @@ impl DeformSystem {
 
         // resolve indirect indices of invalidated deforms
         flagged.iter_mut().for_each(|indirect| {
-            *indirect = unsafe { self.data.get_indirect_unchecked(*indirect) }
+            *indirect = self.data.get_indirect(*indirect).unwrap();
         });
 
         // recompute invalidated control points
@@ -122,9 +123,12 @@ impl DeformSystem {
         {
             let (_, pose, controllers, binds) = self.data.split_mut();
             flagged.retain(|&direct| {
-                let pose = *unsafe { pose.alpha.get_unchecked(direct as usize) };
-                let bind = *unsafe { binds.alpha.get_unchecked(direct as usize) };
-                let controllers = unsafe { controllers.alpha.get_unchecked_mut(direct as usize) };
+                // let pose = *unsafe { pose.alpha.get_unchecked(direct as usize) };
+                // let bind = *unsafe { binds.alpha.get_unchecked(direct as usize) };
+                // let controllers = unsafe { controllers.alpha.get_unchecked_mut(direct as usize) };
+                let pose = pose.alpha[direct as usize];
+                let bind = binds.alpha[direct as usize];
+                let controllers = &mut controllers.alpha[direct as usize];
 
                 controllers
                     .iter_mut()
@@ -144,13 +148,15 @@ impl DeformSystem {
         }
 
         // resolve direct indices to stable indirect indices
-        flagged.iter_mut().for_each(|direct| {
-            *direct = *unsafe { self.data.handles().get_unchecked(*direct as usize) }
-        });
+        flagged
+            .iter_mut()
+            .for_each(|direct| *direct = self.data.handles()[*direct as usize]);
 
         // delete dead deforms
-        flagged.drain(..).for_each(|indirect| {
+        flagged.drain(..).for_each(|direct| {
+            let indirect = self.data.handles()[direct as usize];
             if indirect != 0 {
+                println!("deform clear: ");
                 self.data.free(indirect);
             }
         });
