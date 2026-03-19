@@ -33,16 +33,32 @@ pub enum FragmentState {
     InactiveDebris = 2,
 }
 
+const PARENTS_COUNT: usize = 4;
+const ANCHORS_COUNT: usize = 8;
+
 ethel::table_spec! {
     struct Fragments {
-        parents: [u32; FRAGMENTS_PARENTS_COUNT];
-        influence: [f32; FRAGMENTS_PARENTS_COUNT];
-        // bind pose world position
-        bind_world: glam::Vec4;
-
         state: FragmentState;
-        health: f32; // also acts as mass in Debris state
 
+        parents: [u32; PARENTS_COUNT];
+        parents_weights: [f32; PARENTS_COUNT];
+
+        anchors: [u32; ANCHORS_COUNT];
+        anchors_weights: [f32; ANCHORS_COUNT];
+        
+        // bind position at fragment creation
+        // vec4 due to SSBO alignment requirements 
+        bind_position: glam::Vec4;
+
+        // lattice contribution coefficient
+        health_coeff: f32; 
+        // debris rigid body mass coefficient  
+        mass_coeff: f32;
+        // normalised integrity of fragment [0; 1]
+        integrity: f32;
+
+        // rigid body position, unused during attached state
+        // vec3 to reduce memory footprint in physics solver
         position: glam::Vec3;
         velocity: glam::Vec3;
         forces: glam::Vec3;
