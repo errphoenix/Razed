@@ -100,10 +100,10 @@ impl DeformSystem {
                         if constraint > CONTROL_POINT_CONSTRAIN_THRESHOLD {
                             *id = 0;
                             *weight = 0f32;
-                            b = true;
                             if !b {
                                 flagged.push(i);
                             }
+                            b = true;
                         }
                     },
                 );
