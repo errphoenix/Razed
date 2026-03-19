@@ -1,6 +1,7 @@
 use ethel::state::data::Column;
 use janus::context::DeltaTime;
-use physics::xpbd::{LinksRowTable, NodesRowTable, XpbdLatticeBuilder, XpbdSolver};
+use physics::xpbd::{LinkNodes, LinksRowTable, NodesRowTable, XpbdLatticeBuilder, XpbdSolver};
+use rustc_hash::FxHashSet;
 
 #[derive(Debug, Default)]
 pub struct LatticeSystem {
@@ -8,6 +9,10 @@ pub struct LatticeSystem {
     links: LinksRowTable,
 
     solver: XpbdSolver,
+
+    /// alltime accumulated set of dead node IDs; hashing avoids dedup op
+    damaged_nodes_data: Vec<u32>,
+    damaged_nodes_hash: FxHashSet<u32>,
 }
 
 impl LatticeSystem {
@@ -23,6 +28,7 @@ impl LatticeSystem {
             solver,
             nodes: NodesRowTable::with_capacity(capacity),
             links: LinksRowTable::with_capacity(capacity),
+            ..Default::default()
         }
     }
 
@@ -32,6 +38,32 @@ impl LatticeSystem {
             nodes,
             links,
             ..Default::default()
+        }
+    }
+
+    /// Returns a slice of disabled node IDs during this frame.
+    ///
+    /// No duplicates are present. All entries are unique for **this** frame.
+    ///
+    /// Requires a prior call to [`Self::register_dead_nodes`] during the
+    /// same frame.
+    pub fn unique_damaged_nodes_frame(&self) -> &[u32] {
+        &self.damaged_nodes_data
+    }
+
+    pub fn register_dead_nodes(&mut self) {
+        self.damaged_nodes_data.clear();
+        self.damaged_nodes_hash.clear();
+
+        for id in self.solver.broken_links() {
+            let LinkNodes(node_a, node_b) =
+                *unsafe { self.links().relation_slice().get_unchecked(*id as usize) };
+            if self.damaged_nodes_hash.insert(node_a) {
+                self.damaged_nodes_data.push(node_a);
+            }
+            if self.damaged_nodes_hash.insert(node_b) {
+                self.damaged_nodes_data.push(node_b);
+            }
         }
     }
 

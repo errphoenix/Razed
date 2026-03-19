@@ -72,6 +72,7 @@ impl DeformSystem {
         let mut flagged = Vec::<u32>::new(); // todo: do not alloc
 
         // invalidate control points constraint weights
+        // stores direct indices
         {
             let mut i = 0;
             let (deforms, _, controllers, _) = self.data.split_mut();

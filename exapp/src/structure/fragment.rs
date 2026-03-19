@@ -1,9 +1,7 @@
-use crate::data::FRAGMENTS_PARENTS_COUNT;
 use ethel::state::data::{
     Column,
     hash::{Cell, FxSpatialHash, SpatialResolution},
 };
-use physics::xpbd::{LinkNodes, LinksRowTable};
 use rustc_hash::FxHashSet;
 
 const MIN_CLUSTER_SIZE: u32 = 7;
@@ -33,8 +31,8 @@ pub enum FragmentState {
     InactiveDebris = 2,
 }
 
-const PARENTS_COUNT: usize = 4;
-const ANCHORS_COUNT: usize = 8;
+pub const PARENTS_COUNT: usize = 4;
+pub const ANCHORS_COUNT: usize = 8;
 
 ethel::table_spec! {
     struct Fragments {
@@ -45,14 +43,14 @@ ethel::table_spec! {
 
         anchors: [u32; ANCHORS_COUNT];
         anchors_weights: [f32; ANCHORS_COUNT];
-        
+
         // bind position at fragment creation
-        // vec4 due to SSBO alignment requirements 
+        // vec4 due to SSBO alignment requirements
         bind_position: glam::Vec4;
 
         // lattice contribution coefficient
-        health_coeff: f32; 
-        // debris rigid body mass coefficient  
+        health_coeff: f32;
+        // debris rigid body mass coefficient
         mass_coeff: f32;
         // normalised integrity of fragment [0; 1]
         integrity: f32;
@@ -71,9 +69,6 @@ pub struct FragmentSystem {
 
     /// sparse map of node ID to sequence of fragment IDs
     node_map: Vec<Vec<u32>>,
-
-    /// alltime accumulated set of disabled node IDs; avoids dedup op
-    disabled_nodes: FxHashSet<u32>,
 
     /// alltime accumulated set of disable fragment IDs; avoids dedup op
     /// these are the fragments' indirect indices (stable)
@@ -97,7 +92,6 @@ impl FragmentSystem {
             // account for degenerate
             node_map: vec![Vec::new()],
 
-            disabled_nodes: FxHashSet::default(),
             disabled_frags_alltime: FxHashSet::default(),
             disabled_frags_frame: Vec::new(),
         }
@@ -112,7 +106,6 @@ impl FragmentSystem {
             fragments: FragmentsRowTable::with_capacity(capacity),
             node_map,
 
-            disabled_nodes: FxHashSet::default(),
             disabled_frags_alltime: FxHashSet::default(),
             disabled_frags_frame: Vec::new(),
         }
@@ -146,67 +139,28 @@ impl FragmentSystem {
     }
 
     pub fn reset(&mut self) {
-        self.disabled_nodes.clear();
         self.node_map.clear();
     }
 
     /// Synchronise (stable II) `broken_ids` of constraints and
     /// [`degenerate_nodes`] with fragments state.
-    pub fn handle_constraint_break(
-        &mut self,
-        broken_ids: &[u32],
-        degenerate_nodes: &[u32],
-        constraints: &LinksRowTable,
-    ) {
+    pub fn sync_lattice_damage(&mut self, broken_nodes: &[u32]) {
         self.disabled_frags_frame.clear();
-        for &degen in degenerate_nodes {
-            if self.disabled_nodes.insert(degen) {
-                for &frag_id in &self.node_map[degen as usize] {
-                    if frag_id == 0 {
-                        continue;
-                    }
-
-                    if self.disabled_frags_alltime.insert(frag_id) {
-                        let idx = unsafe { self.fragments.get_indirect_unchecked(frag_id) };
-                        self.disabled_frags_frame.push((idx, degen));
-                    }
+        for &node in broken_nodes {
+            for &frag_id in &self.node_map[node as usize] {
+                if frag_id == 0 {
+                    continue;
                 }
-            }
-        }
 
-        {
-            let relations = constraints.relation_slice();
-            for broken in broken_ids {
-                let index = unsafe { constraints.get_indirect_unchecked(*broken) };
-                let LinkNodes(a, b) = *unsafe { relations.get_unchecked(index as usize) };
-
-                if self.disabled_nodes.insert(a) {
-                    for frag_id in &self.node_map[a as usize] {
-                        if *frag_id == 0 {
-                            continue;
-                        }
-                        if self.disabled_frags_alltime.insert(*frag_id) {
-                            let index = unsafe { self.fragments.get_indirect_unchecked(*frag_id) };
-                            self.disabled_frags_frame.push((index, a));
-                        }
-                    }
-                }
-                if self.disabled_nodes.insert(b) {
-                    for &frag_id in &self.node_map[b as usize] {
-                        if frag_id == 0 {
-                            continue;
-                        }
-                        if self.disabled_frags_alltime.insert(frag_id) {
-                            let index = unsafe { self.fragments.get_indirect_unchecked(frag_id) };
-                            self.disabled_frags_frame.push((index, b));
-                        }
-                    }
+                if self.disabled_frags_alltime.insert(frag_id) {
+                    let idx = unsafe { self.fragments.get_indirect_unchecked(frag_id) };
+                    self.disabled_frags_frame.push((idx, node));
                 }
             }
         }
 
         // validate disabled fragments and invalidate relations
-        let (parents, weights, _, states, _, _, _, _) = self.fragments.split_mut();
+        let (states, parents, weights, _, _, _, _, _, _, _, _, _) = self.fragments.split_mut();
         self.disabled_frags_frame.retain(|&(frag_idx, node_id)| {
             let parents = unsafe { parents.alpha.get_unchecked_mut(frag_idx as usize) };
             let weights = unsafe { weights.alpha.get_unchecked_mut(frag_idx as usize) };
@@ -290,7 +244,7 @@ impl FragmentSystem {
             self.node_map.push(Vec::<u32>::new());
         }
 
-        let mut near_buf = Vec::with_capacity(FRAGMENTS_PARENTS_COUNT);
+        let mut near_buf = Vec::with_capacity(PARENTS_COUNT);
         let mut world_points = vec![glam::Vec3::ZERO; grid.count()];
 
         grid.to_world(origin, &mut world_points);
@@ -301,7 +255,7 @@ impl FragmentSystem {
             #[cfg(not(debug_assertions))]
             let _ = node_hash.nearest_cells(
                 cell,
-                FRAGMENTS_PARENTS_COUNT as u32,
+                PARENTS_COUNT as u32,
                 Self::VOXEL_NEIGHBOR_QUERY_RADIUS,
                 &mut near_buf,
                 false,
@@ -311,7 +265,7 @@ impl FragmentSystem {
             {
                 if let Err(rem) = node_hash.nearest_cells(
                     cell,
-                    FRAGMENTS_PARENTS_COUNT as u32,
+                    PARENTS_COUNT as u32,
                     Self::VOXEL_NEIGHBOR_QUERY_RADIUS,
                     &mut near_buf,
                     false,
@@ -345,7 +299,7 @@ impl FragmentSystem {
                 });
             }
 
-            let n_count = near_buf.len().min(FRAGMENTS_PARENTS_COUNT);
+            let n_count = near_buf.len().min(PARENTS_COUNT);
 
             if n_count < MIN_CLUSTER_SIZE as usize {
                 tracing::event!(
@@ -357,10 +311,7 @@ impl FragmentSystem {
             }
 
             let (parents, weights) = {
-                let (mut parents, mut weights) = (
-                    [0u32; FRAGMENTS_PARENTS_COUNT],
-                    [0f32; FRAGMENTS_PARENTS_COUNT],
-                );
+                let (mut parents, mut weights) = ([0u32; PARENTS_COUNT], [0f32; PARENTS_COUNT]);
 
                 near_buf
                     .drain(..)
@@ -380,11 +331,15 @@ impl FragmentSystem {
             };
 
             let handle = self.fragments.put((
+                FragmentState::Attached,
                 parents,
                 weights,
+                [0u32; ANCHORS_COUNT],
+                [0f32; ANCHORS_COUNT],
                 glam::vec4(voxel.x, voxel.y, voxel.z, 1f32),
-                FragmentState::Attached,
-                100.0, //todo; health
+                1.0, // todo: health contribution
+                1.0, // todo: debris rigid body
+                1.0, // todo: damage and integrity
                 voxel,
                 glam::Vec3::ZERO,
                 glam::Vec3::ZERO,

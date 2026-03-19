@@ -124,9 +124,9 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 let imap_nodes = self.lattice.nodes().handles();
                 let pod_nodes_positions = self.lattice.nodes().current_pos_slice();
                 let pod_nodes_bind_pose = &self.lattice_bind_pose;
-                let pod_parents = self.fragments.table().parents_slice();
-                let pod_weights = self.fragments.table().influence_slice();
-                let pod_bind_pose = self.fragments.table().bind_world_slice();
+                let pod_parents = self.fragments.table().parents_slice(); // todo: switch to anchors
+                let pod_weights = self.fragments.table().parents_weights_slice(); // todo: switch to anchors
+                let pod_bind_pose = self.fragments.table().bind_position_slice();
                 let pod_states = self.fragments.table().state_slice();
 
                 // SAFETY: the use of LayoutFragmentData ensures we are
@@ -136,8 +136,8 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     fragments.blit_part(buf_idx, LayoutFragmentData::ImapNodes as usize, imap_nodes, 0);
                     fragments.blit_part_padded(buf_idx, LayoutFragmentData::PodNodesPositions as usize, pod_nodes_positions, 0, VEC3_VEC4_PADDING);
                     fragments.blit_part_padded(buf_idx, LayoutFragmentData::PodNodesBindPose as usize, pod_nodes_bind_pose, 0, VEC3_VEC4_PADDING);
-                    fragments.blit_part(buf_idx, LayoutFragmentData::PodParents as usize, pod_parents, 0);
-                    fragments.blit_part(buf_idx, LayoutFragmentData::PodWeights as usize, pod_weights, 0);
+                    fragments.blit_part(buf_idx, LayoutFragmentData::PodAnchors as usize, pod_parents, 0);
+                    fragments.blit_part(buf_idx, LayoutFragmentData::PodAnchorsWeights as usize, pod_weights, 0);
                     fragments.blit_part(buf_idx, LayoutFragmentData::PodBindPose as usize, pod_bind_pose, 0);
                     fragments.blit_part(buf_idx, LayoutFragmentData::PodStates as usize, pod_states, 0);
                 }
@@ -328,17 +328,15 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             .apply_forces_batched(glam::vec3(WIND_FORCE, -9.81, WIND_FORCE));
 
         {
-            self.fragments.handle_constraint_break(
-                self.lattice.frame_broken_links(),
-                self.lattice.frame_degenerate_nodes(),
-                self.lattice.links(),
-            );
+            let damaged_nodes = self.lattice.unique_damaged_nodes_frame();
+            self.fragments.sync_lattice_damage(damaged_nodes);
 
             let broken_frags = self.fragments.frame_disabled_frags_direct();
             for &(frag_index, _) in broken_frags {
                 let renderable_id = *unsafe { self.frag_map.get_unchecked(frag_index as usize) };
                 let entity_id = self.renderables[renderable_id as usize].data_handle;
                 let e_index = unsafe { self.entity_data.get_indirect_unchecked(entity_id) };
+
                 let pos = unsafe {
                     self.entity_data
                         .position_mut_slice()

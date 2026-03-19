@@ -5,7 +5,10 @@ use ethel::{
     render::buffer::{InitStrategy, PartitionedTriBuffer, TriBuffer},
 };
 
-use crate::structure::deforms::{self, ControlPoint};
+use crate::structure::deforms::{
+    CONTROL_POINTS_COUNT as DEFORM_CONTROL_POINTS_COUNT, ControlPoint,
+};
+use crate::structure::fragment::ANCHORS_COUNT as FRAGMENT_ANCHORS_COUNT;
 
 pub const RENDER_STORAGE_PARTS: usize = 8;
 pub const ENTITY_ALLOCATION: usize = 8192;
@@ -88,17 +91,16 @@ layout_buffer! {
 
 pub const FRAGMENTS_ALLOC: usize = 16384;
 pub const FRAGMENTS_DATA_PARTS: usize = 7;
-pub const FRAGMENTS_PARENTS_COUNT: usize = 8;
 
 layout_buffer! {
     const FragmentData: FRAGMENTS_DATA_PARTS, {
-        enum PodParents: FRAGMENTS_ALLOC => {
-            type [u32; FRAGMENTS_PARENTS_COUNT];
+        enum PodAnchors: FRAGMENTS_ALLOC => {
+            type [u32; FRAGMENT_ANCHORS_COUNT];
             bind 0;
             shader 0;
         };
-        enum PodWeights: FRAGMENTS_ALLOC => {
-            type [f32; FRAGMENTS_PARENTS_COUNT];
+        enum PodAnchorsWeights: FRAGMENTS_ALLOC => {
+            type [f32; FRAGMENT_ANCHORS_COUNT];
             bind 1;
             shader 1;
         };
@@ -143,7 +145,7 @@ pub struct FrameDataBuffers {
     pub xpbd_debug_link_count: Arc<AtomicU32>,
 
     pub deform_debug: TriBuffer<glam::Vec4>,
-    pub deform_debug_controls: TriBuffer<[ControlPoint; deforms::CONTROL_POINTS_COUNT]>,
+    pub deform_debug_controls: TriBuffer<[ControlPoint; DEFORM_CONTROL_POINTS_COUNT]>,
     pub deform_debug_count: Arc<AtomicU32>,
 }
 
@@ -164,7 +166,7 @@ impl FrameDataBuffers {
         );
         let deform_debug_controls = TriBuffer::new(
             DEFORM_DEBUG_ALLOC,
-            InitStrategy::FillWith(|| [ControlPoint::default(); deforms::CONTROL_POINTS_COUNT]),
+            InitStrategy::FillWith(|| [ControlPoint::default(); DEFORM_CONTROL_POINTS_COUNT]),
         );
 
         Self {
