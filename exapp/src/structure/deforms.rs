@@ -175,9 +175,9 @@ impl DeformSystem {
         let total = mx * my * mz + mx + my + mz;
         let mut unique_cells = HashSet::<Cell>::with_capacity(total as usize);
         for &voxel in vox.cells() {
-            for x in 0..1 {
-                for y in 0..1 {
-                    for z in 0..1 {
+            for x in 0..=1 {
+                for y in 0..=1 {
+                    for z in 0..=1 {
                         let cell = Cell {
                             x: voxel.x + x,
                             y: voxel.y + y,
