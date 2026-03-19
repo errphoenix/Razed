@@ -113,10 +113,10 @@ impl DeformSystem {
             }
         }
 
-        // resolve indirect indices of invalidated deforms
-        flagged.iter_mut().for_each(|indirect| {
-            *indirect = self.data.get_indirect(*indirect).unwrap();
-        });
+        // resolve to stable indirect indices of flagged deforms
+        // flagged
+        //     .iter_mut()
+        //     .for_each(|direct| *direct = self.data.handles()[*direct as usize]);
 
         // recompute invalidated control points
         // this retains all deforms for which total weight equals to 0 to be
@@ -154,8 +154,8 @@ impl DeformSystem {
             .for_each(|direct| *direct = self.data.handles()[*direct as usize]);
 
         // delete dead deforms
-        flagged.drain(..).for_each(|direct| {
-            let indirect = self.data.handles()[direct as usize];
+        flagged.drain(..).for_each(|indirect| {
+            //let indirect = self.data.handles()[direct as usize];
             if indirect != 0 {
                 println!("deform clear: ");
                 self.data.free(indirect);
