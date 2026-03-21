@@ -155,9 +155,7 @@ impl DeformSystem {
 
         // delete dead deforms
         flagged.drain(..).for_each(|indirect| {
-            //let indirect = self.data.handles()[direct as usize];
             if indirect != 0 {
-                println!("deform clear: ");
                 self.data.free(indirect);
             }
         });
@@ -232,7 +230,7 @@ struct DeformPoint {
 
 impl DeformPoint {
     pub const CONTROL_POINT_MAX_RANGE: u32 = 16;
-    pub const RIGIDITY: f32 = 2.0;
+    pub const RIGIDITY: f32 = 4.0;
 
     fn new(
         point: glam::Vec3,
