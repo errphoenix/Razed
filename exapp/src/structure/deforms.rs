@@ -170,33 +170,16 @@ impl DeformSystem {
     ) -> std::ops::Range<usize> {
         let vox = fragments.voxels();
         let (mx, my, mz) = fragments.dimensions();
-
         let total = mx * my * mz + mx + my + mz;
-        let mut unique_cells = HashSet::<Cell>::with_capacity(total as usize);
-        for &voxel in vox.cells() {
-            for x in 0..=1 {
-                for y in 0..=1 {
-                    for z in 0..=1 {
-                        let cell = Cell {
-                            x: voxel.x + x,
-                            y: voxel.y + y,
-                            z: voxel.z + z,
-                        };
-                        unique_cells.insert(cell);
-                    }
-                }
-            }
-        }
 
         let mut points = Vec::<DeformPoint>::with_capacity(total as usize);
         let mut near_buf = Vec::<Cell>::with_capacity(CONTROL_POINTS_COUNT);
-        let hu = fragments.options().density as f32 * 0.5;
 
-        for cell in unique_cells.iter() {
+        for voxel in vox.cells() {
             let point = glam::vec3(
-                (cell.x / fragments.options().density) as f32 + hu,
-                (cell.y / fragments.options().density) as f32 + hu,
-                (cell.z / fragments.options().density) as f32 + hu,
+                (voxel.x / fragments.options().density) as f32,
+                (voxel.y / fragments.options().density) as f32,
+                (voxel.z / fragments.options().density) as f32,
             ) + origin;
 
             points.push(DeformPoint::new(point, node_hash, lattice, &mut near_buf));
