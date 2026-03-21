@@ -1,4 +1,4 @@
-use ethel::state::data::Column;
+use ethel::state::data::{Column, IndirectIndex};
 use janus::context::DeltaTime;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -238,7 +238,7 @@ impl XpbdLatticeBuilder {
                 let forces = glam::Vec3::ZERO;
                 let velocity = glam::Vec3::ZERO;
 
-                nodes.put((p_pos, c_pos, mass, inv_mass, forces, velocity))
+                nodes.insert((p_pos, c_pos, mass, inv_mass, forces, velocity))
             })
             .collect::<Vec<_>>();
 
@@ -254,16 +254,16 @@ impl XpbdLatticeBuilder {
                 let lambda = 0f32;
                 let compliance = link.options.compliance;
                 let rest_length = link.options.rest_length.unwrap_or_else(|| {
-                    let ip_a = unsafe { nodes.get_indirect_unchecked(relation.0) };
-                    let ip_b = unsafe { nodes.get_indirect_unchecked(relation.1) };
+                    let ip_a = unsafe { nodes.solve_indirect_unchecked(relation.0) };
+                    let ip_b = unsafe { nodes.solve_indirect_unchecked(relation.1) };
 
                     let node_positions = nodes.current_pos_slice();
-                    let p_a = unsafe { node_positions.get_unchecked(ip_a as usize) };
-                    let p_b = unsafe { node_positions.get_unchecked(ip_b as usize) };
+                    let p_a = unsafe { node_positions.get_unchecked(ip_a.as_index()) };
+                    let p_b = unsafe { node_positions.get_unchecked(ip_b.as_index()) };
                     (p_a - p_b).length()
                 });
 
-                links.put((relation, compliance, rest_length, lambda))
+                links.insert((relation, compliance, rest_length, lambda))
             })
             .collect::<Vec<_>>();
 
@@ -276,8 +276,8 @@ impl XpbdLatticeBuilder {
 
 #[derive(Clone, Debug, Default)]
 pub struct LatticeIds {
-    pub nodes: Vec<u32>,
-    pub links: Vec<u32>,
+    pub nodes: Vec<IndirectIndex>,
+    pub links: Vec<IndirectIndex>,
 }
 
 pub const DEFAULT_SOLVE_ITERATIONS: u32 = 16;
@@ -296,7 +296,7 @@ ethel::table_spec! {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd, Eq, Ord, Hash)]
-pub struct LinkNodes(pub u32, pub u32);
+pub struct LinkNodes(pub IndirectIndex, pub IndirectIndex);
 
 ethel::table_spec! {
     struct Links {
@@ -318,8 +318,8 @@ pub struct XpbdSolver {
     clear_degenerate_nodes: bool,
     ground_level: Option<f32>,
 
-    broken_links: Vec<u32>,
-    degenerate_nodes: Vec<u32>,
+    broken_links: Vec<IndirectIndex>,
+    degenerate_nodes: Vec<IndirectIndex>,
 
     /// Maps a node indirect index (stable) to number of active constraints
     frame_constraint_map: Vec<u32>,
@@ -476,7 +476,7 @@ impl XpbdSolver {
     /// Will panic:
     /// * If `link_id` is an invalid constraint handle.
     /// * If the XPBD solver's `allow_breaking` flag is `false`.
-    pub fn break_link(&mut self, link_id: u32) {
+    pub fn break_link(&mut self, link_id: IndirectIndex) {
         assert!(
             self.allow_breaking,
             "cannot query broken links: allow_breaking flag for XPBD is set to false"
@@ -493,7 +493,7 @@ impl XpbdSolver {
     ///
     /// # Panics
     /// Will panic if the XPBD solver's `clear_degenerate_flag` flag is `false`.
-    pub fn degenerate_nodes(&self) -> &[u32] {
+    pub fn degenerate_nodes(&self) -> &[IndirectIndex] {
         assert!(
             self.clear_degenerate_nodes,
             "cannot query degenerate nodes: clear_degenerate_nodes flag for XPBD is set to false"
@@ -510,7 +510,7 @@ impl XpbdSolver {
     ///
     /// # Panics
     /// Will panic if the XPBD solver's `allow_breaking` flag is `false`.
-    pub fn broken_links(&self) -> &[u32] {
+    pub fn broken_links(&self) -> &[IndirectIndex] {
         assert!(
             self.allow_breaking,
             "cannot query broken links: allow_breaking flag for XPBD is set to false"
@@ -531,30 +531,32 @@ impl XpbdSolver {
             self.frame_constraint_map.resize(count, 0u32);
 
             for &LinkNodes(a, b) in relations {
-                *unsafe { self.frame_constraint_map.get_unchecked_mut(a as usize) } += 1;
-                *unsafe { self.frame_constraint_map.get_unchecked_mut(b as usize) } += 1;
+                *unsafe { self.frame_constraint_map.get_unchecked_mut(a.as_index()) } += 1;
+                *unsafe { self.frame_constraint_map.get_unchecked_mut(b.as_index()) } += 1;
             }
         }
 
         if self.allow_breaking {
             self.broken_links.iter().for_each(|&handle| {
                 if self.clear_degenerate_nodes {
-                    let id = unsafe { links.get_indirect_unchecked(handle) };
-                    let &LinkNodes(a, b) = unsafe { links.relation.get_unchecked(id as usize) };
+                    let id = unsafe { links.solve_indirect_unchecked(handle) };
+                    let &LinkNodes(a, b) = unsafe { links.relation.get_unchecked(id.as_index()) };
 
                     // delete node if this deleted constraint was their last
                     // else, only keep tracking count: constraints are only
                     // recounted at the start of the next step, but multiple
                     // constraints to the same node might break in one step.
                     {
-                        let ca = unsafe { self.frame_constraint_map.get_unchecked_mut(a as usize) };
+                        let ca =
+                            unsafe { self.frame_constraint_map.get_unchecked_mut(a.as_index()) };
                         if *ca == 1 {
                             // nodes.free(a);
                             self.degenerate_nodes.push(a);
                         } else {
                             *ca -= 1;
                         }
-                        let cb = unsafe { self.frame_constraint_map.get_unchecked_mut(b as usize) };
+                        let cb =
+                            unsafe { self.frame_constraint_map.get_unchecked_mut(b.as_index()) };
                         if *cb == 1 {
                             // nodes.free(b);
                             self.degenerate_nodes.push(b);
@@ -633,16 +635,16 @@ impl XpbdSolver {
         let view = rel.join(comp).join(len).join(lambda);
 
         for (ab, inv_stiffness, l, y) in view {
-            let i_a = unsafe { node_data.get_indirect_unchecked(ab.0) };
-            let i_b = unsafe { node_data.get_indirect_unchecked(ab.1) };
+            let i_a = unsafe { node_data.solve_indirect_unchecked(ab.0) };
+            let i_b = unsafe { node_data.solve_indirect_unchecked(ab.1) };
             let inv_mass = &node_data.inv_mass;
             let position = &mut node_data.predicted_pos;
 
-            let w_a = inv_mass[i_a as usize];
-            let w_b = inv_mass[i_b as usize];
+            let w_a = inv_mass[i_a.as_index()];
+            let w_b = inv_mass[i_b.as_index()];
 
-            let p_a = position[i_a as usize];
-            let p_b = position[i_b as usize];
+            let p_a = position[i_a.as_index()];
+            let p_b = position[i_b.as_index()];
 
             let ab_d = p_a - p_b;
             let dist = ab_d.length();
@@ -662,8 +664,8 @@ impl XpbdSolver {
             *y += d_y;
 
             let gradient = ab_d / dist;
-            position[i_a as usize] += w_a * d_y * gradient;
-            position[i_b as usize] -= w_b * d_y * gradient;
+            position[i_a.as_index()] += w_a * d_y * gradient;
+            position[i_b.as_index()] -= w_b * d_y * gradient;
         }
     }
 
@@ -752,7 +754,7 @@ mod tests {
 
         let map = builder.export(&mut nodes, &mut links);
         {
-            let node_ids = map.nodes;
+            let node_ids = map.nodes.iter().map(|ii| ii.as_int()).collect::<Vec<_>>();
             let compare = {
                 let mut v = vec![A, B, C, D, E, F, G, H];
                 v.iter_mut().for_each(|i| *i += 1);
@@ -760,7 +762,7 @@ mod tests {
             };
             assert_eq!(node_ids, compare);
 
-            let link_ids = map.links;
+            let link_ids = map.links.iter().map(|ii| ii.as_int()).collect::<Vec<_>>();
             let compare = {
                 let mut v = vec![BC, AB, EF, DE, GH, DG, AD];
                 v.iter_mut().for_each(|i| *i += 1);
@@ -805,7 +807,7 @@ mod tests {
 
         let map = builder.export(&mut nodes, &mut links);
         {
-            let node_ids = map.nodes;
+            let node_ids = map.nodes.iter().map(|ii| ii.as_int()).collect::<Vec<_>>();
             let compare = {
                 let mut v = vec![A, B, C, D];
                 v.iter_mut().for_each(|i| *i += 1);
@@ -813,7 +815,7 @@ mod tests {
             };
             assert_eq!(node_ids, compare);
 
-            let link_ids = map.links;
+            let link_ids = map.links.iter().map(|ii| ii.as_int()).collect::<Vec<_>>();
             dbg!(&links);
             let compare = {
                 let mut v = vec![AD, CD, BC];
