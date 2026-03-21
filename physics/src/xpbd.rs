@@ -549,15 +549,15 @@ impl XpbdSolver {
                     {
                         let ca = unsafe { self.frame_constraint_map.get_unchecked_mut(a as usize) };
                         if *ca == 1 {
-                            // nodes.free(*ca);
-                            self.degenerate_nodes.push(*ca);
+                            // nodes.free(a);
+                            self.degenerate_nodes.push(a);
                         } else {
                             *ca -= 1;
                         }
                         let cb = unsafe { self.frame_constraint_map.get_unchecked_mut(b as usize) };
                         if *cb == 1 {
-                            // nodes.free(*cb);
-                            self.degenerate_nodes.push(*cb);
+                            // nodes.free(b);
+                            self.degenerate_nodes.push(b);
                         } else {
                             *cb -= 1;
                         }
