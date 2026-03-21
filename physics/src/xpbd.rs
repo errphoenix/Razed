@@ -280,8 +280,8 @@ pub struct LatticeIds {
     pub links: Vec<u32>,
 }
 
-pub const DEFAULT_SOLVE_ITERATIONS: u32 = 8;
-pub const DEFAULT_SUB_STEPS: u32 = 4;
+pub const DEFAULT_SOLVE_ITERATIONS: u32 = 16;
+pub const DEFAULT_SUB_STEPS: u32 = 8;
 pub const DAMPING: f32 = 0.9935;
 
 ethel::table_spec! {
