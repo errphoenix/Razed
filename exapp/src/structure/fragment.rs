@@ -559,9 +559,9 @@ impl VoxelGrid {
         let hvh = vh / 2;
         let hvd = vd / 2;
 
-        for x in -hvw..hvw {
-            for y in -hvh..hvh {
-                for z in -hvd..hvd {
+        for x in -hvw..=hvw {
+            for y in -hvh..=hvh {
+                for z in -hvd..=hvd {
                     let cell = Cell { x, y, z };
                     if (self.generator)(cell) {
                         self.voxels.put(cell, self.voxel_index(cell));
