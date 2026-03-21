@@ -1,4 +1,4 @@
-use ethel::state::data::Column;
+use ethel::state::data::{Column, IndirectIndex};
 use janus::context::DeltaTime;
 use physics::xpbd::{LinkNodes, LinksRowTable, NodesRowTable, XpbdLatticeBuilder, XpbdSolver};
 use rustc_hash::FxHashSet;
@@ -11,8 +11,8 @@ pub struct LatticeSystem {
     solver: XpbdSolver,
 
     /// alltime accumulated set of dead node IDs; hashing avoids dedup op
-    damaged_nodes_data: Vec<u32>,
-    damaged_nodes_hash: FxHashSet<u32>,
+    damaged_nodes_data: Vec<IndirectIndex>,
+    damaged_nodes_hash: FxHashSet<IndirectIndex>,
 }
 
 impl LatticeSystem {
@@ -47,7 +47,7 @@ impl LatticeSystem {
     ///
     /// Requires a prior call to [`Self::register_dead_nodes`] during the
     /// same frame.
-    pub fn unique_damaged_nodes_frame(&self) -> &[u32] {
+    pub fn unique_damaged_nodes_frame(&self) -> &[IndirectIndex] {
         &self.damaged_nodes_data
     }
 
@@ -57,7 +57,7 @@ impl LatticeSystem {
 
         for id in self.solver.broken_links() {
             let LinkNodes(node_a, node_b) =
-                *unsafe { self.links().relation_slice().get_unchecked(*id as usize) };
+                *unsafe { self.links().relation_slice().get_unchecked(id.as_index()) };
             if self.damaged_nodes_hash.insert(node_a) {
                 self.damaged_nodes_data.push(node_a);
             }
@@ -76,27 +76,27 @@ impl LatticeSystem {
 
     /// Break a `constraint` by its handle.
     #[inline]
-    pub fn break_constraint(&mut self, constraint: u32) {
-        if self.links.get_indirect(constraint).is_some() {
+    pub fn break_constraint(&mut self, constraint: IndirectIndex) {
+        if self.links.solve_indirect(constraint).is_some() {
             self.solver.break_link(constraint);
         }
     }
 
     #[inline]
-    pub fn apply_forces(&mut self, index: u32, force: glam::Vec3) {
-        if let Some(node) = self.nodes.get_indirect(index) {
-            let mass = *unsafe { self.nodes.mass_slice().get_unchecked(node as usize) };
+    pub fn apply_forces(&mut self, index: IndirectIndex, force: glam::Vec3) {
+        if let Some(node) = self.nodes.solve_indirect(index) {
+            let mass = *unsafe { self.nodes.mass_slice().get_unchecked(node.as_index()) };
             let f = unsafe {
                 self.nodes
                     .forces_mut_slice()
-                    .get_unchecked_mut(node as usize)
+                    .get_unchecked_mut(node.as_index())
             };
             *f += force * mass;
         }
     }
 
     #[inline]
-    pub fn apply_forces_multi(&mut self, indices: &[u32], force: glam::Vec3) {
+    pub fn apply_forces_multi(&mut self, indices: &[IndirectIndex], force: glam::Vec3) {
         for &index in indices {
             self.apply_forces(index, force);
         }
@@ -137,13 +137,13 @@ impl LatticeSystem {
 
     /// See [`physics::xpbd::XpbdSolver::broken_links`].
     #[inline]
-    pub fn frame_broken_links(&self) -> &[u32] {
+    pub fn frame_broken_links(&self) -> &[IndirectIndex] {
         self.solver.broken_links()
     }
 
     /// See [`physics::xpbd::XpbdSolver::degenerate_nodes`].
     #[inline]
-    pub fn frame_degenerate_nodes(&self) -> &[u32] {
+    pub fn frame_degenerate_nodes(&self) -> &[IndirectIndex] {
         self.solver.degenerate_nodes()
     }
 

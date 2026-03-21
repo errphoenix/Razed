@@ -1,8 +1,10 @@
 use ethel::state::data::{
-    Column,
+    Column, DirectIndex, IndirectIndex,
     hash::{Cell, FxSpatialHash, SpatialResolution},
 };
 use rustc_hash::FxHashSet;
+
+use crate::structure::LatticeView;
 
 const MIN_CLUSTER_SIZE: u32 = 7;
 
@@ -38,10 +40,10 @@ ethel::table_spec! {
     struct Fragments {
         state: FragmentState;
 
-        parents: [u32; PARENTS_COUNT];
+        parents: [IndirectIndex; PARENTS_COUNT];
         parents_weights: [f32; PARENTS_COUNT];
 
-        anchors: [u32; ANCHORS_COUNT];
+        anchors: [IndirectIndex; ANCHORS_COUNT];
         anchors_weights: [f32; ANCHORS_COUNT];
 
         // bind position at fragment creation
@@ -68,15 +70,15 @@ pub struct FragmentSystem {
     fragments: FragmentsRowTable,
 
     /// sparse map of node ID to sequence of fragment IDs
-    node_map: Vec<Vec<u32>>,
+    node_map: Vec<Vec<IndirectIndex>>,
 
-    /// alltime accumulated set of disable fragment IDs; avoids dedup op
+    /// alltime accumulated set of disabled fragment IDs; avoids dedup op
     /// these are the fragments' indirect indices (stable)
-    disabled_frags_alltime: FxHashSet<u32>,
+    disabled_frags_alltime: FxHashSet<IndirectIndex>,
 
     /// per-frame list of disabled fragment IDs and an indirect node
     /// these are the fragments' direct indices (unstable)
-    disabled_frags_frame: Vec<(u32, u32)>,
+    disabled_frags_frame: Vec<(DirectIndex, IndirectIndex)>,
 }
 
 impl Default for FragmentSystem {
@@ -111,7 +113,7 @@ impl FragmentSystem {
         }
     }
 
-    /// Get a slice to the fragments associated to `node`.
+    /// Get a slice to the fragments IDs associated to `node` ID.
     ///
     /// # Panics
     /// Will panic if `node` is out-of-bounds; i.e. the node has not been
@@ -119,15 +121,15 @@ impl FragmentSystem {
     ///
     /// This will not panic if the `node` has no associated fragments: an empty
     /// slice will be returned instead.
-    pub fn fragments_of(&self, node: u32) -> &[u32] {
-        &self.node_map[node as usize]
+    pub fn fragments_of(&self, node: IndirectIndex) -> &[IndirectIndex] {
+        &self.node_map[node.as_index()]
     }
 
-    /// Get a mutable slice to the fragments associated to `node`.
+    /// Get a mutable slice to the fragments IDs associated to `node` ID.
     ///
     /// See [`FragmentSystem::fragments_of`] for details on panics.
-    pub fn fragments_of_mut(&mut self, node: u32) -> &mut [u32] {
-        &mut self.node_map[node as usize]
+    pub fn fragments_of_mut(&mut self, node: IndirectIndex) -> &mut [IndirectIndex] {
+        &mut self.node_map[node.as_index()]
     }
 
     pub fn table(&self) -> &FragmentsRowTable {
@@ -144,16 +146,16 @@ impl FragmentSystem {
 
     /// Synchronise (stable II) `broken_ids` of constraints and
     /// [`degenerate_nodes`] with fragments state.
-    pub fn sync_lattice_damage(&mut self, broken_nodes: &[u32]) {
+    pub fn sync_lattice_damage(&mut self, broken_nodes: &[IndirectIndex]) {
         self.disabled_frags_frame.clear();
         for &node in broken_nodes {
-            for &frag_id in &self.node_map[node as usize] {
-                if frag_id == 0 {
+            for &frag_id in &self.node_map[node.as_index()] {
+                if frag_id.as_int() == 0 {
                     continue;
                 }
 
                 if self.disabled_frags_alltime.insert(frag_id) {
-                    let idx = unsafe { self.fragments.get_indirect_unchecked(frag_id) };
+                    let idx = unsafe { self.fragments.solve_indirect_unchecked(frag_id) };
                     self.disabled_frags_frame.push((idx, node));
                 }
             }
@@ -162,15 +164,15 @@ impl FragmentSystem {
         // validate disabled fragments and invalidate relations
         let (states, parents, weights, _, _, _, _, _, _, _, _, _) = self.fragments.split_mut();
         self.disabled_frags_frame.retain(|&(frag_idx, node_id)| {
-            let parents = unsafe { parents.alpha.get_unchecked_mut(frag_idx as usize) };
-            let weights = unsafe { weights.alpha.get_unchecked_mut(frag_idx as usize) };
+            let parents = unsafe { parents.alpha.get_unchecked_mut(frag_idx.as_index()) };
+            let weights = unsafe { weights.alpha.get_unchecked_mut(frag_idx.as_index()) };
 
             parents
                 .iter_mut()
                 .zip(weights.iter_mut())
                 .for_each(|(id, weight)| {
                     if *id == node_id {
-                        *id = 0;
+                        *id = IndirectIndex::default();
                         *weight = 0.0;
                     }
                 });
@@ -181,9 +183,9 @@ impl FragmentSystem {
                 *w /= w_t;
             }
 
-            let active_count = parents.iter().filter(|id| **id != 0).count();
+            let active_count = parents.iter().filter(|id| id.as_int() != 0).count();
             if active_count < MIN_CLUSTER_SIZE as usize {
-                let state = unsafe { states.alpha.get_unchecked_mut(frag_idx as usize) };
+                let state = unsafe { states.alpha.get_unchecked_mut(frag_idx.as_index()) };
                 *state = FragmentState::Debris;
                 false
             } else {
@@ -204,7 +206,7 @@ impl FragmentSystem {
     /// These are unstable and may be invalidated on the next frame; they are
     /// intended for use only during the same frame this was populated in and
     /// before any operation that might add/remove elements to the table.
-    pub fn frame_disabled_frags_direct(&self) -> &[(u32, u32)] {
+    pub fn frame_disabled_frags_direct(&self) -> &[(DirectIndex, IndirectIndex)] {
         &self.disabled_frags_frame
     }
 
@@ -215,33 +217,23 @@ impl FragmentSystem {
     ///
     /// The `voxels` [`VoxelGrid`] is expected to have been built previously
     /// with [`VoxelGrid::build`].
-    ///
-    /// The `(owners, handles, positions)` tuple parameter refer, in order, to
-    /// the following Node table data of any [`NodesRowTable`]:
-    /// * `owners` as in the collection of sparse slot indices as returned from
-    ///   [`ethel::state::data::SparseSlot::slots_map`].
-    /// * `handles` as in the data parallel collection of inverse owner indices
-    ///   for each table element, may be returned by a method of the same naem.
-    /// * `positions` the data slice of positions for each node parallel to
-    ///   `handles`.
     pub fn generate_fragments(
         &mut self,
         origin: glam::Vec3,
         grid: &VoxelGrid,
-        (owners, handles, positions): (&[u32], &[u32], &[glam::Vec3]),
+        lattice: &LatticeView,
     ) {
         let node_hash = {
             let mut node_hash = FxSpatialHash::with_capacity(
                 SpatialResolution::new(Self::LATTICE_SPATIAL_RESOLUTION),
-                handles.len(),
+                lattice.len(),
             );
-            node_hash.dump_soa(positions, handles);
+            node_hash.dump_soa(lattice.positions, lattice.handles);
             node_hash
         };
 
-        let len = handles.len();
-        for _ in 0..len {
-            self.node_map.push(Vec::<u32>::new());
+        for _ in 0..lattice.len() {
+            self.node_map.push(Vec::<IndirectIndex>::new());
         }
 
         let mut near_buf = Vec::with_capacity(PARENTS_COUNT);
@@ -285,10 +277,8 @@ impl FragmentSystem {
                     let id0 = node_hash.get(c0).expect("query populated neighbour cell");
                     let id1 = node_hash.get(c1).expect("query populated neighbour cell");
 
-                    let ii0 = owners[*id0 as usize];
-                    let ii1 = owners[*id1 as usize];
-                    let p0 = positions[ii0 as usize];
-                    let p1 = positions[ii1 as usize];
+                    let p0 = lattice.position(*id0);
+                    let p1 = lattice.position(*id1);
 
                     let l0 = p0 - cell_world;
                     let l1 = p1 - cell_world;
@@ -311,7 +301,8 @@ impl FragmentSystem {
             }
 
             let (parents, weights) = {
-                let (mut parents, mut weights) = ([0u32; PARENTS_COUNT], [0f32; PARENTS_COUNT]);
+                let (mut parents, mut weights) =
+                    ([Default::default(); PARENTS_COUNT], [0f32; PARENTS_COUNT]);
 
                 near_buf
                     .drain(..)
@@ -319,7 +310,7 @@ impl FragmentSystem {
                     .zip(&mut parents.iter_mut().zip(&mut weights))
                     .for_each(|(cell, (id, weight))| {
                         *id = node_hash.get(&cell).copied().unwrap_or_default();
-                        let point = positions[owners[*id as usize] as usize];
+                        let point = lattice.position(*id);
                         let ds = voxel.distance_squared(point);
                         *weight = 1.0 / (ds + f32::EPSILON);
                     });
@@ -330,11 +321,11 @@ impl FragmentSystem {
                 (parents, weights)
             };
 
-            let handle = self.fragments.put((
+            let handle = self.fragments.insert((
                 FragmentState::Attached,
                 parents,
                 weights,
-                [0u32; ANCHORS_COUNT],
+                [IndirectIndex::default(); ANCHORS_COUNT],
                 [0f32; ANCHORS_COUNT],
                 glam::vec4(voxel.x, voxel.y, voxel.z, 1f32),
                 1.0, // todo: health contribution
@@ -347,7 +338,7 @@ impl FragmentSystem {
             i += 1;
 
             for node in parents {
-                self.node_map[node as usize].push(handle);
+                self.node_map[node.as_index()].push(handle);
             }
         }
 

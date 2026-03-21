@@ -19,7 +19,7 @@ use ethel::{
     state::{
         camera,
         data::{
-            Column, SparseSlot,
+            Column, IndirectIndex, SparseSlot,
             hash::{FxSpatialHash, SpatialResolution},
         },
     },
@@ -53,7 +53,7 @@ pub struct State {
     frag_map: Vec<u32>,
 
     /// Selected lattice link id
-    selection: Option<u32>,
+    selection: Option<IndirectIndex>,
 
     camera: camera::Orbital,
 }
@@ -206,7 +206,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 let pod_nodes = self.lattice.nodes().current_pos_slice();
                 let selected_link = {
                     let handle = self.selection.unwrap_or_default();
-                    self.lattice.links().get_indirect(handle).unwrap_or_default()
+                    self.lattice.links().solve_indirect(handle).unwrap_or_default()
                 };
 
                 let node_count = self.lattice.links().len() as u32;
@@ -293,10 +293,10 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             for (i, ::physics::xpbd::LinkNodes(a, b)) in constraints.into_iter().enumerate() {
                 const RAY_SIZE: f32 = 0.05;
 
-                let a_i = unsafe { self.lattice.nodes().get_indirect_unchecked(*a) };
-                let b_i = unsafe { self.lattice.nodes().get_indirect_unchecked(*b) };
-                let a_p = *unsafe { node_positions.get_unchecked(a_i as usize) };
-                let b_p = *unsafe { node_positions.get_unchecked(b_i as usize) };
+                let a_i = unsafe { self.lattice.nodes().solve_indirect_unchecked(*a) };
+                let b_i = unsafe { self.lattice.nodes().solve_indirect_unchecked(*b) };
+                let a_p = *unsafe { node_positions.get_unchecked(a_i.as_index()) };
+                let b_p = *unsafe { node_positions.get_unchecked(b_i.as_index()) };
 
                 if let Some(t) = ::physics::intersect_ray_segment(mouse_ray, (a_p, b_p), RAY_SIZE) {
                     if let Some(ct) = closest
@@ -306,8 +306,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     }
 
                     closest = Some(t);
-                    let id = *unsafe { self.lattice.links().handles().get_unchecked(i) };
-                    self.selection = Some(id as u32);
+                    self.selection = self.lattice.links().handles().get(i).copied();
                 }
             }
         } else {
@@ -333,14 +332,14 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
 
             let broken_frags = self.fragments.frame_disabled_frags_direct();
             for &(frag_index, _) in broken_frags {
-                let renderable_id = *unsafe { self.frag_map.get_unchecked(frag_index as usize) };
+                let renderable_id = *unsafe { self.frag_map.get_unchecked(frag_index.as_index()) };
                 let entity_id = self.renderables[renderable_id as usize].data_handle;
-                let e_index = unsafe { self.entity_data.get_indirect_unchecked(entity_id) };
+                let e_index = unsafe { self.entity_data.solve_indirect_unchecked(entity_id) };
 
                 let pos = unsafe {
                     self.entity_data
                         .position_mut_slice()
-                        .get_unchecked_mut(e_index as usize)
+                        .get_unchecked_mut(e_index.as_index())
                 };
 
                 pos.w = 0.0;
@@ -404,7 +403,7 @@ impl State {
         let position = glam::Vec4::new(position.x, position.y, position.z, 1.0);
         let scale = glam::Vec4::new(scale.x, scale.y, scale.z, 1.0);
 
-        let data_handle = self.entity_data.put((position, rotation, scale));
+        let data_handle = self.entity_data.insert((position, rotation, scale));
         let entity = Renderable {
             mesh_id,
             data_handle,
@@ -450,21 +449,9 @@ impl State {
         let new_positions = &self.lattice.nodes().current_pos_slice()[l0..l1];
         self.lattice_bind_pose.extend(new_positions);
 
-        // todo: CLEANUP THIS UGLY PIECE OF SHIT
-        let owners = &self
-            .lattice
-            .nodes()
-            .slots_map()
-            .iter()
-            .map(|v| v.saturating_sub(l0 as u32))
-            .collect::<Vec<_>>();
-
-        let handles = &self.lattice.nodes().handles()[l0..l1];
-        let positions = &self.lattice.nodes().current_pos_slice()[l0..l1];
-
         let l0 = self.fragments.table().handles().len();
         self.fragments
-            .generate_fragments(origin, voxel_grid, (owners, handles, positions));
+            .generate_fragments(origin, voxel_grid, &lattice);
         let l1 = self.fragments.table().handles().len();
 
         // currently unnecessary

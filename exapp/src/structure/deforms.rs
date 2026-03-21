@@ -1,7 +1,5 @@
-use std::collections::HashSet;
-
 use ethel::state::data::{
-    Column,
+    Column, DirectIndex, IndirectIndex,
     hash::{Cell, FxSpatialHash},
 };
 
@@ -50,7 +48,7 @@ impl DeformSystem {
             *deform = glam::Vec3::ZERO;
             controllers.iter().zip(binds.iter()).for_each(
                 |(&ControlPoint { id, weight }, &bind)| {
-                    if id == 0 {
+                    if id.as_int() == 0 {
                         return;
                     }
 
@@ -80,7 +78,7 @@ impl DeformSystem {
                 for j in 0..CONTROL_POINTS_COUNT {
                     //let controller_id = *&unsafe { controllers.get_unchecked(j) }.id;
                     let controller_id = controllers[j].id;
-                    if controller_id == 0 {
+                    if controller_id.as_int() == 0 {
                         continue;
                     }
 
@@ -98,7 +96,7 @@ impl DeformSystem {
                     |(ControlPoint { id, weight }, current_weight)| {
                         let constraint = (current_weight - *weight).abs();
                         if constraint > CONTROL_POINT_CONSTRAIN_THRESHOLD {
-                            *id = 0;
+                            *id = IndirectIndex::default();
                             *weight = 0f32;
                             if !b {
                                 flagged.push(i);
@@ -124,12 +122,14 @@ impl DeformSystem {
         {
             let (_, pose, controllers, binds) = self.data.split_mut();
             flagged.retain(|&direct| {
+                let direct = DirectIndex::from_index(direct as usize);
+
                 // let pose = *unsafe { pose.alpha.get_unchecked(direct as usize) };
                 // let bind = *unsafe { binds.alpha.get_unchecked(direct as usize) };
                 // let controllers = unsafe { controllers.alpha.get_unchecked_mut(direct as usize) };
-                let pose = pose.alpha[direct as usize];
-                let bind = binds.alpha[direct as usize];
-                let controllers = &mut controllers.alpha[direct as usize];
+                let pose = pose.alpha[direct.as_index()];
+                let bind = binds.alpha[direct.as_index()];
+                let controllers = &mut controllers.alpha[direct.as_index()];
 
                 controllers
                     .iter_mut()
@@ -144,19 +144,20 @@ impl DeformSystem {
                     .iter_mut()
                     .for_each(|ControlPoint { weight, .. }| *weight /= w_t);
 
-                controllers.iter().all(|ctl| ctl.id == 0)
+                controllers.iter().all(|ctl| ctl.id.as_int() == 0)
             });
         }
 
         // resolve direct indices to stable indirect indices
-        flagged
-            .iter_mut()
-            .for_each(|direct| *direct = self.data.handles()[*direct as usize]);
+        flagged.iter_mut().for_each(|indirect| {
+            let direct = DirectIndex::from_index(*indirect as usize);
+            *indirect = self.data.handles()[direct.as_index()].as_int()
+        });
 
         // delete dead deforms
         flagged.drain(..).for_each(|indirect| {
             if indirect != 0 {
-                self.data.free(indirect);
+                self.data.free(IndirectIndex::from_index(indirect as usize));
             }
         });
     }
@@ -165,7 +166,7 @@ impl DeformSystem {
         &mut self,
         origin: glam::Vec3,
         fragments: &VoxelGrid,
-        node_hash: &FxSpatialHash<u32>,
+        node_hash: &FxSpatialHash<IndirectIndex>,
         lattice: &LatticeView,
     ) -> std::ops::Range<usize> {
         let vox = fragments.voxels();
@@ -188,7 +189,7 @@ impl DeformSystem {
         let r0 = self.data.len();
         points.drain(..).for_each(|deform| {
             self.data
-                .put((deform.point, deform.point, deform.controllers, deform.binds));
+                .insert((deform.point, deform.point, deform.controllers, deform.binds));
         });
         let r1 = self.data.len();
         println!("done; {} deform points", r1 - r0);
@@ -200,7 +201,7 @@ impl DeformSystem {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct ControlPoint {
-    pub id: u32,
+    pub id: IndirectIndex,
     pub weight: f32,
 }
 
@@ -217,7 +218,7 @@ impl DeformPoint {
 
     fn new(
         point: glam::Vec3,
-        node_hash: &FxSpatialHash<u32>,
+        node_hash: &FxSpatialHash<IndirectIndex>,
         lattice: &LatticeView,
         near_buf: &mut Vec<Cell>,
     ) -> Self {

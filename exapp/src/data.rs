@@ -3,6 +3,7 @@ use std::sync::{Arc, atomic::AtomicU32};
 use ethel::{
     DrawCommand, layout_buffer, layout_mesh_buffer,
     render::buffer::{InitStrategy, PartitionedTriBuffer, TriBuffer},
+    state::data::IndirectIndex,
 };
 
 use crate::structure::deforms::{
@@ -18,7 +19,7 @@ pub const COMMAND_QUEUE_ALLOC: usize = 2048;
 #[repr(C)]
 pub struct Renderable {
     pub mesh_id: u32,
-    pub data_handle: u32,
+    pub data_handle: IndirectIndex,
 }
 
 layout_mesh_buffer!(count: 512; vertices: 2048);

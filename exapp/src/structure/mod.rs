@@ -1,7 +1,7 @@
 pub mod deforms;
 pub mod fragment;
 
-use ethel::state::data::{Column, SparseSlot};
+use ethel::state::data::{Column, DirectIndex, IndirectIndex, SparseSlot};
 use physics::xpbd::{NodesRowTable, XpbdLatticeBuilder, XpbdLinkOptions, XpbdNodeOptions as Node};
 
 #[allow(unused_imports)]
@@ -9,9 +9,9 @@ pub use fragment::{FragmentState, FragmentSystem};
 
 #[derive(Debug, Clone, Copy)]
 pub struct LatticeView<'nodes> {
-    pub sparse_ids: &'nodes [u32],
+    pub sparse_ids: &'nodes [DirectIndex],
     pub positions: &'nodes [glam::Vec3],
-    pub handles: &'nodes [u32],
+    pub handles: &'nodes [IndirectIndex],
 
     /// The indexing offset between sparse index values and contiguous slices.
     slice_offset: usize,
@@ -48,41 +48,17 @@ impl<'nodes> LatticeView<'nodes> {
         }
     }
 
-    /// Returns the node position and handle (reverse indirect ID) of the given
-    /// node.
-    ///
-    /// # Panics
-    /// Will panic if `indirect_id` is out-of-bounds to the sparse IDs map.
-    pub fn query(&self, indirect_id: u32) -> (glam::Vec3, u32) {
-        let direct_idx = self.sparse_ids[indirect_id as usize] as usize;
-        let position = self.positions[direct_idx - self.slice_offset];
-        let handle = self.handles[direct_idx - self.slice_offset];
-        (position, handle)
-    }
-
-    /// Returns the node position and handle (reverse indirect ID) of the given
-    /// node.
-    ///
-    /// # Panics
-    /// Will panic if `indirect_id` is out-of-bounds to the sparse IDs map.
-    ///
-    /// # Safety
-    /// This operation is safe as long as `indirect_id` is guaranteed to be
-    /// a valid indirect index.
-    pub unsafe fn query_unchecked(&self, indirect_id: u32) -> (glam::Vec3, u32) {
-        let direct_idx = *unsafe { self.sparse_ids.get_unchecked(indirect_id as usize) } as usize;
-        let position = *unsafe { self.positions.get_unchecked(direct_idx - self.slice_offset) };
-        let handle = *unsafe { self.handles.get_unchecked(direct_idx - self.slice_offset) };
-        (position, handle)
+    pub fn len(&self) -> usize {
+        self.handles.len()
     }
 
     /// Returns the node position of the given node.
     ///
     /// # Panics
     /// Will panic if `indirect_id` is out-of-bounds to the sparse IDs map.
-    pub fn position(&self, indirect_id: u32) -> glam::Vec3 {
-        let direct_idx = self.sparse_ids[indirect_id as usize] as usize;
-        self.positions[direct_idx - self.slice_offset]
+    pub fn position(&self, indirect_id: IndirectIndex) -> glam::Vec3 {
+        let direct_idx = self.sparse_ids[indirect_id.as_index()];
+        self.positions[direct_idx.as_index() - self.slice_offset]
     }
 
     /// Returns the node position of the given node.
@@ -93,31 +69,12 @@ impl<'nodes> LatticeView<'nodes> {
     /// # Safety
     /// This operation is safe as long as `indirect_id` is guaranteed to be
     /// a valid indirect index.
-    pub unsafe fn position_unchecked(&self, indirect_id: u32) -> glam::Vec3 {
-        let direct_idx = *unsafe { self.sparse_ids.get_unchecked(indirect_id as usize) } as usize;
-        *unsafe { self.positions.get_unchecked(direct_idx - self.slice_offset) }
-    }
-
-    /// Returns the handle (reverse indirect ID) of the given node.
-    ///
-    /// # Panics
-    /// Will panic if `indirect_id` is out-of-bounds to the sparse IDs map.
-    pub fn handle(&self, indirect_id: u32) -> u32 {
-        let direct_idx = self.sparse_ids[indirect_id as usize] as usize;
-        self.handles[direct_idx - self.slice_offset]
-    }
-
-    /// Returns the handle (reverse indirect ID) of the given node.
-    ///
-    /// # Panics
-    /// Will panic if `indirect_id` is out-of-bounds to the sparse IDs map.
-    ///
-    /// # Safety
-    /// This operation is safe as long as `indirect_id` is guaranteed to be
-    /// a valid indirect index.
-    pub unsafe fn handle_unchecked(&self, indirect_id: u32) -> u32 {
-        let direct_idx = *unsafe { self.sparse_ids.get_unchecked(indirect_id as usize) } as usize;
-        *unsafe { self.handles.get_unchecked(direct_idx - self.slice_offset) }
+    pub unsafe fn position_unchecked(&self, indirect_id: IndirectIndex) -> glam::Vec3 {
+        let direct_idx = *unsafe { self.sparse_ids.get_unchecked(indirect_id.as_index()) };
+        *unsafe {
+            self.positions
+                .get_unchecked(direct_idx.as_index() - self.slice_offset)
+        }
     }
 }
 
