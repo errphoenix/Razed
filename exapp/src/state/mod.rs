@@ -19,7 +19,7 @@ use ethel::{
     state::{
         camera,
         data::{
-            Column, IndirectIndex, SparseSlot,
+            Column, IndirectIndex,
             hash::{FxSpatialHash, SpatialResolution},
         },
     },
@@ -129,9 +129,8 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 let pod_bind_pose = self.fragments.table().bind_position_slice();
                 let pod_states = self.fragments.table().state_slice();
 
-                // SAFETY: the use of LayoutFragmentData ensures we are
-                // blitting to a valid section of the fragments partitioned
-                // buffer.
+                // SAFETY: the use of LayoutFragmentData ensures we blit to a
+                // valid section of the partitioned buffer.
                 unsafe {
                     fragments.blit_part(buf_idx, LayoutFragmentData::ImapNodes as usize, imap_nodes, 0);
                     fragments.blit_part_padded(buf_idx, LayoutFragmentData::PodNodesPositions as usize, pod_nodes_positions, 0, VEC3_VEC4_PADDING);
@@ -212,9 +211,8 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 let node_count = self.lattice.links().len() as u32;
                 storage.xpbd_debug_link_count.store(node_count, Ordering::Release);
 
-                // SAFETY: the use of LayoutXpbdDebugData ensures we are
-                // blitting to a valid section of the xpbd_dbg partitioned
-                // buffer.
+                // SAFETY: the use of LayoutXpbdDebugData ensures we blit to a
+                // valid section of the partitioned buffer.
                 unsafe {
                     xpbd_dbg.blit_part(buf_idx, LayoutXpbdDebugData::Constraints as usize, constraints, 0);
                     xpbd_dbg.blit_part(buf_idx, LayoutXpbdDebugData::ImapNodes as usize, imap_nodes, 0);
@@ -431,8 +429,11 @@ impl State {
         let lattice = LatticeView::from_range(self.lattice.nodes(), l0, l1 - l0);
         let mut node_hash = FxSpatialHash::new(SpatialResolution::new(2));
         node_hash.dump_soa(lattice.positions, lattice.handles);
+
+        let mut deform_cage = VoxelGrid::new(|_| true, *&voxel_grid.options().with_density(2));
+        deform_cage.repopulate();
         self.deforms
-            .generate_points(origin, voxel_grid, &node_hash, &lattice);
+            .generate_points(origin, &deform_cage, &node_hash, &lattice);
 
         // handle degenerate
         if self.frag_map.is_empty() {

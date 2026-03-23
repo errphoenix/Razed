@@ -426,7 +426,7 @@ impl From<VoxelIndex> for i32 {
 
 #[derive(Clone, Debug)]
 pub struct VoxelGrid {
-    generator: VoxelGridFn,
+    pub generator: VoxelGridFn,
     options: VoxelGridOptions,
 
     voxels: FxSpatialHash<VoxelIndex>,
