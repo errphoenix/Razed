@@ -7,6 +7,7 @@ mod data;
 mod render;
 mod state;
 mod structure;
+mod voxel;
 
 const DISPLAY_PARAMS: DisplayParameters = DisplayParameters::fullscreen("Razed");
 

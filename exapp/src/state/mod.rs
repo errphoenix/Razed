@@ -7,11 +7,8 @@ use crate::{
         FrameDataBuffers, LayoutEntityData, LayoutFragmentData, LayoutXpbdDebugData, Renderable,
     },
     state::physics::LatticeSystem,
-    structure::{
-        self, FragmentSystem, LatticeView,
-        deforms::DeformSystem,
-        fragment::{VoxelGrid, VoxelGridOptions},
-    },
+    structure::{self, FragmentSystem, LatticeView, deforms::DeformSystem},
+    voxel::{VoxelGrid, VoxelGridOptions},
 };
 use ::physics::xpbd::{LatticeIds, XpbdLatticeBuilder, XpbdOptions, XpbdSolver};
 use ethel::{

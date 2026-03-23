@@ -3,7 +3,7 @@ use ethel::state::data::{
     hash::{Cell, FxSpatialHash},
 };
 
-use crate::structure::{LatticeView, fragment::VoxelGrid};
+use crate::{structure::LatticeView, voxel::VoxelGrid};
 
 pub const CONTROL_POINTS_COUNT: usize = 8;
 pub const CONTROL_POINT_CONSTRAIN_THRESHOLD: f32 = 0.2;
