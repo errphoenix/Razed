@@ -1,82 +1,10 @@
 pub mod deforms;
 pub mod fragment;
 
-use ethel::state::data::{Column, DirectIndex, IndirectIndex, SparseSlot};
-use physics::xpbd::{NodesRowTable, XpbdLatticeBuilder, XpbdLinkOptions, XpbdNodeOptions as Node};
+use physics::xpbd::{XpbdLatticeBuilder, XpbdLinkOptions, XpbdNodeOptions as Node};
 
 #[allow(unused_imports)]
 pub use fragment::{FragmentState, FragmentSystem};
-
-#[derive(Debug, Clone, Copy)]
-pub struct LatticeView<'nodes> {
-    pub sparse_ids: &'nodes [DirectIndex],
-    pub positions: &'nodes [glam::Vec3],
-    pub handles: &'nodes [IndirectIndex],
-
-    /// The indexing offset between sparse index values and contiguous slices.
-    slice_offset: usize,
-}
-
-impl<'nodes> LatticeView<'nodes> {
-    pub fn from(nodes: &'nodes NodesRowTable) -> Self {
-        Self {
-            sparse_ids: nodes.slots_map(),
-            positions: nodes.current_pos_slice(),
-            handles: nodes.handles(),
-            slice_offset: 0,
-        }
-    }
-
-    pub fn from_range(nodes: &'nodes NodesRowTable, offset: usize, length: usize) -> Self {
-        debug_assert!(
-            offset < nodes.len(),
-            "cannot construct LatticeView: offset {offset} goes beyond table length of {}",
-            nodes.len()
-        );
-        debug_assert!(
-            (offset + length) < nodes.len(),
-            "cannot construct LatticeView: attempted to create view over range {offset}..{} for table of length {}",
-            offset + length,
-            nodes.len()
-        );
-
-        Self {
-            sparse_ids: nodes.slots_map(),
-            positions: &nodes.current_pos_slice()[offset..(offset + length)],
-            handles: &nodes.handles()[offset..(offset + length)],
-            slice_offset: offset,
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        self.handles.len()
-    }
-
-    /// Returns the node position of the given node.
-    ///
-    /// # Panics
-    /// Will panic if `indirect_id` is out-of-bounds to the sparse IDs map.
-    pub fn position(&self, indirect_id: IndirectIndex) -> glam::Vec3 {
-        let direct_idx = self.sparse_ids[indirect_id.as_index()];
-        self.positions[direct_idx.as_index() - self.slice_offset]
-    }
-
-    /// Returns the node position of the given node.
-    ///
-    /// # Panics
-    /// Will panic if `indirect_id` is out-of-bounds to the sparse IDs map.
-    ///
-    /// # Safety
-    /// This operation is safe as long as `indirect_id` is guaranteed to be
-    /// a valid indirect index.
-    pub unsafe fn position_unchecked(&self, indirect_id: IndirectIndex) -> glam::Vec3 {
-        let direct_idx = *unsafe { self.sparse_ids.get_unchecked(indirect_id.as_index()) };
-        *unsafe {
-            self.positions
-                .get_unchecked(direct_idx.as_index() - self.slice_offset)
-        }
-    }
-}
 
 // height is per floor, not total building; todo: docs
 pub fn create_structure_lattice(

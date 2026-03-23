@@ -1,10 +1,12 @@
 use ethel::state::data::{
     Column, DirectIndex, IndirectIndex,
-    hash::{Cell, FxSpatialHash, SpatialResolution},
+    hash::{FxSpatialHash, SpatialResolution},
+    table::TableView,
 };
+use physics::xpbd::NodesRowTableView;
 use rustc_hash::FxHashSet;
 
-use crate::{structure::LatticeView, voxel::VoxelGrid};
+use crate::{structure::deforms::DeformsRowTableView, voxel::VoxelGrid};
 
 const MIN_CLUSTER_SIZE: u32 = 7;
 
@@ -221,14 +223,14 @@ impl FragmentSystem {
         &mut self,
         origin: glam::Vec3,
         grid: &VoxelGrid,
-        lattice: &LatticeView,
+        lattice: &NodesRowTableView,
     ) {
         let node_hash = {
             let mut node_hash = FxSpatialHash::with_capacity(
                 SpatialResolution::new(Self::LATTICE_SPATIAL_RESOLUTION),
                 lattice.len(),
             );
-            node_hash.dump_soa(lattice.positions, lattice.handles);
+            node_hash.dump_soa(lattice.current_pos, lattice.handles);
             node_hash
         };
 
@@ -277,8 +279,8 @@ impl FragmentSystem {
                     let id0 = node_hash.get(c0).expect("query populated neighbour cell");
                     let id1 = node_hash.get(c1).expect("query populated neighbour cell");
 
-                    let p0 = lattice.position(*id0);
-                    let p1 = lattice.position(*id1);
+                    let p0 = lattice.current_pos(*id0);
+                    let p1 = lattice.current_pos(*id1);
 
                     let l0 = p0 - cell_world;
                     let l1 = p1 - cell_world;
@@ -310,8 +312,8 @@ impl FragmentSystem {
                     .zip(&mut parents.iter_mut().zip(&mut weights))
                     .for_each(|(cell, (id, weight))| {
                         *id = node_hash.get(&cell).copied().unwrap_or_default();
-                        let point = lattice.position(*id);
-                        let ds = voxel.distance_squared(point);
+                        let point = lattice.current_pos(*id);
+                        let ds = voxel.distance_squared(*point);
                         *weight = 1.0 / (ds + f32::EPSILON);
                     });
 

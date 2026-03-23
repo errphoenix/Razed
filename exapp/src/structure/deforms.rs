@@ -2,8 +2,9 @@ use ethel::state::data::{
     Column, DirectIndex, IndirectIndex,
     hash::{Cell, FxSpatialHash},
 };
+use physics::xpbd::NodesRowTableView;
 
-use crate::{structure::LatticeView, voxel::VoxelGrid};
+use crate::voxel::VoxelGrid;
 
 pub const CONTROL_POINTS_COUNT: usize = 8;
 pub const CONTROL_POINT_CONSTRAIN_THRESHOLD: f32 = 0.2;
@@ -42,7 +43,7 @@ impl DeformSystem {
         &mut self.data
     }
 
-    pub fn deform(&mut self, lattice: &LatticeView) {
+    pub fn deform(&mut self, lattice: &NodesRowTableView) {
         let (deforms, pose, controllers, binds) = self.data.split_mut();
         for (deform, pose, controllers, binds) in deforms.join(pose).join(controllers).join(binds) {
             *deform = glam::Vec3::ZERO;
@@ -54,7 +55,7 @@ impl DeformSystem {
 
                     // SAFETY:
                     // we assume the indirect index is always valid
-                    let position = unsafe { lattice.position_unchecked(id) };
+                    let position = unsafe { lattice.current_pos_unchecked(id) };
                     let delta = position - bind;
 
                     *deform += delta * weight;
@@ -65,7 +66,7 @@ impl DeformSystem {
         }
     }
 
-    pub fn constrain(&mut self, lattice: &LatticeView) {
+    pub fn constrain(&mut self, lattice: &NodesRowTableView) {
         let mut weights_buf = [0f32; CONTROL_POINTS_COUNT];
         let mut flagged = Vec::<u32>::new(); // todo: do not alloc
 
@@ -82,8 +83,8 @@ impl DeformSystem {
                         continue;
                     }
 
-                    let position = unsafe { lattice.position_unchecked(controller_id) };
-                    let dist_sq = deform.distance_squared(position) + f32::EPSILON;
+                    let position = unsafe { lattice.current_pos_unchecked(controller_id) };
+                    let dist_sq = deform.distance_squared(*position) + f32::EPSILON;
                     weights_buf[j] = 1.0 / dist_sq.powf(DeformPoint::RIGIDITY);
                 }
 
@@ -167,7 +168,7 @@ impl DeformSystem {
         origin: glam::Vec3,
         fragments: &VoxelGrid,
         node_hash: &FxSpatialHash<IndirectIndex>,
-        lattice: &LatticeView,
+        lattice: &NodesRowTableView,
     ) -> std::ops::Range<usize> {
         let vox = fragments.voxels();
         let (mx, my, mz) = fragments.dimensions();
@@ -219,7 +220,7 @@ impl DeformPoint {
     fn new(
         point: glam::Vec3,
         node_hash: &FxSpatialHash<IndirectIndex>,
-        lattice: &LatticeView,
+        lattice: &NodesRowTableView,
         near_buf: &mut Vec<Cell>,
     ) -> Self {
         near_buf.clear();
@@ -246,7 +247,7 @@ impl DeformPoint {
                 // SAFETY:
                 // we assume node_hash has been loaded with the nodes of
                 // lattice, thus all handles are valid.
-                let position = unsafe { lattice.position_unchecked(node) };
+                let position = *unsafe { lattice.current_pos_unchecked(node) };
                 let dist = point.distance_squared(position) + f32::EPSILON;
 
                 binds[c] = position;

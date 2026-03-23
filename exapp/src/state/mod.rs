@@ -7,10 +7,10 @@ use crate::{
         FrameDataBuffers, LayoutEntityData, LayoutFragmentData, LayoutXpbdDebugData, Renderable,
     },
     state::physics::LatticeSystem,
-    structure::{self, FragmentSystem, LatticeView, deforms::DeformSystem},
+    structure::{self, FragmentSystem, deforms::DeformSystem},
     voxel::{VoxelGrid, VoxelGridOptions},
 };
-use ::physics::xpbd::{LatticeIds, XpbdLatticeBuilder, XpbdOptions, XpbdSolver};
+use ::physics::xpbd::{LatticeIds, NodesRowTableView, XpbdLatticeBuilder, XpbdOptions, XpbdSolver};
 use ethel::{
     render::{ScreenSpace, command::DrawArraysIndirectCommand},
     state::{
@@ -342,7 +342,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         }
 
         self.lattice.update(delta);
-        let lattice = LatticeView::from(self.lattice.nodes());
+        let lattice = NodesRowTableView::from(self.lattice.nodes());
         self.deforms.deform(&lattice);
         self.deforms.constrain(&lattice);
 
@@ -423,9 +423,9 @@ impl State {
             return lattice_map;
         }
 
-        let lattice = LatticeView::from_range(self.lattice.nodes(), l0, l1 - l0);
+        let lattice = NodesRowTableView::from_range(self.lattice.nodes(), l0, l1 - l0);
         let mut node_hash = FxSpatialHash::new(SpatialResolution::new(2));
-        node_hash.dump_soa(lattice.positions, lattice.handles);
+        node_hash.dump_soa(lattice.current_pos, lattice.handles);
 
         let mut deform_cage = VoxelGrid::new(|_| true, *&voxel_grid.options().with_density(2));
         deform_cage.repopulate();
