@@ -121,22 +121,22 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             {
                 let fragments = &storage.fragments;
 
-                let imap_nodes = self.lattice.nodes().handles();
-                let pod_nodes_positions = self.lattice.nodes().current_pos_slice();
-                let pod_nodes_bind_pose = &self.lattice_bind_pose;
-                let pod_parents = self.fragments.table().parents_slice(); // todo: switch to anchors
-                let pod_weights = self.fragments.table().parents_weights_slice(); // todo: switch to anchors
+                let imap_deforms = self.deforms.data().handles();
+                let pod_deforms_positions = self.deforms.data().deformed_slice();
+                let pod_deforms_bind_pose = &self.deforms.data().pose_slice();
+                let pod_anchors = self.fragments.table().anchors_slice();
+                let pod_anchor_weights = self.fragments.table().anchors_weights_slice();
                 let pod_bind_pose = self.fragments.table().bind_position_slice();
                 let pod_states = self.fragments.table().state_slice();
 
                 // SAFETY: the use of LayoutFragmentData ensures we blit to a
                 // valid section of the partitioned buffer.
                 unsafe {
-                    fragments.blit_part(buf_idx, LayoutFragmentData::ImapNodes as usize, imap_nodes, 0);
-                    fragments.blit_part_padded(buf_idx, LayoutFragmentData::PodNodesPositions as usize, pod_nodes_positions, 0, VEC3_VEC4_PADDING);
-                    fragments.blit_part_padded(buf_idx, LayoutFragmentData::PodNodesBindPose as usize, pod_nodes_bind_pose, 0, VEC3_VEC4_PADDING);
-                    fragments.blit_part(buf_idx, LayoutFragmentData::PodAnchors as usize, pod_parents, 0);
-                    fragments.blit_part(buf_idx, LayoutFragmentData::PodAnchorsWeights as usize, pod_weights, 0);
+                    fragments.blit_part(buf_idx, LayoutFragmentData::ImapDeforms as usize, imap_deforms, 0);
+                    fragments.blit_part_padded(buf_idx, LayoutFragmentData::PodDeformsPositions as usize, pod_deforms_positions, 0, VEC3_VEC4_PADDING);
+                    fragments.blit_part_padded(buf_idx, LayoutFragmentData::PodDeformsBindPose as usize, pod_deforms_bind_pose, 0, VEC3_VEC4_PADDING);
+                    fragments.blit_part(buf_idx, LayoutFragmentData::PodAnchors as usize, pod_anchors, 0);
+                    fragments.blit_part(buf_idx, LayoutFragmentData::PodAnchorsWeights as usize, pod_anchor_weights, 0);
                     fragments.blit_part(buf_idx, LayoutFragmentData::PodBindPose as usize, pod_bind_pose, 0);
                     fragments.blit_part(buf_idx, LayoutFragmentData::PodStates as usize, pod_states, 0);
                 }

@@ -116,17 +116,17 @@ layout_buffer! {
             shader 3;
         };
 
-        enum IMapNodes: XPBD_NODES_ALLOC => {
+        enum IMapDeforms: DEFORM_POINTS_ALLOC => {
             type u32;
             bind 4;
             shader 6;
         };
-        enum PodNodesPositions: XPBD_NODES_ALLOC => {
+        enum PodDeformsPositions: DEFORM_POINTS_ALLOC => {
             type [f32; 4];
             bind 5;
             shader 7;
         };
-        enum PodNodesBindPose: XPBD_NODES_ALLOC => {
+        enum PodDeformsBindPose: DEFORM_POINTS_ALLOC => {
             type [f32; 4];
             bind 6;
             shader 8;
@@ -134,7 +134,7 @@ layout_buffer! {
     }
 }
 
-pub const DEFORM_DEBUG_ALLOC: usize = 4096;
+pub const DEFORM_POINTS_ALLOC: usize = 32000;
 
 #[derive(Debug, Default)]
 pub struct FrameDataBuffers {
@@ -162,11 +162,11 @@ impl FrameDataBuffers {
         LayoutFragmentData::initialise_partitions(&fragment_data);
 
         let deform_debug = TriBuffer::new(
-            DEFORM_DEBUG_ALLOC,
+            DEFORM_POINTS_ALLOC,
             InitStrategy::FillWith(|| glam::Vec4::NAN),
         );
         let deform_debug_controls = TriBuffer::new(
-            DEFORM_DEBUG_ALLOC,
+            DEFORM_POINTS_ALLOC,
             InitStrategy::FillWith(|| [ControlPoint::default(); DEFORM_CONTROL_POINTS_COUNT]),
         );
 

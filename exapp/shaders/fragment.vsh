@@ -19,11 +19,11 @@ layout(std430, binding = 11) readonly buffer MeshMetadata {
     Metadata metadata[];
 };
 
-// bidimensional array of parenting nodes to support 8 parents per fragment.
+// bidimensional array of parenting nodes to support 8 anchors per fragment.
 // each entry is a 2-sized array of vec4, contiguous in memory
-layout(std430, binding = 0) readonly buffer POD_Parents
+layout(std430, binding = 0) readonly buffer POD_Anchors
 {
-    uvec4 pod_parents[][2];
+    uvec4 pod_anchors[][2];
 };
 layout(std430, binding = 1) readonly buffer POD_Weights
 {
@@ -39,18 +39,19 @@ layout(std430, binding = 3) readonly buffer POD_States
     uint pod_states[];
 };
 
-layout(std430, binding = 6) readonly buffer IMap_Nodes
+layout(std430, binding = 6) readonly buffer IMap_Deforms
 {
-    uint imap_nodes[];
+    uint imap_deforms[];
 };
-layout(std430, binding = 7) readonly buffer POD_Nodes_Positions
+layout(std430, binding = 7) readonly buffer POD_Deforms_Positions
 {
-    // cpu physics data is vec3; padded to vec4 during upload
-    vec4 pod_nodes_positions[];
+    // cpu deform data is vec3; padded to vec4 during upload
+    vec4 pod_deforms_positions[];
 };
-layout(std430, binding = 8) readonly buffer POD_Nodes_BindPose
+layout(std430, binding = 8) readonly buffer POD_Deforms_BindPose
 {
-    vec4 pod_nodes_bind_pose[];
+    // cpu deform data is vec3; padded to vec4 during upload
+    vec4 pod_deforms_pose[];
 };
 
 uniform mat4 u_projection;
@@ -74,19 +75,19 @@ void main() {
 
     // account for degenerate 0
     uint fragment_id = gl_InstanceID + 1;
-    uvec4[2] parents = pod_parents[fragment_id];
+    uvec4[2] anchors = pod_anchors[fragment_id];
     vec4[2] weights = pod_weights[fragment_id];
     vec3 bind_pose = pod_bind_pose[fragment_id].xyz;
 
     // common ids and weights gather
-    uint i0 = imap_nodes[parents[0].x];
-    uint i1 = imap_nodes[parents[0].y];
-    uint i2 = imap_nodes[parents[0].z];
-    uint i3 = imap_nodes[parents[0].w];
-    uint i4 = imap_nodes[parents[1].x];
-    uint i5 = imap_nodes[parents[1].y];
-    uint i6 = imap_nodes[parents[1].z];
-    uint i7 = imap_nodes[parents[1].w];
+    uint i0 = imap_deforms[anchors[0].x];
+    uint i1 = imap_deforms[anchors[0].y];
+    uint i2 = imap_deforms[anchors[0].z];
+    uint i3 = imap_deforms[anchors[0].w];
+    uint i4 = imap_deforms[anchors[1].x];
+    uint i5 = imap_deforms[anchors[1].y];
+    uint i6 = imap_deforms[anchors[1].z];
+    uint i7 = imap_deforms[anchors[1].w];
 
     float w0 = weights[0].x;
     float w1 = weights[0].y;
@@ -97,23 +98,23 @@ void main() {
     float w6 = weights[1].z;
     float w7 = weights[1].w;
 
-    vec3 p0 = pod_nodes_positions[i0].xyz;
-    vec3 p1 = pod_nodes_positions[i1].xyz;
-    vec3 p2 = pod_nodes_positions[i2].xyz;
-    vec3 p3 = pod_nodes_positions[i3].xyz;
-    vec3 p4 = pod_nodes_positions[i4].xyz;
-    vec3 p5 = pod_nodes_positions[i5].xyz;
-    vec3 p6 = pod_nodes_positions[i6].xyz;
-    vec3 p7 = pod_nodes_positions[i7].xyz;
+    vec3 p0 = pod_deforms_positions[i0].xyz;
+    vec3 p1 = pod_deforms_positions[i1].xyz;
+    vec3 p2 = pod_deforms_positions[i2].xyz;
+    vec3 p3 = pod_deforms_positions[i3].xyz;
+    vec3 p4 = pod_deforms_positions[i4].xyz;
+    vec3 p5 = pod_deforms_positions[i5].xyz;
+    vec3 p6 = pod_deforms_positions[i6].xyz;
+    vec3 p7 = pod_deforms_positions[i7].xyz;
 
-    vec3 b0 = pod_nodes_bind_pose[i0].xyz;
-    vec3 b1 = pod_nodes_bind_pose[i1].xyz;
-    vec3 b2 = pod_nodes_bind_pose[i2].xyz;
-    vec3 b3 = pod_nodes_bind_pose[i3].xyz;
-    vec3 b4 = pod_nodes_bind_pose[i4].xyz;
-    vec3 b5 = pod_nodes_bind_pose[i5].xyz;
-    vec3 b6 = pod_nodes_bind_pose[i6].xyz;
-    vec3 b7 = pod_nodes_bind_pose[i7].xyz;
+    vec3 b0 = pod_deforms_pose[i0].xyz;
+    vec3 b1 = pod_deforms_pose[i1].xyz;
+    vec3 b2 = pod_deforms_pose[i2].xyz;
+    vec3 b3 = pod_deforms_pose[i3].xyz;
+    vec3 b4 = pod_deforms_pose[i4].xyz;
+    vec3 b5 = pod_deforms_pose[i5].xyz;
+    vec3 b6 = pod_deforms_pose[i6].xyz;
+    vec3 b7 = pod_deforms_pose[i7].xyz;
 
     vec3 w_rest = bind_pose + model;
 
