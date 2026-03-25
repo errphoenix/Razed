@@ -7,7 +7,10 @@ use crate::{
         FrameDataBuffers, LayoutEntityData, LayoutFragmentData, LayoutXpbdDebugData, Renderable,
     },
     state::physics::LatticeSystem,
-    structure::{self, FragmentSystem, deforms::DeformSystem},
+    structure::{
+        self, FragmentSystem,
+        deforms::{DeformSystem, DeformsRowTableView},
+    },
     voxel::{VoxelGrid, VoxelGridOptions},
 };
 use ::physics::xpbd::{LatticeIds, NodesRowTableView, XpbdLatticeBuilder, XpbdOptions, XpbdSolver};
@@ -424,13 +427,22 @@ impl State {
         }
 
         let lattice = NodesRowTableView::from_range(self.lattice.nodes(), l0, l1 - l0);
-        let mut node_hash = FxSpatialHash::new(SpatialResolution::new(2));
-        node_hash.dump_soa(lattice.current_pos, lattice.handles);
+        let mut lattice_hash = FxSpatialHash::new(SpatialResolution::new(2));
+        lattice_hash.dump_soa(lattice.current_pos, lattice.handles);
 
-        let mut deform_cage = VoxelGrid::new(|_| true, *&voxel_grid.options().with_density(2));
-        deform_cage.repopulate();
-        self.deforms
-            .generate_points(origin, &deform_cage, &node_hash, &lattice);
+        let mut deforms_vox = VoxelGrid::new(|_| true, *&voxel_grid.options().with_density(2));
+        deforms_vox.repopulate();
+        let generated_len =
+            self.deforms
+                .generate_points(origin, &deforms_vox, &lattice_hash, &lattice);
+
+        let deforms = DeformsRowTableView::from_range(
+            self.deforms.data(),
+            generated_len.start,
+            generated_len.end - generated_len.start,
+        );
+        let mut deforms_hash = FxSpatialHash::new(SpatialResolution::new(2));
+        deforms_hash.dump_soa(deforms.pose, deforms.handles);
 
         // handle degenerate
         if self.frag_map.is_empty() {
@@ -449,6 +461,8 @@ impl State {
 
         let l0 = self.fragments.table().handles().len();
         self.fragments.generate_fragments(origin, voxel_grid);
+        self.fragments.bind_lattice(&lattice_hash, &lattice);
+        self.fragments.bind_deforms(&deforms_hash, &deforms);
         let l1 = self.fragments.table().handles().len();
 
         // currently unnecessary

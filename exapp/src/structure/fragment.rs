@@ -253,6 +253,54 @@ impl FragmentSystem {
         deforms_hash: &FxSpatialHash<IndirectIndex>,
         deforms: &DeformsRowTableView,
     ) {
+        let mut near_buf = Vec::with_capacity(ANCHORS_COUNT);
+
+        self.uninitialised.retain(|frag| {
+            if let UninitFragmentStage::Unfinished { indirect } = frag.stage {
+                let fragment_world = frag.position;
+                let fragment_cell = deforms_hash.cell_at(fragment_world);
+
+                if let Err(rem) = deforms_hash.nearest_cells(
+                    fragment_cell,
+                    ANCHORS_COUNT as u32,
+                    Self::VOXEL_NEIGHBOR_QUERY_RADIUS,
+                    &mut near_buf,
+                    false,
+                ) {
+                    tracing::event!(
+                        name: "fragment.bind_deforms.near_query.miss",
+                        tracing::Level::ERROR,
+                        "Query for nearby deforms to {fragment_cell:?}: miss {rem} deforms within range.",
+                    )
+                }
+
+                let near_count = near_buf.len().min(ANCHORS_COUNT);
+                let fragment_direct = self.fragments.solve_indirect(indirect).expect("fragment indirect always valid");
+                let fragment_weights = &mut self.fragments.anchors_weights[fragment_direct.as_index()];
+
+                near_buf.drain(..)
+                    .take(near_count)
+                    .zip(&mut self.fragments.anchors[fragment_direct.as_index()])
+                    .zip(fragment_weights.iter_mut())
+                    .for_each(|((cell, anchor_id), anchor_weight)| {
+                        let deform = deforms_hash.get(&cell).copied().expect("deforms hash neighbors are populated");
+                        let point = deforms.pose(deform);
+                        let ds = fragment_world.distance_squared(*point);
+
+                        *anchor_id = deform;
+                        *anchor_weight = 1.0 / (ds + f32::EPSILON);
+                    });
+
+                let w_t = fragment_weights.iter().sum::<f32>();
+                fragment_weights.iter_mut().for_each(|w| *w /= w_t);
+
+                // remove fragment from intermediate buffer
+                false
+            } else {
+                // keep other unfinished fragments
+                true
+            }
+        });
     }
 
     /// Binds all currently uninitialised fragments to `lattice` through
@@ -264,6 +312,11 @@ impl FragmentSystem {
         lattice_hash: &FxSpatialHash<IndirectIndex>,
         lattice: &NodesRowTableView,
     ) {
+        {
+            let lattice_len = lattice.view_offset() + lattice.len();
+            self.node_map.resize_with(lattice_len, || Vec::new());
+        }
+
         let mut near_buf = Vec::with_capacity(PARENTS_COUNT);
 
         self.uninitialised.iter_mut().for_each(|frag| {
@@ -303,7 +356,10 @@ impl FragmentSystem {
                     .take(near_count)
                     .zip(&mut parents.iter_mut().zip(&mut weights))
                     .for_each(|(cell, (id, weight))| {
-                        *id = lattice_hash.get(&cell).copied().unwrap_or_default();
+                        *id = lattice_hash
+                            .get(&cell)
+                            .copied()
+                            .expect("lattice hash neighbors are populated");
                         let point = lattice.current_pos(*id);
                         let ds = fragment_world.distance_squared(*point);
                         *weight = 1.0 / (ds + f32::EPSILON);
