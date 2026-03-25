@@ -448,8 +448,7 @@ impl State {
         self.lattice_bind_pose.extend(new_positions);
 
         let l0 = self.fragments.table().handles().len();
-        self.fragments
-            .generate_fragments(origin, voxel_grid, &lattice);
+        self.fragments.generate_fragments(origin, voxel_grid);
         let l1 = self.fragments.table().handles().len();
 
         // currently unnecessary

@@ -64,12 +64,41 @@ ethel::table_spec! {
         position: glam::Vec3;
         velocity: glam::Vec3;
         forces: glam::Vec3;
+
+        //todo: mesh id, structure id?
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum UninitFragmentStage {
+    #[default]
+    Unregistered,
+    Unfinished {
+        indirect: IndirectIndex,
+    },
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct UninitFragment {
+    pub stage: UninitFragmentStage,
+    pub position: glam::Vec3,
+    //todo: mesh id, structure id?
+}
+
+impl UninitFragment {
+    fn new(position: glam::Vec3) -> Self {
+        Self {
+            position,
+            ..Default::default()
+        }
     }
 }
 
 #[derive(Debug)]
 pub struct FragmentSystem {
     fragments: FragmentsRowTable,
+
+    uninitialised: Vec<UninitFragment>,
 
     /// sparse map of node ID to sequence of fragment IDs
     node_map: Vec<Vec<IndirectIndex>>,
@@ -93,6 +122,8 @@ impl FragmentSystem {
     pub fn new() -> Self {
         Self {
             fragments: FragmentsRowTable::new(),
+            uninitialised: Vec::new(),
+
             // account for degenerate
             node_map: vec![Vec::new()],
 
@@ -108,6 +139,8 @@ impl FragmentSystem {
 
         Self {
             fragments: FragmentsRowTable::with_capacity(capacity),
+            uninitialised: Vec::with_capacity(capacity),
+
             node_map,
 
             disabled_frags_alltime: FxHashSet::default(),
@@ -215,105 +248,64 @@ impl FragmentSystem {
     const LATTICE_SPATIAL_RESOLUTION: u32 = 2;
     const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 10;
 
-    /// Generate new fragments from a [`VoxelGrid`] and raw lattice data.
-    ///
-    /// The `voxels` [`VoxelGrid`] is expected to have been built previously
-    /// with [`VoxelGrid::build`].
-    pub fn generate_fragments(
+    pub fn bind_deforms(
         &mut self,
-        origin: glam::Vec3,
-        grid: &VoxelGrid,
+        deforms_hash: &FxSpatialHash<IndirectIndex>,
+        deforms: &DeformsRowTableView,
+    ) {
+    }
+
+    /// Binds all currently uninitialised fragments to `lattice` through
+    /// `lattice_hash` spatial info.
+    ///
+    /// The given `lattice` and `lattice_hash` must be in world-space.
+    pub fn bind_lattice(
+        &mut self,
+        lattice_hash: &FxSpatialHash<IndirectIndex>,
         lattice: &NodesRowTableView,
     ) {
-        let node_hash = {
-            let mut node_hash = FxSpatialHash::with_capacity(
-                SpatialResolution::new(Self::LATTICE_SPATIAL_RESOLUTION),
-                lattice.len(),
-            );
-            node_hash.dump_soa(lattice.current_pos, lattice.handles);
-            node_hash
-        };
-
-        for _ in 0..lattice.len() {
-            self.node_map.push(Vec::<IndirectIndex>::new());
-        }
-
         let mut near_buf = Vec::with_capacity(PARENTS_COUNT);
-        let mut world_points = vec![glam::Vec3::ZERO; grid.count()];
 
-        grid.to_world(origin, &mut world_points);
-        let mut i = 0;
-        for voxel in world_points {
-            let cell = node_hash.cell_at(voxel);
+        self.uninitialised.iter_mut().for_each(|frag| {
+            let fragment_world = frag.position;
+            let fragment_cell = lattice_hash.cell_at(fragment_world);
 
-            #[cfg(not(debug_assertions))]
-            let _ = node_hash.nearest_cells(
-                cell,
+            if let Err(rem) = lattice_hash.nearest_cells(
+                fragment_cell,
                 PARENTS_COUNT as u32,
                 Self::VOXEL_NEIGHBOR_QUERY_RADIUS,
                 &mut near_buf,
                 false,
-            );
-
-            #[cfg(debug_assertions)]
-            {
-                if let Err(rem) = node_hash.nearest_cells(
-                    cell,
-                    PARENTS_COUNT as u32,
-                    Self::VOXEL_NEIGHBOR_QUERY_RADIUS,
-                    &mut near_buf,
-                    false,
-                ) {
-                    tracing::event!(
-                        name: "structure.fragment.build.query.err_maybe_miss",
-                        tracing::Level::ERROR,
-                        "Query for nearby nodes to {cell:?} could not produce {rem} amount of nodes within range: maybe a miss? or lattice is malformed.",
-                    )
-                }
-            }
-
-            {
-                let cell_world = node_hash.approx_point_at(cell);
-
-                near_buf.sort_by(|c0, c1| {
-                    let id0 = node_hash.get(c0).expect("query populated neighbour cell");
-                    let id1 = node_hash.get(c1).expect("query populated neighbour cell");
-
-                    let p0 = lattice.current_pos(*id0);
-                    let p1 = lattice.current_pos(*id1);
-
-                    let l0 = p0 - cell_world;
-                    let l1 = p1 - cell_world;
-
-                    l0.length_squared()
-                        .partial_cmp(&l1.length_squared())
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                });
-            }
-
-            let n_count = near_buf.len().min(PARENTS_COUNT);
-
-            if n_count < MIN_CLUSTER_SIZE as usize {
+            ) {
                 tracing::event!(
-                    name: "structure.fragment.build.query.skip_voxel",
-                    tracing::Level::WARN,
-                    "Skipping voxel {cell:?}: not enough {n_count} nearby nodes found."
-                );
-                continue;
+                    name: "fragment.bind_lattice.near_query.miss",
+                    tracing::Level::ERROR,
+                    "Query for nearby nodes to {fragment_cell:?}: miss {rem} nodes within range.",
+                )
             }
+
+            let near_count = near_buf.len().min(PARENTS_COUNT);
+            // if n_count < MIN_CLUSTER_SIZE as usize {
+            //     tracing::event!(
+            //         name: "structure.fragment.build.query.skip_voxel",
+            //         tracing::Level::WARN,
+            //         "Skipping voxel {cell:?}: not enough {n_count} nearby nodes found."
+            //     );
+            //     continue;
+            // }
 
             let (parents, weights) = {
-                let (mut parents, mut weights) =
-                    ([Default::default(); PARENTS_COUNT], [0f32; PARENTS_COUNT]);
+                let mut parents = [IndirectIndex::default(); PARENTS_COUNT];
+                let mut weights = [0f32; PARENTS_COUNT];
 
                 near_buf
                     .drain(..)
-                    .take(n_count)
+                    .take(near_count)
                     .zip(&mut parents.iter_mut().zip(&mut weights))
                     .for_each(|(cell, (id, weight))| {
-                        *id = node_hash.get(&cell).copied().unwrap_or_default();
+                        *id = lattice_hash.get(&cell).copied().unwrap_or_default();
                         let point = lattice.current_pos(*id);
-                        let ds = voxel.distance_squared(*point);
+                        let ds = fragment_world.distance_squared(*point);
                         *weight = 1.0 / (ds + f32::EPSILON);
                     });
 
@@ -329,21 +321,33 @@ impl FragmentSystem {
                 weights,
                 [IndirectIndex::default(); ANCHORS_COUNT],
                 [0f32; ANCHORS_COUNT],
-                glam::vec4(voxel.x, voxel.y, voxel.z, 1f32),
+                glam::vec4(fragment_world.x, fragment_world.y, fragment_world.z, 1.0),
                 1.0, // todo: health contribution
                 1.0, // todo: debris rigid body
                 1.0, // todo: damage and integrity
-                voxel,
+                fragment_world,
                 glam::Vec3::ZERO,
                 glam::Vec3::ZERO,
             ));
-            i += 1;
+            frag.stage = UninitFragmentStage::Unfinished { indirect: handle };
 
             for node in parents {
                 self.node_map[node.as_index()].push(handle);
             }
-        }
+        });
+    }
 
-        println!("done; {i} fragments");
+    /// Create new uninitialised fragments from a `voxels` describing
+    /// their positions in space.
+    ///
+    /// The `voxels` [`VoxelGrid`] is expected to have been built previously
+    /// with [`VoxelGrid::build`].
+    pub fn generate_fragments(&mut self, origin: glam::Vec3, grid: &VoxelGrid) {
+        let mut world_points = vec![glam::Vec3::ZERO; grid.count()];
+
+        grid.to_world(origin, &mut world_points);
+        for voxel in world_points {
+            self.uninitialised.push(UninitFragment::new(voxel));
+        }
     }
 }
