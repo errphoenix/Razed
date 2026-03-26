@@ -97,9 +97,10 @@ impl UninitFragment {
 #[derive(Debug)]
 pub struct FragmentSystem {
     fragments: FragmentsRowTable,
-
     uninitialised: Vec<UninitFragment>,
 
+    /// sparse map of deform ID to sequence of fragment IDs
+    deform_map: Vec<Vec<IndirectIndex>>,
     /// sparse map of node ID to sequence of fragment IDs
     node_map: Vec<Vec<IndirectIndex>>,
 
@@ -125,6 +126,8 @@ impl FragmentSystem {
             uninitialised: Vec::new(),
 
             // account for degenerate
+            deform_map: vec![Vec::new()],
+            // account for degenerate
             node_map: vec![Vec::new()],
 
             disabled_frags_alltime: FxHashSet::default(),
@@ -134,6 +137,10 @@ impl FragmentSystem {
 
     pub fn with_capacity(capacity: usize) -> Self {
         // account for degenerate
+        let mut deform_map = Vec::with_capacity(capacity + 1);
+        deform_map.push(Vec::new());
+
+        // account for degenerate
         let mut node_map = Vec::with_capacity(capacity + 1);
         node_map.push(Vec::new());
 
@@ -141,6 +148,7 @@ impl FragmentSystem {
             fragments: FragmentsRowTable::with_capacity(capacity),
             uninitialised: Vec::with_capacity(capacity),
 
+            deform_map,
             node_map,
 
             disabled_frags_alltime: FxHashSet::default(),
@@ -152,19 +160,38 @@ impl FragmentSystem {
     ///
     /// # Panics
     /// Will panic if `node` is out-of-bounds; i.e. the node has not been
-    /// registered with [`FragmentSystem::generate_fragments`].
+    /// registered with [`FragmentSystem::bind_lattice`].
     ///
     /// This will not panic if the `node` has no associated fragments: an empty
     /// slice will be returned instead.
-    pub fn fragments_of(&self, node: IndirectIndex) -> &[IndirectIndex] {
+    pub fn fragments_of_node(&self, node: IndirectIndex) -> &[IndirectIndex] {
         &self.node_map[node.as_index()]
     }
 
     /// Get a mutable slice to the fragments IDs associated to `node` ID.
     ///
-    /// See [`FragmentSystem::fragments_of`] for details on panics.
-    pub fn fragments_of_mut(&mut self, node: IndirectIndex) -> &mut [IndirectIndex] {
+    /// See [`FragmentSystem::fragments_of_node`] for details on panics.
+    pub fn fragments_of_node_mut(&mut self, node: IndirectIndex) -> &mut [IndirectIndex] {
         &mut self.node_map[node.as_index()]
+    }
+
+    /// Get a slice to the fragments IDs associated to `deform` ID.
+    ///
+    /// # Panics
+    /// Will panic if `deform` is out-of-bounds; i.e. the deform has not been
+    /// registered with [`FragmentSystem::bind_deforms`].
+    ///
+    /// This will not panic if the `deform` has no associated fragments: an
+    /// empty slice will be returned instead.
+    pub fn fragments_of_deform(&self, deform: IndirectIndex) -> &[IndirectIndex] {
+        &self.deform_map[deform.as_index()]
+    }
+
+    /// Get a mutable slice to the fragments IDs associated to `deform` ID.
+    ///
+    /// See [`FragmentSystem::fragments_of_deform`] for details on panics.
+    pub fn fragments_of_deform_mut(&mut self, deform: IndirectIndex) -> &mut [IndirectIndex] {
+        &mut self.deform_map[deform.as_index()]
     }
 
     pub fn table(&self) -> &FragmentsRowTable {
@@ -253,6 +280,11 @@ impl FragmentSystem {
         deforms_hash: &FxSpatialHash<IndirectIndex>,
         deforms: &DeformsRowTableView,
     ) {
+        {
+            let deforms_len = deforms.view_offset() + deforms.len();
+            self.deform_map.resize_with(deforms_len, || Vec::new());
+        }
+
         let mut near_buf = Vec::with_capacity(ANCHORS_COUNT);
 
         self.uninitialised.retain(|frag| {
@@ -276,11 +308,12 @@ impl FragmentSystem {
 
                 let near_count = near_buf.len().min(ANCHORS_COUNT);
                 let fragment_direct = self.fragments.solve_indirect(indirect).expect("fragment indirect always valid");
+                let fragment_anchors = &mut self.fragments.anchors[fragment_direct.as_index()];
                 let fragment_weights = &mut self.fragments.anchors_weights[fragment_direct.as_index()];
 
                 near_buf.drain(..)
                     .take(near_count)
-                    .zip(&mut self.fragments.anchors[fragment_direct.as_index()])
+                    .zip(fragment_anchors.iter_mut())
                     .zip(fragment_weights.iter_mut())
                     .for_each(|((cell, anchor_id), anchor_weight)| {
                         let deform = deforms_hash.get(&cell).copied().expect("deforms hash neighbors are populated");
@@ -293,6 +326,10 @@ impl FragmentSystem {
 
                 let w_t = fragment_weights.iter().sum::<f32>();
                 fragment_weights.iter_mut().for_each(|w| *w /= w_t);
+
+                for anchor in fragment_anchors {
+                    self.deform_map[anchor.as_index()].push(indirect);
+                }
 
                 // remove fragment from intermediate buffer
                 false
