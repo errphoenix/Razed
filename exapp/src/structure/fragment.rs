@@ -228,6 +228,7 @@ impl FragmentSystem {
         self.disabled_frags_frame.retain(|&(frag_idx, node_id)| {
             let parents = unsafe { parents.alpha.get_unchecked_mut(frag_idx.as_index()) };
             let weights = unsafe { weights.alpha.get_unchecked_mut(frag_idx.as_index()) };
+            let mut empty_weight = 0.0;
 
             parents
                 .iter_mut()
@@ -235,15 +236,13 @@ impl FragmentSystem {
                 .for_each(|(id, weight)| {
                     if *id == node_id {
                         *id = IndirectIndex::default();
+                        empty_weight = *weight;
                         *weight = 0.0;
                     }
                 });
 
-            // recalibrate weights
-            let w_t = weights.iter().fold(0f32, |v0, vi| v0 + *vi);
-            for w in weights {
-                *w /= w_t;
-            }
+            // recalibrate weight
+            weights.iter_mut().for_each(|w| *w += empty_weight * *w);
 
             let active_count = parents.iter().filter(|id| id.as_int() != 0).count();
             if active_count < MIN_CLUSTER_SIZE as usize {
