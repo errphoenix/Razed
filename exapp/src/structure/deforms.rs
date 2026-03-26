@@ -22,6 +22,7 @@ ethel::table_spec! {
 #[derive(Debug, Default)]
 pub struct DeformSystem {
     data: DeformsRowTable,
+    deleted_points: Vec<IndirectIndex>,
 }
 
 impl DeformSystem {
@@ -32,6 +33,7 @@ impl DeformSystem {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             data: DeformsRowTable::with_capacity(capacity),
+            deleted_points: Vec::new(),
         }
     }
 
@@ -41,6 +43,19 @@ impl DeformSystem {
 
     pub fn data_mut(&mut self) -> &mut DeformsRowTable {
         &mut self.data
+    }
+
+    /// Slice of indirect indices to all points deleted during the last
+    /// constrain pass.
+    ///
+    /// Note: by this point, all the deform points returned by this function
+    /// have already been freed from their tables and are no longer accessible.
+    ///
+    /// This data must only be used as a back-reference to other systems that
+    /// rely on indirect indices to track deforms and need to track their
+    /// lifetime.
+    pub fn deleted_points_frame(&self) -> &[IndirectIndex] {
+        &self.deleted_points
     }
 
     pub fn deform(&mut self, lattice: &NodesRowTableView) {
@@ -67,6 +82,7 @@ impl DeformSystem {
     }
 
     pub fn constrain(&mut self, lattice: &NodesRowTableView) {
+        self.deleted_points.clear();
         let mut weights_buf = [0f32; CONTROL_POINTS_COUNT];
         let mut flagged = Vec::<u32>::new(); // todo: do not alloc
 
@@ -158,7 +174,9 @@ impl DeformSystem {
         // delete dead deforms
         flagged.drain(..).for_each(|indirect| {
             if indirect != 0 {
-                self.data.free(IndirectIndex::from_index(indirect as usize));
+                let ii = IndirectIndex::from_index(indirect as usize);
+                self.deleted_points.push(ii);
+                self.data.free(ii);
             }
         });
     }

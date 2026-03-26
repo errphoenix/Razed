@@ -203,13 +203,48 @@ impl FragmentSystem {
     }
 
     pub fn reset(&mut self) {
+        self.deform_map.clear();
         self.node_map.clear();
+        self.disabled_frags_alltime.clear();
     }
 
-    /// Synchronise (stable II) `broken_ids` of constraints and
+    pub fn clear_damage_buffer(&mut self) {
+        self.disabled_frags_frame.clear();
+    }
+
+    pub fn sync_deform_damage(&mut self, dead_points: &[IndirectIndex]) {
+        for deform in dead_points {
+            for &frag_id in &self.deform_map[deform.as_index()] {
+                if frag_id.as_int() == 0 {
+                    continue;
+                }
+
+                if let Some(direct) = self.fragments.solve_indirect(frag_id) {
+                    let anchors = &mut self.fragments.anchors[direct.as_index()];
+                    let weights = &mut self.fragments.anchors_weights[direct.as_index()];
+                    let mut empty_weight = 0.0;
+
+                    anchors
+                        .iter_mut()
+                        .zip(weights.iter_mut())
+                        .for_each(|(anchor, weight)| {
+                            if *anchor == *deform {
+                                *anchor = IndirectIndex::default();
+                                empty_weight = *weight;
+                                *weight = 0f32;
+                            }
+                        });
+
+                    // redistribute lost weight
+                    weights.iter_mut().for_each(|w| *w += empty_weight * *w);
+                }
+            }
+        }
+    }
+
+    /// Synchronise stable indirect indices `broken_ids` of constraints and
     /// [`degenerate_nodes`] with fragments state.
     pub fn sync_lattice_damage(&mut self, broken_nodes: &[IndirectIndex]) {
-        self.disabled_frags_frame.clear();
         for &node in broken_nodes {
             for &frag_id in &self.node_map[node.as_index()] {
                 if frag_id.as_int() == 0 {
@@ -241,7 +276,7 @@ impl FragmentSystem {
                     }
                 });
 
-            // recalibrate weight
+            // redistribute lost weight
             weights.iter_mut().for_each(|w| *w += empty_weight * *w);
 
             let active_count = parents.iter().filter(|id| id.as_int() != 0).count();

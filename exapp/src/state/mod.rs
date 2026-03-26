@@ -325,7 +325,12 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             .apply_forces_batched(glam::vec3(WIND_FORCE, -9.81, WIND_FORCE));
 
         {
+            self.lattice.register_dead_nodes();
             let damaged_nodes = self.lattice.unique_damaged_nodes_frame();
+            let deleted_points = self.deforms.deleted_points_frame();
+
+            self.fragments.clear_damage_buffer();
+            self.fragments.sync_deform_damage(deleted_points);
             self.fragments.sync_lattice_damage(damaged_nodes);
 
             let broken_frags = self.fragments.frame_disabled_frags_direct();
