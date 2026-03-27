@@ -84,7 +84,7 @@ impl DeformSystem {
     pub fn constrain(&mut self, lattice: &NodesRowTableView) {
         self.deleted_points.clear();
         let mut weights_buf = [0f32; CONTROL_POINTS_COUNT];
-        let mut flagged = Vec::<u32>::new(); // todo: do not alloc
+        let mut flagged = Vec::<(u32, f32)>::new(); // todo: do not alloc
 
         // invalidate control points constraint weights
         // stores direct indices
@@ -108,15 +108,19 @@ impl DeformSystem {
                 weights_buf.iter_mut().for_each(|w| *w /= w_t);
 
                 let mut b = false;
+                let mut dead_weight = 0.0;
 
                 controllers.iter_mut().zip(weights_buf).for_each(
                     |(ControlPoint { id, weight }, current_weight)| {
                         let constraint = (current_weight - *weight).abs();
                         if constraint * constraint > CONTROL_POINT_CONSTRAIN_THRESHOLD {
                             *id = IndirectIndex::default();
+                            dead_weight += *weight;
                             *weight = 0f32;
                             if !b {
-                                flagged.push(i);
+                                flagged.push((i, dead_weight));
+                            } else {
+                                flagged.last_mut().as_mut().unwrap().1 += dead_weight;
                             }
                             b = true;
                         }
@@ -137,42 +141,39 @@ impl DeformSystem {
         // this retains all deforms for which total weight equals to 0 to be
         // deleted in the next pass.
         {
-            let (_, pose, controllers, binds) = self.data.split_mut();
-            flagged.retain(|&direct| {
+            let (_, _, controllers, _) = self.data.split_mut();
+            flagged.retain(|&(direct, dead_weight)| {
                 let direct = DirectIndex::from_index(direct as usize);
-
-                // let pose = *unsafe { pose.alpha.get_unchecked(direct as usize) };
-                // let bind = *unsafe { binds.alpha.get_unchecked(direct as usize) };
-                // let controllers = unsafe { controllers.alpha.get_unchecked_mut(direct as usize) };
-                let pose = pose.alpha[direct.as_index()];
-                let bind = binds.alpha[direct.as_index()];
                 let controllers = &mut controllers.alpha[direct.as_index()];
+                controllers.iter_mut().for_each(|controller| {
+                    controller.weight += dead_weight * controller.weight;
+                });
 
-                controllers
-                    .iter_mut()
-                    .zip(bind)
-                    .for_each(|(ControlPoint { weight, .. }, bind)| {
-                        let dist_sq = pose.distance_squared(bind) + f32::EPSILON;
-                        *weight = 1.0 / dist_sq.powf(DeformPoint::RIGIDITY);
-                    });
+                // controllers
+                //     .iter_mut()
+                //     .zip(bind)
+                //     .for_each(|(ControlPoint { weight, .. }, bind)| {
+                //         let dist_sq = pose.distance_squared(bind) + f32::EPSILON;
+                //         *weight = 1.0 / dist_sq.powf(DeformPoint::RIGIDITY);
+                //     });
 
-                let w_t = controllers.iter().fold(0f32, |t, v| t + v.weight);
-                controllers
-                    .iter_mut()
-                    .for_each(|ControlPoint { weight, .. }| *weight /= w_t);
+                // let w_t = controllers.iter().fold(0f32, |t, v| t + v.weight);
+                // controllers
+                //     .iter_mut()
+                //     .for_each(|ControlPoint { weight, .. }| *weight /= w_t);
 
                 controllers.iter().all(|ctl| ctl.id.as_int() == 0)
             });
         }
 
         // resolve direct indices to stable indirect indices
-        flagged.iter_mut().for_each(|indirect| {
+        flagged.iter_mut().for_each(|(indirect, _)| {
             let direct = DirectIndex::from_index(*indirect as usize);
             *indirect = self.data.handles()[direct.as_index()].as_int()
         });
 
         // delete dead deforms
-        flagged.drain(..).for_each(|indirect| {
+        flagged.drain(..).for_each(|(indirect, _)| {
             if indirect != 0 {
                 let ii = IndirectIndex::from_index(indirect as usize);
                 self.deleted_points.push(ii);
