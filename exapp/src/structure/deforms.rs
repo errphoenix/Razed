@@ -1,6 +1,7 @@
 use ethel::state::data::{
     Column, DirectIndex, IndirectIndex,
     hash::{Cell, FxSpatialHash},
+    table::TableView,
 };
 use physics::xpbd::NodesRowTableView;
 
@@ -19,10 +20,16 @@ ethel::table_spec! {
     }
 }
 
+pub const CONTROL_POINT_MAX_RANGE: u32 = 16;
+pub const RIGIDITY: f32 = 4.0;
+
 #[derive(Debug, Default)]
 pub struct DeformSystem {
     data: DeformsRowTable,
     deleted_points: Vec<IndirectIndex>,
+
+    /// Mapping of node controller points to owning deform point by IDs.
+    node_map: Vec<Vec<IndirectIndex>>,
 }
 
 impl DeformSystem {
@@ -102,7 +109,7 @@ impl DeformSystem {
 
                     let position = unsafe { lattice.current_pos_unchecked(controller_id) };
                     let dist_sq = deform.distance_squared(*position) + f32::EPSILON;
-                    weights_buf[j] = 1.0 / dist_sq.powf(DeformPoint::RIGIDITY);
+                    weights_buf[j] = 1.0 / dist_sq.powf(RIGIDITY);
                 }
 
                 let w_t = weights_buf.iter().fold(0f32, |t, v| t + v);
@@ -149,7 +156,7 @@ impl DeformSystem {
                         if id.as_int() != 0 {
                             *bind = *lattice.current_pos(*id);
                             let ds = deform.distance_squared(*bind) + f32::EPSILON;
-                            *weight = 1.0 / ds.powf(DeformPoint::RIGIDITY);
+                            *weight = 1.0 / ds.powf(RIGIDITY);
                         }
                     },
                 );
@@ -200,7 +207,7 @@ impl DeformSystem {
 
                     let position = unsafe { lattice.current_pos_unchecked(controller_id) };
                     let dist_sq = deform.distance_squared(*position) + f32::EPSILON;
-                    weights_buf[j] = 1.0 / dist_sq.powf(DeformPoint::RIGIDITY);
+                    weights_buf[j] = 1.0 / dist_sq.powf(RIGIDITY);
                 }
 
                 let w_t = weights_buf.iter().fold(0f32, |t, v| t + v);
@@ -303,7 +310,7 @@ impl DeformSystem {
                 (voxel.z / fragments.options().density) as f32,
             ) + origin;
 
-            points.push(DeformPoint::new(point, node_hash, lattice, &mut near_buf));
+            points.push(self.create_deform(point, node_hash, lattice, &mut near_buf));
         }
 
         let r0 = self.data.len();
@@ -316,34 +323,16 @@ impl DeformSystem {
 
         r0..r1
     }
-}
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub struct ControlPoint {
-    pub id: IndirectIndex,
-    pub weight: f32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct DeformPoint {
-    point: glam::Vec3,
-    controllers: [ControlPoint; CONTROL_POINTS_COUNT],
-    binds: [glam::Vec3; CONTROL_POINTS_COUNT],
-}
-
-impl DeformPoint {
-    pub const CONTROL_POINT_MAX_RANGE: u32 = 16;
-    pub const RIGIDITY: f32 = 4.0;
-
-    fn new(
+    fn create_deform(
+        &mut self,
         point: glam::Vec3,
         node_hash: &FxSpatialHash<IndirectIndex>,
         lattice: &NodesRowTableView,
         near_buf: &mut Vec<Cell>,
-    ) -> Self {
+    ) -> DeformPoint {
         near_buf.clear();
-        let max_range = Self::CONTROL_POINT_MAX_RANGE * node_hash.resolution.get();
+        let max_range = CONTROL_POINT_MAX_RANGE * node_hash.resolution.get();
         let _ = node_hash.nearest_cells(
             node_hash.cell_at(point),
             CONTROL_POINTS_COUNT as u32,
@@ -352,7 +341,6 @@ impl DeformPoint {
             false,
         );
 
-        let mut c = 0;
         let mut controllers = [ControlPoint::default(); CONTROL_POINTS_COUNT];
         let mut binds = [glam::Vec3::ZERO; CONTROL_POINTS_COUNT];
 
@@ -369,13 +357,11 @@ impl DeformPoint {
                 let position = *unsafe { lattice.current_pos_unchecked(node) };
                 let dist = point.distance_squared(position) + f32::EPSILON;
 
-                binds[c] = position;
-                controllers[c] = ControlPoint {
+                binds[i] = position;
+                controllers[i] = ControlPoint {
                     id: node,
-                    weight: 1.0 / dist.powf(Self::RIGIDITY),
+                    weight: 1.0 / dist.powf(RIGIDITY),
                 };
-
-                c = i;
             });
 
         let w_t = controllers
@@ -387,10 +373,24 @@ impl DeformPoint {
                 *weight /= w_t;
             });
 
-        Self {
+        DeformPoint {
             point,
             controllers,
             binds,
         }
     }
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct ControlPoint {
+    pub id: IndirectIndex,
+    pub weight: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct DeformPoint {
+    point: glam::Vec3,
+    controllers: [ControlPoint; CONTROL_POINTS_COUNT],
+    binds: [glam::Vec3; CONTROL_POINTS_COUNT],
 }
