@@ -219,24 +219,29 @@ impl FragmentSystem {
                     continue;
                 }
 
-                if let Some(direct) = self.fragments.solve_indirect(frag_id) {
-                    let anchors = &mut self.fragments.anchors[direct.as_index()];
-                    let weights = &mut self.fragments.anchors_weights[direct.as_index()];
-                    let mut empty_weight = 0.0;
+                if self.disabled_frags_alltime.insert(frag_id) {
+                    if let Some(direct) = self.fragments.solve_indirect(frag_id) {
+                        self.disabled_frags_frame
+                            .push((direct, IndirectIndex::default()));
 
-                    anchors
-                        .iter_mut()
-                        .zip(weights.iter_mut())
-                        .for_each(|(anchor, weight)| {
-                            if *anchor == *deform {
-                                *anchor = IndirectIndex::default();
-                                empty_weight = *weight;
-                                *weight = 0f32;
-                            }
-                        });
+                        // let anchors = &mut self.fragments.anchors[direct.as_index()];
+                        // let weights = &mut self.fragments.anchors_weights[direct.as_index()];
+                        // let mut empty_weight = 0.0;
 
-                    // redistribute lost weight
-                    weights.iter_mut().for_each(|w| *w += empty_weight * *w);
+                        // anchors
+                        //     .iter_mut()
+                        //     .zip(weights.iter_mut())
+                        //     .for_each(|(anchor, weight)| {
+                        //         if *anchor == *deform {
+                        //             *anchor = IndirectIndex::default();
+                        //             empty_weight = *weight;
+                        //             *weight = 0f32;
+                        //         }
+                        //     });
+
+                        // // redistribute lost weight
+                        // weights.iter_mut().for_each(|w| *w += empty_weight * *w);
+                    }
                 }
             }
         }
