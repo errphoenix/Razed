@@ -1,14 +1,12 @@
 use ethel::state::data::{
-    Column, DirectIndex, IndirectIndex,
-    hash::{FxSpatialHash, SpatialResolution},
-    table::TableView,
+    Column, DirectIndex, IndirectIndex, hash::FxSpatialHash, table::TableView,
 };
 use physics::xpbd::NodesRowTableView;
 use rustc_hash::FxHashSet;
 
 use crate::{structure::deforms::DeformsRowTableView, voxel::VoxelGrid};
 
-const MIN_CLUSTER_SIZE: u32 = 7;
+const MIN_CLUSTER_SIZE: u32 = 3;
 
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -104,9 +102,9 @@ pub struct FragmentSystem {
     /// sparse map of node ID to sequence of fragment IDs
     node_map: Vec<Vec<IndirectIndex>>,
 
-    /// alltime accumulated set of disabled fragment IDs; avoids dedup op
+    /// accumulated hash set of disabled fragment IDs; avoids dedup op
     /// these are the fragments' indirect indices (stable)
-    disabled_frags_alltime: FxHashSet<IndirectIndex>,
+    disabled_frags_hash: FxHashSet<IndirectIndex>,
 
     /// per-frame list of disabled fragment IDs and an indirect node
     /// these are the fragments' direct indices (unstable)
@@ -130,7 +128,7 @@ impl FragmentSystem {
             // account for degenerate
             node_map: vec![Vec::new()],
 
-            disabled_frags_alltime: FxHashSet::default(),
+            disabled_frags_hash: FxHashSet::default(),
             disabled_frags_frame: Vec::new(),
         }
     }
@@ -151,7 +149,7 @@ impl FragmentSystem {
             deform_map,
             node_map,
 
-            disabled_frags_alltime: FxHashSet::default(),
+            disabled_frags_hash: FxHashSet::default(),
             disabled_frags_frame: Vec::new(),
         }
     }
@@ -205,11 +203,11 @@ impl FragmentSystem {
     pub fn reset(&mut self) {
         self.deform_map.clear();
         self.node_map.clear();
-        self.disabled_frags_alltime.clear();
     }
 
     pub fn clear_damage_buffer(&mut self) {
         self.disabled_frags_frame.clear();
+        self.disabled_frags_hash.clear();
     }
 
     pub fn sync_deform_damage(&mut self, dead_points: &[IndirectIndex]) {
@@ -219,7 +217,7 @@ impl FragmentSystem {
                     continue;
                 }
 
-                if self.disabled_frags_alltime.insert(frag_id) {
+                if self.disabled_frags_hash.insert(frag_id) {
                     if let Some(direct) = self.fragments.solve_indirect(frag_id) {
                         self.disabled_frags_frame
                             .push((direct, IndirectIndex::default()));
@@ -256,7 +254,7 @@ impl FragmentSystem {
                     continue;
                 }
 
-                if self.disabled_frags_alltime.insert(frag_id) {
+                if self.disabled_frags_hash.insert(frag_id) {
                     let idx = unsafe { self.fragments.solve_indirect_unchecked(frag_id) };
                     self.disabled_frags_frame.push((idx, node));
                 }
