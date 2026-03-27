@@ -81,6 +81,105 @@ impl DeformSystem {
         }
     }
 
+    pub fn constrain_v2(&mut self, lattice: &NodesRowTableView) {
+        self.deleted_points.clear();
+
+        let mut weights_buf = [0f32; CONTROL_POINTS_COUNT];
+        let mut flagged = Vec::<(u32, f32)>::new(); // todo: do not alloc
+
+        // invalidate control points constraint weights
+        // stores direct indices
+        {
+            let mut i = 0;
+            let (deforms, _, controllers, _) = self.data.split_mut();
+            for (deform, controllers) in deforms.join(controllers) {
+                for j in 0..CONTROL_POINTS_COUNT {
+                    //let controller_id = *&unsafe { controllers.get_unchecked(j) }.id;
+                    let controller_id = controllers[j].id;
+                    if controller_id.as_int() == 0 {
+                        continue;
+                    }
+
+                    let position = unsafe { lattice.current_pos_unchecked(controller_id) };
+                    let dist_sq = deform.distance_squared(*position) + f32::EPSILON;
+                    weights_buf[j] = 1.0 / dist_sq.powf(DeformPoint::RIGIDITY);
+                }
+
+                let w_t = weights_buf.iter().fold(0f32, |t, v| t + v);
+                weights_buf.iter_mut().for_each(|w| *w /= w_t);
+
+                let mut b = false;
+                let mut dead_weight = 0.0;
+
+                controllers.iter_mut().zip(weights_buf).for_each(
+                    |(ControlPoint { id, weight }, current_weight)| {
+                        let constraint = (current_weight - *weight).abs();
+                        if constraint * constraint > CONTROL_POINT_CONSTRAIN_THRESHOLD {
+                            *id = IndirectIndex::default();
+                            dead_weight += *weight;
+                            *weight = 0f32;
+                            if !b {
+                                flagged.push((i, dead_weight));
+                            } else {
+                                flagged.last_mut().as_mut().unwrap().1 += dead_weight;
+                            }
+                            b = true;
+                        }
+                    },
+                );
+
+                weights_buf.fill(0f32);
+                i += 1;
+            }
+        }
+
+        {
+            let (deformed, pose, controllers, binds) = self.data_mut().split_mut();
+            flagged.retain(|&(id, _)| {
+                let idx = id as usize;
+
+                // update bind pose to current position
+                let deform = deformed.alpha[idx];
+                pose.alpha[idx] = deform;
+
+                let controllers = &mut controllers.alpha[idx];
+                let binds = &mut binds.alpha[idx];
+                controllers.iter_mut().zip(binds.iter_mut()).for_each(
+                    |(ControlPoint { id, weight }, bind)| {
+                        if id.as_int() != 0 {
+                            *bind = *lattice.current_pos(*id);
+                            let ds = deform.distance_squared(*bind) + f32::EPSILON;
+                            *weight = 1.0 / ds.powf(DeformPoint::RIGIDITY);
+                        }
+                    },
+                );
+
+                let w_t = controllers.iter_mut().fold(0f32, |s, ctl| s + ctl.weight);
+                controllers
+                    .iter_mut()
+                    .for_each(|ControlPoint { weight, .. }| *weight /= w_t);
+
+                // if all 0, we keep deforms flagged to remove them in the next pass
+                controllers.iter().all(|ctl| ctl.id.as_int() == 0)
+            });
+        }
+
+        // resolve direct indices to stable indirect indices
+        flagged.iter_mut().for_each(|(indirect, _)| {
+            let direct = DirectIndex::from_index(*indirect as usize);
+            *indirect = self.data.handles()[direct.as_index()].as_int()
+        });
+
+        // delete dead deforms
+        flagged.drain(..).for_each(|(indirect, _)| {
+            if indirect != 0 {
+                let ii = IndirectIndex::from_index(indirect as usize);
+                self.deleted_points.push(ii);
+                self.data.free(ii);
+            }
+        });
+    }
+
     pub fn constrain(&mut self, lattice: &NodesRowTableView) {
         self.deleted_points.clear();
         let mut weights_buf = [0f32; CONTROL_POINTS_COUNT];
@@ -162,6 +261,7 @@ impl DeformSystem {
                 //     .iter_mut()
                 //     .for_each(|ControlPoint { weight, .. }| *weight /= w_t);
 
+                // if all 0, we keep deforms flagged to remove them in the next pass
                 controllers.iter().all(|ctl| ctl.id.as_int() == 0)
             });
         }
