@@ -112,7 +112,7 @@ impl DeformSystem {
                 controllers.iter_mut().zip(weights_buf).for_each(
                     |(ControlPoint { id, weight }, current_weight)| {
                         let constraint = (current_weight - *weight).abs();
-                        if constraint > CONTROL_POINT_CONSTRAIN_THRESHOLD {
+                        if constraint * constraint > CONTROL_POINT_CONSTRAIN_THRESHOLD {
                             *id = IndirectIndex::default();
                             *weight = 0f32;
                             if !b {
