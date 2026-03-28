@@ -327,6 +327,10 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         {
             self.lattice.register_dead_nodes();
             let damaged_nodes = self.lattice.unique_damaged_nodes_frame();
+            let degenerate_nodes = self.lattice.frame_degenerate_nodes();
+
+            self.deforms.sync_lattice_damage(degenerate_nodes);
+
             let deleted_points = self.deforms.deleted_points_frame();
 
             self.fragments.clear_damage_buffer();

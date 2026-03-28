@@ -41,6 +41,7 @@ impl DeformSystem {
         Self {
             data: DeformsRowTable::with_capacity(capacity),
             deleted_points: Vec::new(),
+            node_map: Vec::new(),
         }
     }
 
@@ -50,6 +51,10 @@ impl DeformSystem {
 
     pub fn data_mut(&mut self) -> &mut DeformsRowTable {
         &mut self.data
+    }
+
+    pub fn node_mapping(&self) -> &[Vec<IndirectIndex>] {
+        &self.node_map
     }
 
     /// Slice of indirect indices to all points deleted during the last
@@ -63,6 +68,19 @@ impl DeformSystem {
     /// lifetime.
     pub fn deleted_points_frame(&self) -> &[IndirectIndex] {
         &self.deleted_points
+    }
+
+    pub fn sync_lattice_damage(&mut self, broken_nodes: &[IndirectIndex]) {
+        broken_nodes.iter().for_each(|node| {
+            if let Some(deforms) = self.node_map.get_mut(node.as_index()) {
+                deforms.drain(..).for_each(|deform| {
+                    if deform.as_int() != 0 {
+                        self.deleted_points.push(deform);
+                        self.data.free(deform);
+                    }
+                });
+            }
+        });
     }
 
     pub fn deform(&mut self, lattice: &NodesRowTableView) {
@@ -296,6 +314,9 @@ impl DeformSystem {
         node_hash: &FxSpatialHash<IndirectIndex>,
         lattice: &NodesRowTableView,
     ) -> std::ops::Range<usize> {
+        let lattice_size = lattice.len() + lattice.view_offset();
+        self.node_map.resize_with(lattice_size, || Vec::new());
+
         let vox = fragments.voxels();
         let (mx, my, mz) = fragments.dimensions();
         let total = mx * my * mz + mx + my + mz;
@@ -315,8 +336,18 @@ impl DeformSystem {
 
         let r0 = self.data.len();
         points.drain(..).for_each(|deform| {
-            self.data
-                .insert((deform.point, deform.point, deform.controllers, deform.binds));
+            let handle =
+                self.data
+                    .insert((deform.point, deform.point, deform.controllers, deform.binds));
+
+            deform
+                .controllers
+                .iter()
+                .for_each(|ControlPoint { id, .. }| {
+                    if id.as_int() != 0 {
+                        self.node_map[id.as_index()].push(handle);
+                    }
+                });
         });
         let r1 = self.data.len();
         println!("done; {} deform points", r1 - r0);
