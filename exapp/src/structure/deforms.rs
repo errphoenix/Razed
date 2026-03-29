@@ -8,6 +8,7 @@ use physics::xpbd::NodesRowTableView;
 use crate::voxel::VoxelGrid;
 
 pub const CONTROL_POINTS_COUNT: usize = 8;
+pub const CONTROL_POINTS_MIN_THRESHOLD: usize = 4;
 pub const CONTROL_POINT_CONSTRAIN_THRESHOLD: f32 = 0.2;
 
 ethel::table_spec! {
@@ -26,6 +27,10 @@ pub const RIGIDITY: f32 = 4.0;
 #[derive(Debug, Default)]
 pub struct DeformSystem {
     data: DeformsRowTable,
+
+    // before deletion
+    damaged_buffer: Vec<DirectIndex>,
+    // after deletion
     deleted_points: Vec<IndirectIndex>,
 
     /// Mapping of node controller points to owning deform point by IDs.
@@ -40,6 +45,7 @@ impl DeformSystem {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             data: DeformsRowTable::with_capacity(capacity),
+            damaged_buffer: Vec::new(),
             deleted_points: Vec::new(),
             node_map: Vec::new(),
         }
@@ -70,13 +76,54 @@ impl DeformSystem {
         &self.deleted_points
     }
 
+    pub fn clear_damage_buffers(&mut self) {
+        self.damaged_buffer.clear();
+        self.deleted_points.clear();
+    }
+
+    pub fn process_damage(&mut self) {
+        self.damaged_buffer.retain(|direct| {
+            let controllers = self.data.controllers[direct.as_index()];
+            let count = controllers
+                .iter()
+                .filter(|ctl| ctl.id.as_int() != 0)
+                .count();
+
+            count <= CONTROL_POINTS_MIN_THRESHOLD
+        });
+
+        // temporarily solve indices
+        self.damaged_buffer.iter_mut().for_each(|i| {
+            let indirect = self.data.handles()[i.as_index()];
+            *i = DirectIndex::from_index(indirect.as_index());
+        });
+
+        self.damaged_buffer.drain(..).for_each(|indirect| {
+            let ii = IndirectIndex::from_index(indirect.as_index());
+            self.data.free(ii);
+            self.deleted_points.push(ii);
+        });
+    }
+
     pub fn sync_lattice_damage(&mut self, broken_nodes: &[IndirectIndex]) {
         broken_nodes.iter().for_each(|node| {
             if let Some(deforms) = self.node_map.get_mut(node.as_index()) {
-                deforms.drain(..).for_each(|deform| {
+                deforms.iter_mut().for_each(|deform| {
                     if deform.as_int() != 0 {
-                        self.deleted_points.push(deform);
-                        self.data.free(deform);
+                        let direct = self.data.solve_indirect(*deform).unwrap();
+                        if self.data.controllers[direct.as_index()]
+                            .iter_mut()
+                            .any(|i| {
+                                if i.id == *node {
+                                    i.id = IndirectIndex::default();
+                                    true
+                                } else {
+                                    false
+                                }
+                            })
+                        {
+                            self.damaged_buffer.push(direct);
+                        }
                     }
                 });
             }
