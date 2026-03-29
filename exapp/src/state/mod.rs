@@ -329,12 +329,16 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             let damaged_nodes = self.lattice.unique_damaged_nodes_frame();
             let degenerate_nodes = self.lattice.frame_degenerate_nodes();
 
+            let lattice = NodesRowTableView::from(self.lattice.nodes());
+            self.deforms.process_damage(&lattice);
+            self.deforms.constrain_v2(&lattice);
+            self.deforms.clear_damage_buffers();
             self.deforms.sync_lattice_damage(degenerate_nodes);
-
             let deleted_points = self.deforms.deleted_points_frame();
+            let deforms = DeformsRowTableView::from(self.deforms.data());
 
             self.fragments.clear_damage_buffer();
-            self.fragments.sync_deform_damage(deleted_points);
+            self.fragments.sync_deform_damage(deleted_points, &deforms);
             self.fragments.sync_lattice_damage(damaged_nodes);
 
             let broken_frags = self.fragments.frame_disabled_frags_direct();
@@ -356,8 +360,6 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         self.lattice.update(delta);
         let lattice = NodesRowTableView::from(self.lattice.nodes());
         self.deforms.deform(&lattice);
-        //self.deforms.constrain(&lattice);
-        self.deforms.constrain_v2(&lattice);
 
         // random demo
         if input.keys().key_pressed(janus::input::KeyCode::KeyH) {

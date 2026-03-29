@@ -81,9 +81,30 @@ impl DeformSystem {
         self.deleted_points.clear();
     }
 
-    pub fn process_damage(&mut self) {
+    pub fn process_damage(&mut self, lattice: &NodesRowTableView) {
         self.damaged_buffer.retain(|direct| {
-            let controllers = self.data.controllers[direct.as_index()];
+            let controllers = &mut self.data.controllers[direct.as_index()];
+            let binds = &mut self.data.binds[direct.as_index()];
+
+            // update bind pose to current position
+            let deformed = self.data.deformed[direct.as_index()];
+            self.data.pose[direct.as_index()] = deformed;
+
+            controllers.iter_mut().zip(binds.iter_mut()).for_each(
+                |(ControlPoint { id, weight }, bind)| {
+                    if id.as_int() != 0 {
+                        *bind = *lattice.current_pos(*id);
+                        let ds = deformed.distance_squared(*bind) + f32::EPSILON;
+                        *weight = 1.0 / ds.powf(RIGIDITY);
+                    }
+                },
+            );
+
+            let w_t = controllers.iter_mut().fold(0f32, |s, ctl| s + ctl.weight);
+            controllers
+                .iter_mut()
+                .for_each(|ControlPoint { weight, .. }| *weight /= w_t);
+
             let count = controllers
                 .iter()
                 .filter(|ctl| ctl.id.as_int() != 0)
@@ -100,7 +121,7 @@ impl DeformSystem {
 
         self.damaged_buffer.drain(..).for_each(|indirect| {
             let ii = IndirectIndex::from_index(indirect.as_index());
-            self.data.free(ii);
+            //self.data.free(ii);
             self.deleted_points.push(ii);
         });
     }

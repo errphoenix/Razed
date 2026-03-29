@@ -108,7 +108,7 @@ pub struct FragmentSystem {
 
     /// per-frame list of disabled fragment IDs and an indirect node
     /// these are the fragments' direct indices (unstable)
-    disabled_frags_frame: Vec<(DirectIndex, IndirectIndex)>,
+    damaged_frags_frame: Vec<(DirectIndex, IndirectIndex)>,
 }
 
 impl Default for FragmentSystem {
@@ -129,7 +129,7 @@ impl FragmentSystem {
             node_map: vec![Vec::new()],
 
             disabled_frags_hash: FxHashSet::default(),
-            disabled_frags_frame: Vec::new(),
+            damaged_frags_frame: Vec::new(),
         }
     }
 
@@ -150,7 +150,7 @@ impl FragmentSystem {
             node_map,
 
             disabled_frags_hash: FxHashSet::default(),
-            disabled_frags_frame: Vec::new(),
+            damaged_frags_frame: Vec::new(),
         }
     }
 
@@ -206,39 +206,47 @@ impl FragmentSystem {
     }
 
     pub fn clear_damage_buffer(&mut self) {
-        self.disabled_frags_frame.clear();
+        self.damaged_frags_frame.clear();
         self.disabled_frags_hash.clear();
     }
 
-    pub fn sync_deform_damage(&mut self, dead_points: &[IndirectIndex]) {
+    pub fn sync_deform_damage(
+        &mut self,
+        dead_points: &[IndirectIndex],
+        deforms: &DeformsRowTableView,
+    ) {
         for deform in dead_points {
             for &frag_id in &self.deform_map[deform.as_index()] {
                 if frag_id.as_int() == 0 {
                     continue;
                 }
 
-                if self.disabled_frags_hash.insert(frag_id) {
-                    if let Some(direct) = self.fragments.solve_indirect(frag_id) {
-                        self.disabled_frags_frame
+                if let Some(direct) = self.fragments.solve_indirect(frag_id) {
+                    let fragment_world = self.fragments.position[direct.as_index()];
+                    let anchors = &mut self.fragments.anchors[direct.as_index()];
+                    let weights = &mut self.fragments.anchors_weights[direct.as_index()];
+
+                    anchors
+                        .iter_mut()
+                        .zip(weights.iter_mut())
+                        .for_each(|(anchor, weight)| {
+                            if *anchor == *deform {
+                                *anchor = IndirectIndex::default();
+                                *weight = 0f32;
+                            } else {
+                                let direct = deforms.solve(*anchor);
+                                let deform = deforms.deformed[direct.as_index()];
+                                let ds = fragment_world.distance_squared(deform);
+                                *weight = 1.0 / (ds + f32::EPSILON);
+                            }
+                        });
+
+                    let w_t = weights.iter().sum::<f32>();
+                    weights.iter_mut().for_each(|w| *w /= w_t);
+
+                    if self.disabled_frags_hash.insert(frag_id) {
+                        self.damaged_frags_frame
                             .push((direct, IndirectIndex::default()));
-
-                        // let anchors = &mut self.fragments.anchors[direct.as_index()];
-                        // let weights = &mut self.fragments.anchors_weights[direct.as_index()];
-                        // let mut empty_weight = 0.0;
-
-                        // anchors
-                        //     .iter_mut()
-                        //     .zip(weights.iter_mut())
-                        //     .for_each(|(anchor, weight)| {
-                        //         if *anchor == *deform {
-                        //             *anchor = IndirectIndex::default();
-                        //             empty_weight = *weight;
-                        //             *weight = 0f32;
-                        //         }
-                        //     });
-
-                        // // redistribute lost weight
-                        // weights.iter_mut().for_each(|w| *w += empty_weight * *w);
                     }
                 }
             }
@@ -256,14 +264,14 @@ impl FragmentSystem {
 
                 if self.disabled_frags_hash.insert(frag_id) {
                     let idx = unsafe { self.fragments.solve_indirect_unchecked(frag_id) };
-                    self.disabled_frags_frame.push((idx, node));
+                    self.damaged_frags_frame.push((idx, node));
                 }
             }
         }
 
         // validate disabled fragments and invalidate relations
         let (states, parents, weights, _, _, _, _, _, _, _, _, _) = self.fragments.split_mut();
-        self.disabled_frags_frame.retain(|&(frag_idx, node_id)| {
+        self.damaged_frags_frame.retain(|&(frag_idx, node_id)| {
             let parents = unsafe { parents.alpha.get_unchecked_mut(frag_idx.as_index()) };
             let weights = unsafe { weights.alpha.get_unchecked_mut(frag_idx.as_index()) };
             let mut empty_weight = 0.0;
@@ -306,7 +314,7 @@ impl FragmentSystem {
     /// intended for use only during the same frame this was populated in and
     /// before any operation that might add/remove elements to the table.
     pub fn frame_disabled_frags_direct(&self) -> &[(DirectIndex, IndirectIndex)] {
-        &self.disabled_frags_frame
+        &self.damaged_frags_frame
     }
 
     const LATTICE_SPATIAL_RESOLUTION: u32 = 2;
