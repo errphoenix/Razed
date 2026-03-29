@@ -130,26 +130,48 @@ impl DeformSystem {
         });
     }
 
-    pub fn deform(&mut self, lattice: &NodesRowTableView) {
-        let (deforms, pose, controllers, binds) = self.data.split_mut();
-        for (deform, pose, controllers, binds) in deforms.join(pose).join(controllers).join(binds) {
-            *deform = glam::Vec3::ZERO;
-            controllers.iter().zip(binds.iter()).for_each(
-                |(&ControlPoint { id, weight }, &bind)| {
-                    if id.as_int() == 0 {
-                        return;
+    pub fn constrain_v3(&mut self, lattice: &NodesRowTableView) {
+        let mut weights_buf = [0f32; CONTROL_POINTS_COUNT];
+
+        let mut i = 0;
+        let (deforms, _, controllers, _) = self.data.split_mut();
+        for (deform, controllers) in deforms.join(controllers) {
+            if i > 0 {
+                for j in 0..CONTROL_POINTS_COUNT {
+                    let controller_id = controllers[j].id;
+                    if controller_id.as_int() == 0 {
+                        continue;
                     }
 
-                    // SAFETY:
-                    // we assume the indirect index is always valid
-                    let position = unsafe { lattice.current_pos_unchecked(id) };
-                    let delta = position - bind;
+                    let position = lattice.current_pos(controller_id);
+                    let dist_sq = deform.distance_squared(*position) + f32::EPSILON;
+                    weights_buf[j] = 1.0 / dist_sq.powf(RIGIDITY);
+                }
 
-                    *deform += delta * weight;
-                },
-            );
+                let w_t = weights_buf.iter().fold(0f32, |t, v| t + v);
+                weights_buf.iter_mut().for_each(|w| *w /= w_t);
 
-            *deform += *pose;
+                let mut flagged = false;
+                controllers.iter_mut().zip(weights_buf).for_each(
+                    |(ControlPoint { id, weight }, cur_weight)| {
+                        let constraint = (cur_weight - *weight).abs();
+                        if constraint > CONTROL_POINT_CONSTRAIN_THRESHOLD {
+                            // sync reverse-map
+                            self.node_map[id.as_index()].retain(|&deform| deform != *id);
+
+                            *id = IndirectIndex::default();
+                            if !flagged {
+                                flagged = true;
+                                self.damaged_buffer.push(DirectIndex::from_index(i));
+                            }
+                        }
+                    },
+                );
+
+                weights_buf.fill(0.0);
+            }
+
+            i += 1;
         }
     }
 
@@ -352,6 +374,29 @@ impl DeformSystem {
                 self.data.free(ii);
             }
         });
+    }
+
+    pub fn deform(&mut self, lattice: &NodesRowTableView) {
+        let (deforms, pose, controllers, binds) = self.data.split_mut();
+        for (deform, pose, controllers, binds) in deforms.join(pose).join(controllers).join(binds) {
+            *deform = glam::Vec3::ZERO;
+            controllers.iter().zip(binds.iter()).for_each(
+                |(&ControlPoint { id, weight }, &bind)| {
+                    if id.as_int() == 0 {
+                        return;
+                    }
+
+                    // SAFETY:
+                    // we assume the indirect index is always valid
+                    let position = unsafe { lattice.current_pos_unchecked(id) };
+                    let delta = position - bind;
+
+                    *deform += delta * weight;
+                },
+            );
+
+            *deform += *pose;
+        }
     }
 
     pub fn generate_points(
