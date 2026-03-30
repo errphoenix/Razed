@@ -330,10 +330,10 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             let degenerate_nodes = self.lattice.frame_degenerate_nodes();
 
             let lattice = NodesRowTableView::from(self.lattice.nodes());
-            self.deforms.process_damage(&lattice);
-            self.deforms.constrain_v2(&lattice);
             self.deforms.clear_damage_buffers();
             self.deforms.sync_lattice_damage(degenerate_nodes);
+            self.deforms.constrain_v3(&lattice);
+            self.deforms.process_damage(&lattice);
             let deleted_points = self.deforms.deleted_points_frame();
             let deforms = DeformsRowTableView::from(self.deforms.data());
 
