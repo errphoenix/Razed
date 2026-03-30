@@ -5,22 +5,22 @@ pub struct VoxelGridOptions {
     pub width: f32,
     pub height: f32,
     pub depth: f32,
-    pub density: i32,
+    pub cell_size: f32,
 }
 
 impl Default for VoxelGridOptions {
     fn default() -> Self {
-        Self::new(1f32, 1f32, 1f32, 1)
+        Self::new(1f32, 1f32, 1f32, 1f32)
     }
 }
 
 impl VoxelGridOptions {
-    pub fn new(width: f32, height: f32, depth: f32, density: i32) -> Self {
+    pub fn new(width: f32, height: f32, depth: f32, cell_size: f32) -> Self {
         Self {
             width,
             height,
             depth,
-            density,
+            cell_size,
         }
     }
 
@@ -29,7 +29,7 @@ impl VoxelGridOptions {
             width,
             height: self.height,
             depth: self.depth,
-            density: self.density,
+            cell_size: self.cell_size,
         }
     }
 
@@ -38,7 +38,7 @@ impl VoxelGridOptions {
             height,
             width: self.width,
             depth: self.depth,
-            density: self.density,
+            cell_size: self.cell_size,
         }
     }
 
@@ -47,13 +47,13 @@ impl VoxelGridOptions {
             depth,
             width: self.width,
             height: self.height,
-            density: self.density,
+            cell_size: self.cell_size,
         }
     }
 
-    pub fn with_density(self, density: i32) -> Self {
+    pub fn with_cell_size(self, cell_size: f32) -> Self {
         Self {
-            density,
+            cell_size,
             width: self.width,
             height: self.height,
             depth: self.depth,
@@ -89,7 +89,7 @@ pub struct VoxelGrid {
 impl Default for VoxelGrid {
     fn default() -> Self {
         let options = VoxelGridOptions::default();
-        let voxels = FxSpatialHash::new(SpatialResolution::new(options.density as u32));
+        let voxels = FxSpatialHash::new(SpatialResolution::new(options.cell_size));
 
         Self {
             generator: |_| true,
@@ -104,7 +104,7 @@ impl VoxelGrid {
         Self {
             generator,
             options,
-            voxels: FxSpatialHash::new(SpatialResolution::new(options.density as u32)),
+            voxels: FxSpatialHash::new(SpatialResolution::new(options.cell_size)),
         }
     }
 
@@ -159,9 +159,9 @@ impl VoxelGrid {
     pub fn point_from_id(&self, index: VoxelIndex) -> glam::Vec3 {
         let cell = self.cell_from_id(index);
         glam::vec3(
-            (cell.x as f32 + 0.5) / self.options.density as f32,
-            (cell.y as f32 + 0.5) / self.options.density as f32,
-            (cell.z as f32 + 0.5) / self.options.density as f32,
+            (cell.x as f32 + 0.5) / self.options.cell_size as f32,
+            (cell.y as f32 + 0.5) / self.options.cell_size as f32,
+            (cell.z as f32 + 0.5) / self.options.cell_size as f32,
         )
     }
 
@@ -247,7 +247,7 @@ impl VoxelGrid {
         let w = self.options.width;
         let h = self.options.height;
         let d = self.options.depth;
-        let i = self.options.density;
+        let i = self.options.cell_size;
         (
             (w * i as f32).round() as i32,
             (h * i as f32).round() as i32,

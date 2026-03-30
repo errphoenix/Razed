@@ -21,7 +21,7 @@ ethel::table_spec! {
     }
 }
 
-pub const CONTROL_POINT_MAX_RANGE: u32 = 16;
+pub const CONTROL_POINT_MAX_RANGE: f32 = 16.0;
 pub const RIGIDITY: f32 = 4.0;
 
 #[derive(Debug, Default)]
@@ -436,9 +436,9 @@ impl DeformSystem {
 
         for voxel in vox.cells() {
             let point = glam::vec3(
-                (voxel.x / fragments.options().density) as f32,
-                (voxel.y / fragments.options().density) as f32,
-                (voxel.z / fragments.options().density) as f32,
+                (voxel.x as f32 / fragments.options().cell_size) as f32,
+                (voxel.y as f32 / fragments.options().cell_size) as f32,
+                (voxel.z as f32 / fragments.options().cell_size) as f32,
             ) + origin;
 
             points.push(self.create_deform(point, node_hash, lattice, &mut near_buf));
@@ -473,7 +473,7 @@ impl DeformSystem {
         near_buf: &mut Vec<Cell>,
     ) -> DeformPoint {
         near_buf.clear();
-        let max_range = CONTROL_POINT_MAX_RANGE * node_hash.resolution.get();
+        let max_range = (CONTROL_POINT_MAX_RANGE / node_hash.resolution.get()) as u32;
         let _ = node_hash.nearest_cells(
             node_hash.cell_at(point),
             CONTROL_POINTS_COUNT as u32,

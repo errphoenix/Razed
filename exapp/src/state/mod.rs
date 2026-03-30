@@ -439,10 +439,13 @@ impl State {
         }
 
         let lattice = NodesRowTableView::from_range(self.lattice.nodes(), l0, l1 - l0);
-        let mut lattice_hash = FxSpatialHash::new(SpatialResolution::new(2));
+        let mut lattice_hash = FxSpatialHash::new(SpatialResolution::new(1.0));
         lattice_hash.dump_soa(lattice.current_pos, lattice.handles);
 
-        let mut deforms_vox = VoxelGrid::new(|_| true, *&voxel_grid.options().with_density(2));
+        let mut deforms_vox = VoxelGrid::new(
+            voxel_grid.generator,
+            *&voxel_grid.options().with_cell_size(1.0),
+        );
         deforms_vox.repopulate();
         let generated_len =
             self.deforms
@@ -453,7 +456,7 @@ impl State {
             generated_len.start,
             generated_len.end - generated_len.start,
         );
-        let mut deforms_hash = FxSpatialHash::new(SpatialResolution::new(2));
+        let mut deforms_hash = FxSpatialHash::new(SpatialResolution::new(1.0));
         deforms_hash.dump_soa(deforms.pose, deforms.handles);
 
         // handle degenerate
