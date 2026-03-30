@@ -126,24 +126,23 @@ impl DeformSystem {
         });
     }
 
+    /// Unbind all `broken_nodes` attached to any deforms and flag them for
+    /// damage.
     pub fn sync_lattice_damage(&mut self, broken_nodes: &[IndirectIndex]) {
         broken_nodes.iter().for_each(|node| {
             if let Some(deforms) = self.node_map.get_mut(node.as_index()) {
                 deforms.iter_mut().for_each(|deform| {
                     if deform.as_int() != 0 {
                         let direct = self.data.solve_indirect(*deform).unwrap();
-                        if self.data.controllers[direct.as_index()]
-                            .iter_mut()
-                            .any(|i| {
-                                if i.id == *node {
-                                    i.id = IndirectIndex::default();
-                                    true
-                                } else {
-                                    false
-                                }
-                            })
+                        for ControlPoint { id, weight } in
+                            &mut self.data.controllers[direct.as_index()]
                         {
-                            self.damaged_buffer.push(direct);
+                            if *id == *node {
+                                *id = IndirectIndex::default();
+                                *weight = 0.0;
+                                self.damaged_buffer.push(direct);
+                                break;
+                            }
                         }
                     }
                 });
@@ -157,40 +156,38 @@ impl DeformSystem {
         let mut i = 0;
         let (deforms, _, controllers, _) = self.data.split_mut();
         for (deform, controllers) in deforms.join(controllers) {
-            if i > 0 {
-                for j in 0..CONTROL_POINTS_COUNT {
-                    let controller_id = controllers[j].id;
-                    if controller_id.as_int() == 0 {
-                        continue;
-                    }
-
-                    let position = lattice.current_pos(controller_id);
-                    let dist_sq = deform.distance_squared(*position) + f32::EPSILON;
-                    weights_buf[j] = 1.0 / dist_sq.powf(RIGIDITY);
+            for j in 0..CONTROL_POINTS_COUNT {
+                let controller_id = controllers[j].id;
+                if controller_id.as_int() == 0 {
+                    continue;
                 }
 
-                let w_t = weights_buf.iter().fold(0f32, |t, v| t + v);
-                weights_buf.iter_mut().for_each(|w| *w /= w_t);
-
-                let mut flagged = false;
-                controllers.iter_mut().zip(weights_buf).for_each(
-                    |(ControlPoint { id, weight }, cur_weight)| {
-                        let constraint = (cur_weight - *weight).abs();
-                        if constraint > CONTROL_POINT_CONSTRAIN_THRESHOLD {
-                            // sync reverse-map
-                            self.node_map[id.as_index()].retain(|&deform| deform != *id);
-
-                            *id = IndirectIndex::default();
-                            if !flagged {
-                                flagged = true;
-                                self.damaged_buffer.push(DirectIndex::from_index(i));
-                            }
-                        }
-                    },
-                );
-
-                weights_buf.fill(0.0);
+                let position = lattice.current_pos(controller_id);
+                let dist_sq = deform.distance_squared(*position) + f32::EPSILON;
+                weights_buf[j] = 1.0 / dist_sq.powf(RIGIDITY);
             }
+
+            let w_t = weights_buf.iter().fold(0f32, |t, v| t + v);
+            weights_buf.iter_mut().for_each(|w| *w /= w_t);
+
+            let mut flagged = false;
+            controllers.iter_mut().zip(weights_buf).for_each(
+                |(ControlPoint { id, weight }, cur_weight)| {
+                    let constraint = (cur_weight - *weight).abs();
+                    if constraint > CONTROL_POINT_CONSTRAIN_THRESHOLD {
+                        // sync reverse-map
+                        self.node_map[id.as_index()].retain(|&deform| deform != *id);
+
+                        *id = IndirectIndex::default();
+                        if !flagged {
+                            flagged = true;
+                            self.damaged_buffer.push(DirectIndex::from_index(i));
+                        }
+                    }
+                },
+            );
+
+            weights_buf.fill(0.0);
 
             i += 1;
         }
