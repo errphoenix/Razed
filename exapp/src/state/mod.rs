@@ -338,8 +338,8 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             let deforms = DeformsRowTableView::from(self.deforms.data());
 
             self.fragments.clear_damage_buffer();
-            self.fragments.sync_deform_damage(deleted_points, &deforms);
             self.fragments.sync_lattice_damage(damaged_nodes);
+            self.fragments.sync_deform_damage(deleted_points, &deforms);
 
             let broken_frags = self.fragments.frame_disabled_frags_direct();
             for &(frag_index, _) in broken_frags {
