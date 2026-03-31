@@ -8,8 +8,8 @@ use physics::xpbd::NodesRowTableView;
 use crate::voxel::VoxelGrid;
 
 pub const CONTROL_POINTS_COUNT: usize = 8;
-pub const CONTROL_POINTS_MIN_THRESHOLD: usize = 4;
-pub const CONTROL_POINT_CONSTRAIN_THRESHOLD: f32 = 0.2;
+pub const CONTROL_POINTS_MIN_THRESHOLD: usize = 7;
+pub const CONTROL_POINT_CONSTRAIN_THRESHOLD: f32 = 0.1;
 
 ethel::table_spec! {
     struct Deforms {
@@ -22,7 +22,7 @@ ethel::table_spec! {
 }
 
 pub const CONTROL_POINT_MAX_RANGE: f32 = 16.0;
-pub const RIGIDITY: f32 = 4.0;
+pub const RIGIDITY: f32 = 1.0;
 
 #[derive(Debug, Default)]
 pub struct DeformSystem {
@@ -121,7 +121,13 @@ impl DeformSystem {
 
         self.damaged_buffer.drain(..).for_each(|indirect| {
             let ii = IndirectIndex::from_index(indirect.as_index());
+
+            // temporary: do not delete, reset bind pose to 0 to avoid clutter
+            // from disabled deforms
             //self.data.free(ii);
+            let di = self.data.solve_indirect(ii).unwrap();
+            self.data.pose[di.as_index()] = glam::Vec3::ZERO;
+
             self.deleted_points.push(ii);
         });
     }
