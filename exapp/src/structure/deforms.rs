@@ -173,28 +173,31 @@ impl DeformSystem {
                 weights_buf[j] = 1.0 / dist_sq.powf(RIGIDITY);
             }
 
-            let w_t = weights_buf.iter().fold(0f32, |t, v| t + v);
+            // the strain must be calibrated according to the w_t from the
+            // original weights of the controllers.
+            let w_t = controllers.iter().fold(0f32, |s, c| s + c.weight);
             weights_buf.iter_mut().for_each(|w| *w /= w_t);
 
             let mut flagged = false;
             controllers.iter_mut().zip(weights_buf).for_each(
                 |(ControlPoint { id, weight }, cur_weight)| {
-                    let constraint = (cur_weight - *weight).abs();
-                    if constraint > CONTROL_POINT_CONSTRAIN_THRESHOLD {
-                        // sync reverse-map
-                        self.node_map[id.as_index()].retain(|&deform| deform != *id);
+                    if id.as_int() != 0 {
+                        let constraint = cur_weight - *weight;
+                        if constraint < -CONTROL_POINT_CONSTRAIN_THRESHOLD {
+                            // sync reverse-map
+                            self.node_map[id.as_index()].retain(|&deform| deform != *id);
 
-                        *id = IndirectIndex::default();
-                        if !flagged {
-                            flagged = true;
-                            self.damaged_buffer.push(DirectIndex::from_index(i));
+                            *id = IndirectIndex::default();
+                            if !flagged {
+                                flagged = true;
+                                self.damaged_buffer.push(DirectIndex::from_index(i));
+                            }
                         }
                     }
                 },
             );
 
             weights_buf.fill(0.0);
-
             i += 1;
         }
     }
