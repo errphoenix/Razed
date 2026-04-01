@@ -8,8 +8,8 @@ use physics::xpbd::NodesRowTableView;
 use crate::voxel::VoxelGrid;
 
 pub const CONTROL_POINTS_COUNT: usize = 8;
-pub const CONTROL_POINTS_MIN_THRESHOLD: usize = 7;
-pub const CONTROL_POINT_CONSTRAIN_THRESHOLD: f32 = 0.1;
+pub const CONTROL_POINTS_MIN_THRESHOLD: usize = 4;
+pub const CONTROL_POINT_CONSTRAIN_THRESHOLD: f32 = 1.0;
 
 ethel::table_spec! {
     struct Deforms {
