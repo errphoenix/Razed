@@ -127,7 +127,7 @@ void main() {
     float d6 = distance(w_rest, b6) + 0.0001;
     float d7 = distance(w_rest, b7) + 0.0001;
 
-    const float RIGIDITY = 3.5;
+    const float RIGIDITY = 2.0;
     float vw0 = 1.0 / pow(d0, RIGIDITY);
     float vw1 = 1.0 / pow(d1, RIGIDITY);
     float vw2 = 1.0 / pow(d2, RIGIDITY);
@@ -159,7 +159,7 @@ void main() {
 
     vec4 world = vec4(deform + w_rest, 1.0);
     fs_world = world.xyz;
-    fs_normal = normal;
+    fs_normal = mix(normal, normalize(abs(world.xyz)), 0.35);
     fs_color = vec4(vec3(0.8), 1.0);
 
     uint state = pod_states[fragment_id];
