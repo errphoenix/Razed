@@ -134,6 +134,24 @@ layout_buffer! {
     }
 }
 
+pub const DEBRIS_ALLOC: usize = 16384;
+pub const DEBRIS_DATA_PARTS: usize = 2;
+
+layout_buffer! {
+    const DebrisData: DEBRIS_DATA_PARTS, {
+        enum PodPositions: DEBRIS_ALLOC => {
+            type [f32; 4];
+            bind 0;
+            shader 0;
+        };
+        enum PodRotations: DEBRIS_ALLOC => {
+            type [f32; 4];
+            bind 1;
+            shader 1;
+        };
+    }
+}
+
 pub const DEFORM_POINTS_ALLOC: usize = 32000;
 
 #[derive(Debug, Default)]
@@ -141,6 +159,8 @@ pub struct FrameDataBuffers {
     pub command: TriBuffer<DrawCommand>,
     pub scene: PartitionedTriBuffer<RENDER_STORAGE_PARTS>,
     pub fragments: PartitionedTriBuffer<FRAGMENTS_DATA_PARTS>,
+    pub debris: PartitionedTriBuffer<DEBRIS_DATA_PARTS>,
+    pub debris_count: Arc<AtomicU32>,
 
     pub xpbd_debug: PartitionedTriBuffer<4>,
     pub xpbd_debug_link_count: Arc<AtomicU32>,
@@ -161,6 +181,9 @@ impl FrameDataBuffers {
         let fragment_data = PartitionedTriBuffer::new(LayoutFragmentData::create());
         LayoutFragmentData::initialise_partitions(&fragment_data);
 
+        let debris_data = PartitionedTriBuffer::new(LayoutDebrisData::create());
+        LayoutDebrisData::initialise_partitions(&debris_data);
+
         let deform_debug = TriBuffer::new(
             DEFORM_POINTS_ALLOC,
             InitStrategy::FillWith(|| glam::Vec4::NAN),
@@ -175,6 +198,8 @@ impl FrameDataBuffers {
 
             scene: scene_data_buffer,
             fragments: fragment_data,
+            debris: debris_data,
+            debris_count: Arc::new(AtomicU32::new(0)),
 
             xpbd_debug: xpbd_visualiser,
             xpbd_debug_link_count: Arc::new(AtomicU32::new(0)),

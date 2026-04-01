@@ -4,7 +4,8 @@ use std::sync::atomic::Ordering;
 
 use crate::{
     data::{
-        FrameDataBuffers, LayoutEntityData, LayoutFragmentData, LayoutXpbdDebugData, Renderable,
+        FrameDataBuffers, LayoutDebrisData, LayoutEntityData, LayoutFragmentData,
+        LayoutXpbdDebugData, Renderable,
     },
     state::physics::LatticeSystem,
     structure::{
@@ -103,7 +104,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         //     base_instance: 0,
         // });
 
-        let fragment_count = self.fragments.table().len() as u32;
+        let fragment_count = self.fragments.fragments().len() as u32;
         command_queue.push(DrawArraysIndirectCommand {
             count: 36,
             // degenerate 0 offset handled in shader
@@ -124,10 +125,10 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 let imap_deforms = self.deforms.data().handles();
                 let pod_deforms_positions = self.deforms.data().deformed_slice();
                 let pod_deforms_bind_pose = &self.deforms.data().pose_slice();
-                let pod_anchors = self.fragments.table().anchors_slice();
-                let pod_anchor_weights = self.fragments.table().anchors_weights_slice();
-                let pod_bind_pose = self.fragments.table().bind_position_slice();
-                let pod_states = self.fragments.table().state_slice();
+                let pod_anchors = self.fragments.fragments().anchors_slice();
+                let pod_anchor_weights = self.fragments.fragments().anchors_weights_slice();
+                let pod_bind_pose = self.fragments.fragments().bind_position_slice();
+                let pod_states = self.fragments.fragments().state_slice();
 
                 // SAFETY: the use of LayoutFragmentData ensures we blit to a
                 // valid section of the partitioned buffer.
@@ -140,6 +141,21 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     fragments.blit_part(buf_idx, LayoutFragmentData::PodBindPose as usize, pod_bind_pose, 0);
                     fragments.blit_part(buf_idx, LayoutFragmentData::PodStates as usize, pod_states, 0);
                 }
+            }
+
+            // debris upload
+            {
+                let debris = &storage.debris;
+                let pod_positions = self.fragments.debris().position_slice();
+
+                // SAFETY: the use of LayoutDebrisData ensures we blit to a
+                // valid section of the partitioned buffer.
+                unsafe {
+                    debris.blit_part_padded(buf_idx, LayoutDebrisData::PodPositions as usize, pod_positions, 0, VEC3_VEC4_PADDING);
+                }
+
+                let debris_count = self.fragments.debris().len() as u32;
+                storage.debris_count.store(debris_count, Ordering::Release);
             }
 
             // standard scene upload
@@ -358,8 +374,11 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         }
 
         self.lattice.update(delta);
+
         let lattice = NodesRowTableView::from(self.lattice.nodes());
         self.deforms.deform(&lattice);
+
+        self.fragments.simulate_debris(delta);
 
         // random demo
         if input.keys().key_pressed(janus::input::KeyCode::KeyH) {
@@ -474,18 +493,18 @@ impl State {
         let new_positions = &self.lattice.nodes().current_pos_slice()[l0..l1];
         self.lattice_bind_pose.extend(new_positions);
 
-        let l0 = self.fragments.table().handles().len();
+        let l0 = self.fragments.fragments().handles().len();
         self.fragments.generate_fragments(origin, voxel_grid);
         self.fragments.bind_lattice(&lattice_hash, &lattice);
         self.fragments.bind_deforms(&deforms_hash, &deforms);
-        let l1 = self.fragments.table().handles().len();
+        let l1 = self.fragments.fragments().handles().len();
 
         // currently unnecessary
         // fragments are rendered directly, not as renderables
         // eventually this will no longer be the case: fragments will be
         // adapted to renderables through compute shaders.
         for frag_idx in l0..l1 {
-            let table = self.fragments.table();
+            let table = self.fragments.fragments();
             let position = *unsafe { table.position_slice().get_unchecked(frag_idx) };
             let e_id = self.create_renderable(0, position, Default::default(), glam::Vec3::ONE);
             self.frag_map.push(e_id);

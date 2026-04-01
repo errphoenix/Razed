@@ -13,6 +13,7 @@ pub struct Renderer {
     xpbd_dbg_shader: ShaderHandle,
     line_dbg_shader: ShaderHandle,
     frags_shader: ShaderHandle,
+    debris_shader: ShaderHandle,
     deform_dbg_shader: ShaderHandle,
     deform_dbg_ctl_shader: ShaderHandle,
 }
@@ -57,6 +58,12 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         self.deform_dbg_ctl_shader
             .uniform_mat4_glam("u_projection", *proj);
 
+        self.debris_shader.bind();
+        self.debris_shader
+            .uniform_vec3_glam("u_camera_forward", cam_forward);
+        self.debris_shader.uniform_mat4_glam("u_view", view_mat);
+        self.debris_shader.uniform_mat4_glam("u_projection", *proj);
+
         self.frags_shader.bind();
         self.frags_shader
             .uniform_vec3_glam("u_camera_forward", cam_forward);
@@ -77,7 +84,17 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         let frags = &frame_data.fragments;
         frags.bind_shader_storage(buf_idx);
         let cmds = &frame_data.command;
-        //GpuCommandDispatch::from_view(cmds.view_section(buf_idx)).dispatch();
+        GpuCommandDispatch::from_view(cmds.view_section(buf_idx)).dispatch();
+
+        {
+            let debris = &frame_data.debris;
+            debris.bind_shader_storage(buf_idx);
+
+            let debris_count = frame_data.debris_count.load(Ordering::Acquire) as i32;
+            unsafe {
+                janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 36, debris_count);
+            }
+        }
 
         {
             self.xpbd_dbg_shader.bind();
@@ -134,7 +151,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
             let control_counts = count * deforms::CONTROL_POINTS_COUNT as u32;
             unsafe {
-                janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 2, control_counts as i32);
+                //janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 2, control_counts as i32);
             }
         }
 
@@ -172,5 +189,10 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         let mut vsh = std::io::BufReader::new(VSH_DEFORM_LINKS_SOURCE);
         let mut fsh = std::io::BufReader::new(FSH_SOLID_SOURCE);
         self.deform_dbg_ctl_shader = ShaderHandle::new(&mut vsh, &mut fsh);
+
+        const VSH_DEBRIS_SOURCE: &[u8] = include_bytes!("../shaders/debris.vsh");
+        let mut vsh = std::io::BufReader::new(VSH_DEBRIS_SOURCE);
+        let mut fsh = std::io::BufReader::new(FSH_BASE_SOURCE);
+        self.debris_shader = ShaderHandle::new(&mut vsh, &mut fsh);
     }
 }

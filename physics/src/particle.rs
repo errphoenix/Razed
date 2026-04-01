@@ -97,16 +97,17 @@ impl Default for ParticleSolver {
 }
 
 impl ParticleSolver {
-    pub fn new(options: ParticleOptions, substeps: u32) -> Self {
+    pub const fn new(options: ParticleOptions, substeps: u32) -> Self {
         Self {
             options,
             substeps,
-            ..Default::default()
+            h: 0.0,
+            h2: 0.0,
         }
     }
 
     #[inline]
-    pub fn set_step_time(&mut self, delta: DeltaTime) {
+    pub const fn set_step_time(&mut self, delta: DeltaTime) {
         self.h = delta.as_f32() / self.substeps as f32;
         self.h2 = self.h * self.h;
     }

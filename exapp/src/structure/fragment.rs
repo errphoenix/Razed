@@ -1,7 +1,8 @@
 use ethel::state::data::{
     Column, DirectIndex, IndirectIndex, hash::FxSpatialHash, table::TableView,
 };
-use physics::xpbd::NodesRowTableView;
+use janus::context::DeltaTime;
+use physics::{particle::ParticleSolver, xpbd::NodesRowTableView};
 use rustc_hash::FxHashSet;
 
 use crate::{structure::deforms::DeformsRowTableView, voxel::VoxelGrid};
@@ -67,6 +68,19 @@ ethel::table_spec! {
     }
 }
 
+ethel::table_spec! {
+    struct Debris {
+        state: FragmentState;
+        age: u32;
+
+        position: glam::Vec3;
+        velocity: glam::Vec3;
+        forces: glam::Vec3;
+
+        mass: f32;
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum UninitFragmentStage {
     #[default]
@@ -97,6 +111,9 @@ pub struct FragmentSystem {
     fragments: FragmentsRowTable,
     uninitialised: Vec<UninitFragment>,
 
+    debris: DebrisRowTable,
+    debris_phys: ParticleSolver,
+
     /// sparse map of deform ID to sequence of fragment IDs
     deform_map: Vec<Vec<IndirectIndex>>,
     /// sparse map of node ID to sequence of fragment IDs
@@ -123,6 +140,9 @@ impl FragmentSystem {
             fragments: FragmentsRowTable::new(),
             uninitialised: Vec::new(),
 
+            debris: DebrisRowTable::new(),
+            debris_phys: ParticleSolver::default(),
+
             // account for degenerate
             deform_map: vec![Vec::new()],
             // account for degenerate
@@ -145,6 +165,9 @@ impl FragmentSystem {
         Self {
             fragments: FragmentsRowTable::with_capacity(capacity),
             uninitialised: Vec::with_capacity(capacity),
+
+            debris: DebrisRowTable::with_capacity(capacity),
+            debris_phys: ParticleSolver::default(),
 
             deform_map,
             node_map,
@@ -192,11 +215,31 @@ impl FragmentSystem {
         &mut self.deform_map[deform.as_index()]
     }
 
-    pub fn table(&self) -> &FragmentsRowTable {
+    pub fn debris(&self) -> &DebrisRowTable {
+        &self.debris
+    }
+
+    pub fn debris_mut(&mut self) -> &mut DebrisRowTable {
+        &mut self.debris
+    }
+
+    pub fn simulate_debris(&mut self, delta: DeltaTime) {
+        self.debris_phys.set_step_time(delta);
+
+        let positions = &mut self.debris.position;
+        let velocities = &mut self.debris.velocity;
+        let forces = &mut self.debris.forces;
+        let masses = &self.debris.mass;
+
+        self.debris_phys.pre_pass_gravity(forces);
+        self.debris_phys.step(positions, velocities, forces, masses);
+    }
+
+    pub fn fragments(&self) -> &FragmentsRowTable {
         &self.fragments
     }
 
-    pub fn table_mut(&mut self) -> &mut FragmentsRowTable {
+    pub fn fragments_mut(&mut self) -> &mut FragmentsRowTable {
         &mut self.fragments
     }
 
