@@ -22,9 +22,9 @@ pub fn create_structure_lattice(
 
     const MASS: f32 = 100.0;
 
-    const VERY_STIFF_COMPL: f32 = 0.10e-7;
-    const STIFF_COMPL: f32 = 0.75e-5;
-    const SOFT_COMPL: f32 = 0.1e-4;
+    const VERY_STIFF_COMPL: f32 = 0.1e-7;
+    const STIFF_COMPL: f32 = 0.15e-4;
+    const SOFT_COMPL: f32 = 0.5e-3;
 
     const STRONG_LINK: XpbdLinkOptions = XpbdLinkOptions::new(VERY_STIFF_COMPL);
     const MID_LINK: XpbdLinkOptions = XpbdLinkOptions::new(STIFF_COMPL);
@@ -139,7 +139,7 @@ pub fn create_structure_lattice(
             lattice.link_nodes(front_right, last_top[prev_front_right], STRONG_LINK);
             lattice.link_nodes(front_left, last_top[prev_front_left], STRONG_LINK);
 
-            // centers
+            // with centers
             // lattice.link_nodes(center_back, last_top[prev_back_left_to_right], STRONG_LINK);
             // lattice.link_nodes(
             //     center_right,
@@ -210,7 +210,7 @@ pub fn create_structure_lattice(
             //center_front,
             front_left,
             //center_left,
-            //            origin,
+            //origin,
         ];
     }
 

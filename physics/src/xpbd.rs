@@ -671,12 +671,12 @@ impl XpbdSolver {
 
     #[inline]
     fn apply_ground_constraint(&self, node_data: &mut NodesRowTable) {
-        const RESTITUTION: f32 = 0.35;
-        const FRICTION: f32 = 0.125;
+        const RESTITUTION: f32 = 0.2;
+        const FRICTION: f32 = 0.4;
 
         let ground_level = self.ground_level.unwrap_or_default();
-        let (n_pos, c_pos, _, _, _, velocity) = node_data.split_mut();
-        for (n_pos, c_pos, vel) in n_pos.join(c_pos).join(velocity) {
+        let (n_pos, c_pos, _, _, forces, velocity) = node_data.split_mut();
+        for (n_pos, c_pos, forces, vel) in n_pos.join(c_pos).join(forces).join(velocity) {
             if n_pos.y < ground_level {
                 n_pos.y = ground_level;
                 c_pos.y = ground_level;
@@ -684,6 +684,8 @@ impl XpbdSolver {
                 vel.y *= -RESTITUTION;
                 vel.x *= FRICTION;
                 vel.z *= FRICTION;
+
+                forces.y -= 80_000.0;
             }
         }
     }
