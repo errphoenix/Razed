@@ -1,8 +1,7 @@
-use std::collections::HashSet;
-
 use ethel::state::data::{
     Column, DirectIndex, IndirectIndex, hash::FxSpatialHash, table::TableView,
 };
+use glam::Vec4Swizzles;
 use janus::context::DeltaTime;
 use physics::{particle::ParticleSolver, xpbd::NodesRowTableView};
 use rustc_hash::FxHashSet;
@@ -60,11 +59,7 @@ ethel::table_spec! {
         // normalised integrity of fragment [0; 1]
         integrity: f32;
 
-        // rigid body position, unused during attached state
-        // vec3 to reduce memory footprint in physics solver
-        position: glam::Vec3;
-        velocity: glam::Vec3;
-        forces: glam::Vec3;
+        world_position: glam::Vec3;
 
         //todo: mesh id, structure id?
     }
@@ -259,6 +254,39 @@ impl FragmentSystem {
         self.fragment_damage_frame.clear();
     }
 
+    pub fn compute_world_positions(&mut self, deforms: &DeformsRowTableView) {
+        let length = self.fragments.len();
+        let state = &self.fragments.state;
+        let anchors = &self.fragments.anchors;
+        let anchor_weights = &self.fragments.anchors_weights;
+        let bind = &self.fragments.bind_position;
+        let world_pos = &mut self.fragments.world_position;
+
+        let deform_pose = &deforms.pose;
+        let deform_now = &deforms.deformed;
+
+        for i in 1..length {
+            let state = state[i];
+            if !matches!(state, FragmentState::Attached) {
+                continue;
+            }
+
+            let mut pos = bind[i].xyz();
+            let anchors = anchors[i];
+            let weights = anchor_weights[i];
+
+            anchors.iter().zip(weights).for_each(|(i, w)| {
+                let direct = deforms.solve(*i);
+                let d_pose = deform_pose[direct.as_index()];
+                let d_now = deform_now[direct.as_index()];
+                let v = d_now - d_pose;
+                pos += v * w;
+            });
+
+            world_pos[i] = pos;
+        }
+    }
+
     pub fn sync_deform_damage(
         &mut self,
         dead_points: &[IndirectIndex],
@@ -275,7 +303,8 @@ impl FragmentSystem {
                     if !matches!(state, FragmentState::Attached) {
                         continue;
                     }
-                    let fragment_world = self.fragments.position[direct.as_index()];
+
+                    let fragment_world = self.fragments.world_position[direct.as_index()];
                     let anchors = &mut self.fragments.anchors[direct.as_index()];
                     let weights = &mut self.fragments.anchors_weights[direct.as_index()];
 
@@ -325,8 +354,6 @@ impl FragmentSystem {
         }
 
         // validate disabled fragments and invalidate relations
-        //let (states, parents, weights, _, _, _, _, _, _, _, _, _) = self.fragments.split_mut();
-
         let parents = &mut self.fragments.parents;
         let weights = &mut self.fragments.parents_weights;
         let states = &mut self.fragments.state;
@@ -524,19 +551,18 @@ impl FragmentSystem {
                 (parents, weights)
             };
 
+            let position = glam::vec4(fragment_world.x, fragment_world.y, fragment_world.z, 1.0);
             let handle = self.fragments.insert((
                 FragmentState::Attached,
                 parents,
                 weights,
                 [IndirectIndex::default(); ANCHORS_COUNT],
                 [0f32; ANCHORS_COUNT],
-                glam::vec4(fragment_world.x, fragment_world.y, fragment_world.z, 1.0),
+                position,
                 1.0, // todo: health contribution
                 1.0, // todo: debris rigid body
                 1.0, // todo: damage and integrity
                 fragment_world,
-                glam::Vec3::ZERO,
-                glam::Vec3::ZERO,
             ));
             frag.stage = UninitFragmentStage::Unfinished { indirect: handle };
 

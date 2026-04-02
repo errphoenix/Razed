@@ -260,7 +260,6 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                         "render command queue overflow during upload: {overflow} commands could not be uploaded and will be discarded"
                     )
                 }
-
             }
         });
 
@@ -356,6 +355,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             self.fragments.clear_damage_buffer();
             self.fragments.sync_lattice_damage(damaged_nodes);
             self.fragments.sync_deform_damage(deleted_points, &deforms);
+            self.fragments.compute_world_positions(&deforms);
 
             // todo: rewrite this whole thing
             let disabled_frags = self.fragments.frame_disabled_frags();
@@ -366,24 +366,18 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     disabled_frags.len()
                 ];
 
-                // todo: do not do this...
-                let mut unique = HashSet::with_capacity(disabled_frags.len());
-
                 for &frag_index in disabled_frags {
                     if frag_index.as_int() == 0 {
                         continue;
                     }
-                    if unique.insert(frag_index) {
-                        let data = self.fragments.fragments();
-                        let position = data.position_slice()[frag_index.as_index()];
-                        let velocity = data.velocity_slice()[frag_index.as_index()];
-                        let forces = data.forces_slice()[frag_index.as_index()];
-                        let mass_coeff = data.mass_coeff_slice()[frag_index.as_index()];
-                        let integrity = data.integrity_slice()[frag_index.as_index()];
-                        let mass = integrity * mass_coeff;
 
-                        buffer.push((position, velocity, forces, mass));
-                    }
+                    let data = self.fragments.fragments();
+                    let position = data.world_position_slice()[frag_index.as_index()];
+                    let mass_coeff = data.mass_coeff_slice()[frag_index.as_index()];
+                    let integrity = data.integrity_slice()[frag_index.as_index()];
+                    let mass = integrity * mass_coeff;
+
+                    buffer.push((position, glam::Vec3::ZERO, glam::Vec3::ZERO, mass));
                 }
 
                 println!("creating {} debris", buffer.len());

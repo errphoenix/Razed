@@ -94,7 +94,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
             let debris_count = frame_data.debris_count.load(Ordering::Acquire) as i32;
             unsafe {
-                janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 36, debris_count);
+                janus::gl::DrawArraysInstanced(janus::gl::TRIANGLES, 0, 36, debris_count);
             }
         }
 
