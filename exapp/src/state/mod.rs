@@ -1,6 +1,6 @@
 pub(crate) mod physics;
 
-use std::sync::atomic::Ordering;
+use std::{collections::HashSet, sync::atomic::Ordering, time::Instant};
 
 use crate::{
     data::{
@@ -9,7 +9,7 @@ use crate::{
     },
     state::physics::LatticeSystem,
     structure::{
-        self, FragmentSystem,
+        self, FragmentState, FragmentSystem,
         deforms::{DeformSystem, DeformsRowTableView},
     },
     voxel::{VoxelGrid, VoxelGridOptions},
@@ -154,7 +154,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     debris.blit_part_padded(buf_idx, LayoutDebrisData::PodPositions as usize, pod_positions, 0, VEC3_VEC4_PADDING);
                 }
 
-                let debris_count = self.fragments.debris().len() as u32;
+                let debris_count = self.fragments.debris().len() as u32 - 1;
                 storage.debris_count.store(debris_count, Ordering::Release);
             }
 
@@ -357,20 +357,56 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             self.fragments.sync_lattice_damage(damaged_nodes);
             self.fragments.sync_deform_damage(deleted_points, &deforms);
 
-            let broken_frags = self.fragments.frame_disabled_frags_direct();
-            for &(frag_index, _) in broken_frags {
-                let renderable_id = *unsafe { self.frag_map.get_unchecked(frag_index.as_index()) };
-                let entity_id = self.renderables[renderable_id as usize].data_handle;
-                let e_index = unsafe { self.entity_data.solve_indirect_unchecked(entity_id) };
+            // todo: rewrite this whole thing
+            let disabled_frags = self.fragments.frame_disabled_frags_direct();
+            if disabled_frags.len() > 0 {
+                // todo: do not do this at all
+                let mut buffer = vec![
+                    (glam::Vec3::ZERO, glam::Vec3::ZERO, glam::Vec3::ZERO, 0.0);
+                    disabled_frags.len()
+                ];
 
-                let pos = unsafe {
-                    self.entity_data
-                        .position_mut_slice()
-                        .get_unchecked_mut(e_index.as_index())
-                };
+                // todo: do not do this...
+                let mut unique = HashSet::with_capacity(disabled_frags.len());
 
-                pos.w = 0.0;
+                for &(frag_index, _) in disabled_frags {
+                    if frag_index.as_int() == 0 {
+                        continue;
+                    }
+                    if unique.insert(frag_index) {
+                        let data = self.fragments.fragments();
+                        let position = data.position_slice()[frag_index.as_index()];
+                        let velocity = data.velocity_slice()[frag_index.as_index()];
+                        let forces = data.forces_slice()[frag_index.as_index()];
+                        let mass_coeff = data.mass_coeff_slice()[frag_index.as_index()];
+                        let integrity = data.integrity_slice()[frag_index.as_index()];
+                        let mass = integrity * mass_coeff;
+
+                        buffer.push((position, velocity, forces, mass));
+                    }
+                }
+
+                println!("creating {} debris", buffer.len());
+                buffer.drain(..).for_each(|(p, v, f, w)| {
+                    self.fragments
+                        .debris_mut()
+                        .insert((FragmentState::Debris, 0, p, v, f, w));
+                });
             }
+
+            // for &(frag_index, _) in broken_frags {
+            //     let renderable_id = *unsafe { self.frag_map.get_unchecked(frag_index.as_index()) };
+            //     let entity_id = self.renderables[renderable_id as usize].data_handle;
+            //     let e_index = unsafe { self.entity_data.solve_indirect_unchecked(entity_id) };
+
+            //     let pos = unsafe {
+            //         self.entity_data
+            //             .position_mut_slice()
+            //             .get_unchecked_mut(e_index.as_index())
+            //     };
+
+            //     pos.w = 0.0;
+            // }
         }
 
         self.lattice.update(delta);
@@ -503,12 +539,12 @@ impl State {
         // fragments are rendered directly, not as renderables
         // eventually this will no longer be the case: fragments will be
         // adapted to renderables through compute shaders.
-        for frag_idx in l0..l1 {
-            let table = self.fragments.fragments();
-            let position = *unsafe { table.position_slice().get_unchecked(frag_idx) };
-            let e_id = self.create_renderable(0, position, Default::default(), glam::Vec3::ONE);
-            self.frag_map.push(e_id);
-        }
+        // for frag_idx in l0..l1 {
+        //     let table = self.fragments.fragments();
+        //     let position = *unsafe { table.position_slice().get_unchecked(frag_idx) };
+        //     let e_id = self.create_renderable(0, position, Default::default(), glam::Vec3::ONE);
+        //     self.frag_map.push(e_id);
+        // }
 
         // debug render of nodes
         // for &node_id in &lattice_map.nodes {
