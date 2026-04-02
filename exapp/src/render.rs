@@ -87,6 +87,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         GpuCommandDispatch::from_view(cmds.view_section(buf_idx)).dispatch();
 
         {
+            self.debris_shader.bind();
+
             let debris = &frame_data.debris;
             debris.bind_shader_storage(buf_idx);
 
