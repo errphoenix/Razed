@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use ethel::state::data::{
-    hash::FxSpatialHash, table::TableView, Column, DirectIndex, IndirectIndex,
+    Column, DirectIndex, IndirectIndex, hash::FxSpatialHash, table::TableView,
 };
 use janus::context::DeltaTime;
 use physics::{particle::ParticleSolver, xpbd::NodesRowTableView};
@@ -124,10 +124,11 @@ pub struct FragmentSystem {
     /// accumulated hash set of disabled fragment IDs; avoids dedup op
     /// these are the fragments' indirect indices (stable)
     disabled_frags_hash: FxHashSet<IndirectIndex>,
-
-    /// per-frame list of disabled fragment IDs and an indirect node
+    /// per-frame list of damaged fragments from nodes
     /// these are the fragments' direct indices (unstable)
-    damaged_frags_frame: Vec<(DirectIndex, IndirectIndex)>,
+    fragment_damage_frame: Vec<(DirectIndex, IndirectIndex)>,
+
+    disabled_frags_frame: Vec<DirectIndex>,
 }
 
 impl Default for FragmentSystem {
@@ -151,7 +152,8 @@ impl FragmentSystem {
             node_map: vec![Vec::new()],
 
             disabled_frags_hash: FxHashSet::default(),
-            damaged_frags_frame: Vec::new(),
+            fragment_damage_frame: Vec::new(),
+            disabled_frags_frame: Vec::new(),
         }
     }
 
@@ -175,7 +177,8 @@ impl FragmentSystem {
             node_map,
 
             disabled_frags_hash: FxHashSet::default(),
-            damaged_frags_frame: Vec::new(),
+            fragment_damage_frame: Vec::new(),
+            disabled_frags_frame: Vec::new(),
         }
     }
 
@@ -251,8 +254,9 @@ impl FragmentSystem {
     }
 
     pub fn clear_damage_buffer(&mut self) {
-        self.damaged_frags_frame.clear();
         self.disabled_frags_hash.clear();
+        self.disabled_frags_frame.clear();
+        self.fragment_damage_frame.clear();
     }
 
     pub fn sync_deform_damage(
@@ -294,8 +298,7 @@ impl FragmentSystem {
                     weights.iter_mut().for_each(|w| *w /= w_t);
 
                     if self.disabled_frags_hash.insert(frag_id) {
-                        self.damaged_frags_frame
-                            .push((direct, IndirectIndex::default()));
+                        self.disabled_frags_frame.push(direct);
                     }
                 }
             }
@@ -317,46 +320,53 @@ impl FragmentSystem {
                     continue;
                 }
 
-                if self.disabled_frags_hash.insert(frag_id) {
-                    self.damaged_frags_frame.push((direct, node));
-                }
+                self.fragment_damage_frame.push((direct, node));
             }
         }
 
         // validate disabled fragments and invalidate relations
-        let (states, parents, weights, _, _, _, _, _, _, _, _, _) = self.fragments.split_mut();
-        self.damaged_frags_frame.retain(|&(frag_idx, node_id)| {
-            let parents = unsafe { parents.alpha.get_unchecked_mut(frag_idx.as_index()) };
-            let weights = unsafe { weights.alpha.get_unchecked_mut(frag_idx.as_index()) };
-            let mut empty_weight = 0.0;
+        //let (states, parents, weights, _, _, _, _, _, _, _, _, _) = self.fragments.split_mut();
 
-            parents
-                .iter_mut()
-                .zip(weights.iter_mut())
-                .for_each(|(id, weight)| {
-                    if *id == node_id {
-                        *id = IndirectIndex::default();
-                        empty_weight = *weight;
-                        *weight = 0.0;
+        let parents = &mut self.fragments.parents;
+        let weights = &mut self.fragments.parents_weights;
+        let states = &mut self.fragments.state;
+
+        self.fragment_damage_frame
+            .drain(..)
+            .for_each(|(frag_idx, node_id)| {
+                let parents = unsafe { parents.get_unchecked_mut(frag_idx.as_index()) };
+                let weights = unsafe { weights.get_unchecked_mut(frag_idx.as_index()) };
+                let mut empty_weight = 0.0;
+
+                parents
+                    .iter_mut()
+                    .zip(weights.iter_mut())
+                    .for_each(|(id, weight)| {
+                        if *id == node_id {
+                            *id = IndirectIndex::default();
+                            empty_weight = *weight;
+                            *weight = 0.0;
+                        }
+                    });
+
+                // redistribute lost weight
+                weights.iter_mut().for_each(|w| *w += empty_weight * *w);
+
+                let active_count = parents.iter().filter(|id| id.as_int() != 0).count();
+                if active_count < MIN_CLUSTER_SIZE as usize {
+                    let state = unsafe { states.get_unchecked_mut(frag_idx.as_index()) };
+                    *state = FragmentState::Debris;
+
+                    let indirect = self.fragments.handles[frag_idx.as_index()];
+                    if self.disabled_frags_hash.insert(indirect) {
+                        self.disabled_frags_frame.push(frag_idx);
                     }
-                });
-
-            // redistribute lost weight
-            weights.iter_mut().for_each(|w| *w += empty_weight * *w);
-
-            let active_count = parents.iter().filter(|id| id.as_int() != 0).count();
-            if active_count < MIN_CLUSTER_SIZE as usize {
-                let state = unsafe { states.alpha.get_unchecked_mut(frag_idx.as_index()) };
-                *state = FragmentState::Debris;
-                false
-            } else {
-                true
-            }
-        });
+                }
+            });
     }
 
     /// Return a slice containing the *direct indices* of all fragments
-    /// disabled in the last frame.
+    /// damaged in the last frame.
     ///
     /// Each entry is a tuple that contains the fragment index first, then the
     /// node ID it was broken off of.
@@ -367,8 +377,12 @@ impl FragmentSystem {
     /// These are unstable and may be invalidated on the next frame; they are
     /// intended for use only during the same frame this was populated in and
     /// before any operation that might add/remove elements to the table.
-    pub fn frame_disabled_frags_direct(&self) -> &[(DirectIndex, IndirectIndex)] {
-        &self.damaged_frags_frame
+    pub fn frame_damaged_fragments(&self) -> &[(DirectIndex, IndirectIndex)] {
+        &self.fragment_damage_frame
+    }
+
+    pub fn frame_disabled_frags(&self) -> &[DirectIndex] {
+        &self.disabled_frags_frame
     }
 
     pub fn frame_disabled_frags_hash(&self) -> &FxHashSet<IndirectIndex> {

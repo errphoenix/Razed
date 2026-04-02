@@ -358,7 +358,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             self.fragments.sync_deform_damage(deleted_points, &deforms);
 
             // todo: rewrite this whole thing
-            let disabled_frags = self.fragments.frame_disabled_frags_direct();
+            let disabled_frags = self.fragments.frame_disabled_frags();
             if disabled_frags.len() > 0 {
                 // todo: do not do this at all
                 let mut buffer = vec![
@@ -369,7 +369,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 // todo: do not do this...
                 let mut unique = HashSet::with_capacity(disabled_frags.len());
 
-                for &(frag_index, _) in disabled_frags {
+                for &frag_index in disabled_frags {
                     if frag_index.as_int() == 0 {
                         continue;
                     }
