@@ -1,5 +1,7 @@
+use std::collections::HashSet;
+
 use ethel::state::data::{
-    Column, DirectIndex, IndirectIndex, hash::FxSpatialHash, table::TableView,
+    hash::FxSpatialHash, table::TableView, Column, DirectIndex, IndirectIndex,
 };
 use janus::context::DeltaTime;
 use physics::{particle::ParticleSolver, xpbd::NodesRowTableView};
@@ -265,6 +267,10 @@ impl FragmentSystem {
                 }
 
                 if let Some(direct) = self.fragments.solve_indirect(frag_id) {
+                    let state = self.fragments.state[direct.as_index()];
+                    if !matches!(state, FragmentState::Attached) {
+                        continue;
+                    }
                     let fragment_world = self.fragments.position[direct.as_index()];
                     let anchors = &mut self.fragments.anchors[direct.as_index()];
                     let weights = &mut self.fragments.anchors_weights[direct.as_index()];
@@ -305,9 +311,14 @@ impl FragmentSystem {
                     continue;
                 }
 
+                let direct = unsafe { self.fragments.solve_indirect_unchecked(frag_id) };
+                let state = self.fragments.state[direct.as_index()];
+                if !matches!(state, FragmentState::Attached) {
+                    continue;
+                }
+
                 if self.disabled_frags_hash.insert(frag_id) {
-                    let idx = unsafe { self.fragments.solve_indirect_unchecked(frag_id) };
-                    self.damaged_frags_frame.push((idx, node));
+                    self.damaged_frags_frame.push((direct, node));
                 }
             }
         }
@@ -360,8 +371,11 @@ impl FragmentSystem {
         &self.damaged_frags_frame
     }
 
-    const LATTICE_SPATIAL_RESOLUTION: u32 = 2;
-    const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 10;
+    pub fn frame_disabled_frags_hash(&self) -> &FxHashSet<IndirectIndex> {
+        &self.disabled_frags_hash
+    }
+
+    const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 16;
 
     pub fn bind_deforms(
         &mut self,
