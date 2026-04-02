@@ -52,7 +52,7 @@ void main() {
     vec3 position = pod_positions[debris_id].xyz;
     //vec4 rotation = pod_rotations[debris_id];
 
-    vec4 world = vec4(position, 1.0);
+    vec4 world = vec4(position + model, 1.0);
     fs_world = world.xyz;
     fs_normal = normal;
     fs_color = vec4(vec3(0.8), 1.0);
