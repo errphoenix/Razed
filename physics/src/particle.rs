@@ -9,7 +9,9 @@ pub struct ParticleOptions {
 }
 
 pub const DEFAULT_GRAVITY: f32 = 9.807;
-pub const DEFAULT_DAMPING: f32 = 0.996;
+pub const DEFAULT_DAMPING: f32 = 0.98;
+
+const INTERNAL_STEP_MULT: f32 = 48.0;
 
 impl Default for ParticleOptions {
     fn default() -> Self {
@@ -77,43 +79,23 @@ impl ParticleOptions {
 #[derive(Debug, Clone)]
 pub struct ParticleSolver {
     options: ParticleOptions,
-    substeps: u32,
-
-    h: f32,
-    h2: f32,
 }
-
-pub const DEFAULT_SOLVE_ITERATIONS: u32 = 4;
 
 impl Default for ParticleSolver {
     fn default() -> Self {
         Self {
             options: Default::default(),
-            substeps: DEFAULT_SOLVE_ITERATIONS,
-            h: 0.0,
-            h2: 0.0,
         }
     }
 }
 
 impl ParticleSolver {
-    pub const fn new(options: ParticleOptions, substeps: u32) -> Self {
-        Self {
-            options,
-            substeps,
-            h: 0.0,
-            h2: 0.0,
-        }
-    }
-
-    #[inline]
-    pub const fn set_step_time(&mut self, delta: DeltaTime) {
-        self.h = delta.as_f32() / self.substeps as f32;
-        self.h2 = self.h * self.h;
+    pub const fn new(options: ParticleOptions) -> Self {
+        Self { options }
     }
 
     pub fn pre_pass_gravity(&self, forces: &mut [glam::Vec3]) {
-        forces.iter_mut().for_each(|f| *f += self.options.gravity);
+        forces.iter_mut().for_each(|f| f.y -= self.options.gravity);
     }
 
     pub fn step(
@@ -122,9 +104,10 @@ impl ParticleSolver {
         velocities: &mut [glam::Vec3],
         forces: &mut [glam::Vec3],
         masses: &[f32],
+        delta: DeltaTime,
     ) {
-        let h = self.h * self.options.step_multiplier;
-        let h2 = self.h2 * self.options.step_multiplier;
+        let h = delta.as_f32() * self.options.step_multiplier * INTERNAL_STEP_MULT;
+        let h2 = h * h;
 
         velocities
             .iter_mut()
@@ -135,18 +118,16 @@ impl ParticleSolver {
                 *v += h2 * force * w;
             });
 
-        for _ in 0..self.substeps {
-            positions
-                .iter_mut()
-                .zip(velocities.iter())
-                .for_each(|(p, v)| {
-                    *p += v * h;
-                });
+        positions
+            .iter_mut()
+            .zip(velocities.iter())
+            .for_each(|(p, v)| {
+                *p += v * h;
+            });
 
-            velocities
-                .iter_mut()
-                .for_each(|v| *v *= self.options.damping);
-        }
+        velocities
+            .iter_mut()
+            .for_each(|v| *v *= self.options.damping);
 
         if let Some(ground_level) = self.options.ground_level {
             positions.iter_mut().for_each(|p| {

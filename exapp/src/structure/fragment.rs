@@ -224,15 +224,14 @@ impl FragmentSystem {
     }
 
     pub fn simulate_debris(&mut self, delta: DeltaTime) {
-        self.debris_phys.set_step_time(delta);
-
         let positions = &mut self.debris.position;
         let velocities = &mut self.debris.velocity;
         let forces = &mut self.debris.forces;
         let masses = &self.debris.mass;
 
         self.debris_phys.pre_pass_gravity(forces);
-        self.debris_phys.step(positions, velocities, forces, masses);
+        self.debris_phys
+            .step(positions, velocities, forces, masses, delta);
     }
 
     pub fn fragments(&self) -> &FragmentsRowTable {

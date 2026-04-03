@@ -1,6 +1,6 @@
 pub(crate) mod physics;
 
-use std::{collections::HashSet, sync::atomic::Ordering, time::Instant};
+use std::{sync::atomic::Ordering, time::Instant};
 
 use crate::{
     data::{
