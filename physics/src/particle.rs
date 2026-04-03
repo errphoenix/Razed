@@ -11,7 +11,7 @@ pub struct ParticleOptions {
 pub const DEFAULT_GRAVITY: f32 = 9.807;
 pub const DEFAULT_DAMPING: f32 = 0.98;
 
-const INTERNAL_STEP_MULT: f32 = 48.0;
+const INTERNAL_STEP_MULT: f32 = 3.2;
 
 impl Default for ParticleOptions {
     fn default() -> Self {
@@ -127,7 +127,7 @@ impl ParticleSolver {
 
         velocities
             .iter_mut()
-            .for_each(|v| *v *= self.options.damping);
+            .for_each(|v| *v *= (self.options.damping * h).exp());
 
         if let Some(ground_level) = self.options.ground_level {
             positions.iter_mut().for_each(|p| {
