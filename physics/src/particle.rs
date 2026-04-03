@@ -6,10 +6,12 @@ pub struct ParticleOptions {
     ground_level: Option<f32>,
     step_multiplier: f32,
     damping: f32,
+    restitution: f32,
 }
 
 pub const DEFAULT_GRAVITY: f32 = 9.807;
-pub const DEFAULT_DAMPING: f32 = 0.98;
+pub const DEFAULT_DAMPING: f32 = 0.85;
+pub const DEFAULT_RESTITUTION: f32 = 0.225;
 
 const INTERNAL_STEP_MULT: f32 = 3.2;
 
@@ -20,6 +22,7 @@ impl Default for ParticleOptions {
             ground_level: Some(0.0),
             step_multiplier: 1.0,
             damping: DEFAULT_DAMPING,
+            restitution: DEFAULT_RESTITUTION,
         }
     }
 }
@@ -30,12 +33,14 @@ impl ParticleOptions {
         ground_level: Option<f32>,
         step_multiplier: f32,
         damping: f32,
+        restitution: f32,
     ) -> Self {
         Self {
             gravity,
             ground_level,
             step_multiplier,
             damping,
+            restitution,
         }
     }
 
@@ -45,6 +50,7 @@ impl ParticleOptions {
             ground_level: self.ground_level,
             step_multiplier: self.step_multiplier,
             damping: self.damping,
+            restitution: self.restitution,
         }
     }
 
@@ -54,6 +60,7 @@ impl ParticleOptions {
             gravity: self.gravity,
             step_multiplier: self.step_multiplier,
             damping: self.damping,
+            restitution: self.restitution,
         }
     }
 
@@ -63,6 +70,7 @@ impl ParticleOptions {
             gravity: self.gravity,
             ground_level: self.ground_level,
             damping: self.damping,
+            restitution: self.restitution,
         }
     }
 
@@ -72,6 +80,17 @@ impl ParticleOptions {
             gravity: self.gravity,
             ground_level: self.ground_level,
             step_multiplier: self.step_multiplier,
+            restitution: self.restitution,
+        }
+    }
+
+    pub fn with_restitution(self, restitution: f32) -> Self {
+        Self {
+            restitution,
+            gravity: self.gravity,
+            ground_level: self.ground_level,
+            step_multiplier: self.step_multiplier,
+            damping: self.damping,
         }
     }
 }
@@ -125,14 +144,16 @@ impl ParticleSolver {
                 *p += v * h;
             });
 
-        velocities
-            .iter_mut()
-            .for_each(|v| *v *= (self.options.damping * h).exp());
+        let dh = self.options.damping * h;
+        let dh2 = dh * dh;
+        let dh2e = (-dh2).exp();
+        velocities.iter_mut().for_each(|v| *v *= dh2e);
 
         if let Some(ground_level) = self.options.ground_level {
-            positions.iter_mut().for_each(|p| {
+            positions.iter_mut().zip(velocities).for_each(|(p, v)| {
                 if p.y < ground_level {
                     p.y = 0.0;
+                    *v *= -self.options.restitution;
                 }
             });
         }
