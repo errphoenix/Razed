@@ -35,6 +35,8 @@ out vec3 fs_world;
 out vec3 fs_normal;
 out vec4 fs_color;
 
+mat3 quatToMat(vec4 q);
+
 vec4 mulQuat(vec4 q0, vec4 q1);
 
 vec3 rotateQuat(vec3 p, vec4 q) {
@@ -67,11 +69,11 @@ void main() {
     vec4 world = vec4(position + local, 1.0);
 
     fs_world = world.xyz;
-    fs_normal = normal;
     fs_color = vec4(vec3(0.8), 1.0);
 
-    //uint state = pod_states[fragment_id];
-    //gl_Position = u_projection * u_view * world * float(state);
+    mat3 rot_m = quatToMat(rotation);
+    fs_normal = normalize(normal * transpose(inverse(rot_m)));
+
     gl_Position = u_projection * u_view * world;
 }
 
@@ -82,4 +84,35 @@ vec4 mulQuat(vec4 q0, vec4 q1) {
     r.z = (q0.w * q1.z) + (q0.x * q1.y) - (q0.y * q1.x) + (q0.z * q1.w);
     r.w = (q0.w * q1.w) - (q0.x * q1.x) - (q0.y * q1.y) - (q0.z * q1.z);
     return r;
+}
+
+mat3 quatToMat(vec4 q) {
+    mat3 m = mat3(0.0);
+
+    float sqx = q.x * q.x;
+    float sqy = q.y * q.y;
+    float sqz = q.z * q.z;
+    float sqw = q.w * q.w;
+
+    float invs = 1.0 / (sqx + sqy + sqz + sqw);
+    m[0][0] = (sqx - sqy - sqz + sqw) * invs;
+    m[1][1] = (-sqx + sqy - sqz + sqw) * invs;
+    m[2][2] = (-sqx - sqy + sqz + sqw) * invs;
+
+    float tmp1 = q.x * q.y;
+    float tmp2 = q.z * q.w;
+    m[1][0] = 2.0 * (tmp1 + tmp2) * invs;
+    m[0][1] = 2.0 * (tmp1 - tmp2) * invs;
+
+    tmp1 = q.x * q.z;
+    tmp2 = q.y * q.w;
+    m[2][0] = 2.0 * (tmp1 - tmp2) * invs;
+    m[0][2] = 2.0 * (tmp1 + tmp2) * invs;
+
+    tmp1 = q.y * q.z;
+    tmp2 = q.x * q.w;
+    m[2][1] = 2.0 * (tmp1 + tmp2) * invs;
+    m[1][2] = 2.0 * (tmp1 - tmp2) * invs;
+
+    return m;
 }
