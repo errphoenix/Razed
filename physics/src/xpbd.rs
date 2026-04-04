@@ -685,7 +685,7 @@ impl XpbdSolver {
                 vel.x *= FRICTION;
                 vel.z *= FRICTION;
 
-                forces.y -= 80_000.0;
+                forces.y -= 92_000.0;
             }
         }
     }

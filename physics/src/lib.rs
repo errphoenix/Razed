@@ -1,4 +1,5 @@
 pub mod particle;
+pub mod rigid;
 pub mod xpbd;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
