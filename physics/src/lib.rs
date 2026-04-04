@@ -1,3 +1,4 @@
+pub mod collision;
 pub mod particle;
 pub mod rigid;
 pub mod xpbd;

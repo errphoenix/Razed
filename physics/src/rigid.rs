@@ -1,4 +1,7 @@
+use ethel::state::data::IndirectIndex;
 use janus::context::DeltaTime;
+
+use crate::collision::{self, LightCollision, Sphere};
 
 #[derive(Clone, Copy, Debug)]
 pub struct RigidBodyOptions {
@@ -98,19 +101,70 @@ impl RigidBodyOptions {
 #[derive(Debug, Clone)]
 pub struct RigidBodySolver {
     options: RigidBodyOptions,
+
+    collision_buffer: Vec<LightCollision>,
 }
 
 impl Default for RigidBodySolver {
     fn default() -> Self {
         Self {
             options: Default::default(),
+            collision_buffer: Vec::default(),
         }
     }
 }
 
 impl RigidBodySolver {
     pub const fn new(options: RigidBodyOptions) -> Self {
-        Self { options }
+        Self {
+            options,
+            collision_buffer: Vec::new(),
+        }
+    }
+
+    pub fn detect_collisions(
+        &mut self,
+        positions: &[glam::Vec3],
+        volumes: &[Sphere],
+        id_map: &[IndirectIndex],
+    ) {
+        collision::detect_n2(positions, volumes, id_map, &mut self.collision_buffer);
+    }
+
+    pub fn solve_collisions(
+        &mut self,
+        positions: &[glam::Vec3],
+        forces: &mut [glam::Vec3],
+        torques: &mut [glam::Vec3],
+        id_map: &[IndirectIndex],
+    ) {
+        self.collision_buffer.drain(..).for_each(|collision| {
+            let contact = collision.point;
+            let index0 = collision.index_a;
+            let index1 = collision.index_b;
+            let id0 = id_map[index0.as_index()].as_index();
+            let id1 = id_map[index1.as_index()].as_index();
+
+            {
+                let p0 = positions[id0];
+                let f0 = &mut forces[id0];
+                let t0 = &mut torques[id0];
+
+                let d0 = (p0 - contact).normalize();
+                *f0 += d0;
+                *t0 += d0;
+            }
+
+            {
+                let p1 = positions[id1];
+                let f1 = &mut forces[id1];
+                let t1 = &mut torques[id1];
+
+                let d1 = (p1 - contact).normalize();
+                *f1 += d1;
+                *t1 += d1;
+            }
+        });
     }
 
     pub fn pre_pass_inertia(

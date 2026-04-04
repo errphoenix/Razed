@@ -464,16 +464,16 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         if input.keys().key_pressed(janus::input::KeyCode::KeyH) {
             let vp = view_point.get();
 
-            const WIDTH: f32 = 10.0;
+            const WIDTH: f32 = 8.0;
             const HEIGHT: f32 = 4.0;
-            const DEPTH: f32 = 10.0;
+            const DEPTH: f32 = 8.0;
             const FLOORS: u32 = 8;
             const TOTAL_HEIGHT: f32 = HEIGHT * FLOORS as f32;
 
             let center = glam::vec3(vp.position.x, GROUND_LEVEL, vp.position.z);
             let lattice = structure::create_structure_lattice(center, WIDTH, HEIGHT, DEPTH, FLOORS);
 
-            const INNER_SPACE: i32 = 3;
+            const INNER_SPACE: i32 = 2;
             let mut voxel_grid = VoxelGrid::new(
                 |cell| cell.x.abs() > INNER_SPACE || cell.z.abs() > INNER_SPACE,
                 VoxelGridOptions::default()
