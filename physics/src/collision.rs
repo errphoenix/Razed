@@ -1,12 +1,18 @@
 use ethel::state::data::IndirectIndex;
 
-#[derive(Clone, Copy, PartialEq, PartialOrd, Debug)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Debug, Default)]
 pub struct Sphere {
     pub radius: f32,
 }
 
 impl Sphere {
-    pub fn intersects(&self, other: Sphere, distance_squared: f32) -> bool {
+    pub const UNIT: Self = Self::new(1.0);
+
+    pub const fn new(radius: f32) -> Self {
+        Self { radius }
+    }
+
+    pub const fn intersects(&self, other: Sphere, distance_squared: f32) -> bool {
         let r1 = self.radius;
         let r2 = other.radius;
         let rr2 = (r1 + r2) * (r1 + r2);

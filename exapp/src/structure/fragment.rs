@@ -82,6 +82,8 @@ ethel::table_spec! {
         mass: f32;
         inv_inertia_loc: glam::Mat3;
         inv_inertia_abs: glam::Mat3;
+
+        volume: physics::Sphere;
     }
 }
 
@@ -240,6 +242,13 @@ impl FragmentSystem {
         let masses = &self.debris.mass;
         let inv_inertia_loc = &self.debris.inv_inertia_loc;
         let inv_inertia_abs = &mut self.debris.inv_inertia_abs;
+        let volumes = &self.debris.volume;
+        let handles = &self.debris.handles;
+
+        self.debris_phys
+            .detect_collisions(positions, volumes, handles);
+        self.debris_phys
+            .solve_collisions(positions, forces, torques, handles);
 
         self.debris_phys
             .pre_pass_inertia(rotations, inv_inertia_loc, inv_inertia_abs);

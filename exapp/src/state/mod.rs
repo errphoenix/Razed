@@ -429,6 +429,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                                 mass,
                                 glam::Mat3::IDENTITY,
                                 glam::Mat3::IDENTITY,
+                                ::physics::Sphere::UNIT,
                             ));
                         });
                 }

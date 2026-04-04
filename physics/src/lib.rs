@@ -3,6 +3,9 @@ pub mod particle;
 pub mod rigid;
 pub mod xpbd;
 
+#[allow(unused_imports)]
+pub use collision::Sphere;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Line {
     pub dir: glam::Vec3,
