@@ -71,6 +71,8 @@ ethel::table_spec! {
         age: u32;
 
         position: glam::Vec3;
+        rotation: glam::Quat;
+
         velocity: glam::Vec3;
         forces: glam::Vec3;
 

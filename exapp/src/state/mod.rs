@@ -147,11 +147,13 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             {
                 let debris = &storage.debris;
                 let pod_positions = self.fragments.debris().position_slice();
+                let pod_rotations = self.fragments.debris().rotation_slice();
 
                 // SAFETY: the use of LayoutDebrisData ensures we blit to a
                 // valid section of the partitioned buffer.
                 unsafe {
                     debris.blit_part_padded(buf_idx, LayoutDebrisData::PodPositions as usize, pod_positions, 0, VEC3_VEC4_PADDING);
+                    debris.blit_part(buf_idx, LayoutDebrisData::PodRotations as usize, pod_rotations, 0);
                 }
 
                 let debris_count = self.fragments.debris().len() as u32 - 1;
