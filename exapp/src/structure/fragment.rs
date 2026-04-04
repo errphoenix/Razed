@@ -244,9 +244,8 @@ impl FragmentSystem {
         self.debris_phys
             .pre_pass_inertia(rotations, inv_inertia_loc, inv_inertia_abs);
         self.debris_phys.pre_pass_gravity(forces, torques);
-        self.debris_phys.step(
-            positions,
-            rotations,
+
+        self.debris_phys.integrate(
             velocities,
             ang_velocities,
             forces,
@@ -255,6 +254,13 @@ impl FragmentSystem {
             inv_inertia_abs,
             delta,
         );
+        self.debris_phys
+            .update_bodies(positions, rotations, velocities, ang_velocities, delta);
+
+        self.debris_phys
+            .post_damp_velocities(velocities, ang_velocities, delta);
+        self.debris_phys
+            .post_ground_constraint(positions, velocities, ang_velocities);
     }
 
     pub fn fragments(&self) -> &FragmentsRowTable {
@@ -481,7 +487,7 @@ impl FragmentSystem {
                     .zip(fragment_anchors.iter_mut())
                     .zip(fragment_weights.iter_mut())
                     .for_each(|((cell, anchor_id), anchor_weight)| {
-                        let deform = deforms_hash.get(&cell).copied().expect("deforms hash neighbors are populated");
+                        let deform = deforms_hash.get(cell).copied().expect("deforms hash neighbors are populated");
                         let point = deforms.pose(deform);
                         let ds = fragment_world.distance_squared(*point);
 
@@ -559,7 +565,7 @@ impl FragmentSystem {
                     .zip(&mut parents.iter_mut().zip(&mut weights))
                     .for_each(|(cell, (id, weight))| {
                         *id = lattice_hash
-                            .get(&cell)
+                            .get(cell)
                             .copied()
                             .expect("lattice hash neighbors are populated");
                         let point = lattice.current_pos(*id);

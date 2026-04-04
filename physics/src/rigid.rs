@@ -13,7 +13,6 @@ pub const DEFAULT_GRAVITY: f32 = 9.807;
 pub const DEFAULT_DAMPING: f32 = 0.85;
 pub const DEFAULT_RESTITUTION: f32 = 0.225;
 
-const INTERNAL_TORQUE_MULT: f32 = 0.2;
 const INTERNAL_STEP_MULT: f32 = 3.2;
 
 impl Default for RigidBodyOptions {
@@ -137,16 +136,14 @@ impl RigidBodySolver {
         });
     }
 
-    pub fn step(
+    pub fn integrate(
         &self,
-        positions: &mut [glam::Vec3],
-        rotations: &mut [glam::Quat],
         velocities: &mut [glam::Vec3],
         ang_velocities: &mut [glam::Vec3],
         forces: &mut [glam::Vec3],
         torques: &mut [glam::Vec3],
         masses: &[f32],
-        inertia: &mut [glam::Mat3],
+        inertia: &[glam::Mat3],
         delta: DeltaTime,
     ) {
         let h = delta.as_f32() * self.options.step_multiplier * INTERNAL_STEP_MULT;
@@ -154,7 +151,7 @@ impl RigidBodySolver {
 
         velocities
             .iter_mut()
-            .zip(forces.iter_mut())
+            .zip(forces)
             .zip(masses)
             .for_each(|((v, f), w)| {
                 let f = std::mem::take(f);
@@ -162,39 +159,58 @@ impl RigidBodySolver {
             });
         ang_velocities
             .iter_mut()
-            .zip(torques.iter_mut())
+            .zip(torques)
             .zip(inertia)
             .for_each(|((v, t), i)| {
                 let t = std::mem::take(t);
                 *v += h2 * i.mul_vec3(t) + f32::EPSILON;
             });
+    }
 
-        positions
-            .iter_mut()
-            .zip(velocities.iter())
-            .for_each(|(p, v)| {
-                *p += v * h;
-            });
-        rotations
-            .iter_mut()
-            .zip(ang_velocities.iter())
-            .for_each(|(r, v)| {
-                let q = {
-                    let l = v.length() + f32::EPSILON;
-                    let lh = l * h;
-                    let a = v / l;
-                    glam::Quat::from_axis_angle(a, lh)
-                };
-                *r *= q;
-                *r = r.normalize();
-            });
+    pub fn update_bodies(
+        &self,
+        positions: &mut [glam::Vec3],
+        rotations: &mut [glam::Quat],
+        velocities: &[glam::Vec3],
+        ang_velocities: &[glam::Vec3],
+        delta: DeltaTime,
+    ) {
+        let h = delta.as_f32() * self.options.step_multiplier * INTERNAL_STEP_MULT;
+        positions.iter_mut().zip(velocities).for_each(|(p, v)| {
+            *p += v * h;
+        });
+        rotations.iter_mut().zip(ang_velocities).for_each(|(r, v)| {
+            let q = {
+                let l = v.length() + f32::EPSILON;
+                let lh = l * h;
+                let a = v / l;
+                glam::Quat::from_axis_angle(a, lh)
+            };
+            *r *= q;
+            *r = r.normalize();
+        });
+    }
 
+    pub fn post_damp_velocities(
+        &self,
+        velocities: &mut [glam::Vec3],
+        ang_velocities: &mut [glam::Vec3],
+        delta: DeltaTime,
+    ) {
+        let h = delta.as_f32() * self.options.step_multiplier * INTERNAL_STEP_MULT;
         let dh = self.options.damping * h;
         let dh2 = dh * dh;
         let dh2e = (-dh2).exp();
         velocities.iter_mut().for_each(|v| *v *= dh2e);
         ang_velocities.iter_mut().for_each(|v| *v *= dh2e);
+    }
 
+    pub fn post_ground_constraint(
+        &self,
+        positions: &mut [glam::Vec3],
+        velocities: &mut [glam::Vec3],
+        ang_velocities: &mut [glam::Vec3],
+    ) {
         if let Some(ground_level) = self.options.ground_level {
             positions
                 .iter_mut()

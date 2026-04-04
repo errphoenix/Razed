@@ -224,7 +224,7 @@ impl VoxelGrid {
     }
 
     pub fn get(&self, cell: Cell) -> Option<VoxelIndex> {
-        self.voxels.get(&cell).copied()
+        self.voxels.get(cell).copied()
     }
 
     pub fn options(&self) -> &VoxelGridOptions {

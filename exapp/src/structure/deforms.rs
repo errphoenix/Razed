@@ -499,7 +499,7 @@ impl DeformSystem {
             .take(CONTROL_POINTS_COUNT)
             .enumerate()
             .for_each(|(i, cell)| {
-                let node = *node_hash.get(&cell).expect("query is of populated node");
+                let node = *node_hash.get(cell).expect("query is of populated node");
 
                 // SAFETY:
                 // we assume node_hash has been loaded with the nodes of
