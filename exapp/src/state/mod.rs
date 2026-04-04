@@ -97,6 +97,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         >,
         command_queue: &mut ethel::render::command::GpuCommandQueue<ethel::DrawCommand>,
     ) {
+        let t0 = Instant::now();
         // command_queue.push(DrawArraysIndirectCommand {
         //     count: 36,
         //     instance_count: self.renderables.len() as u32,
@@ -266,6 +267,8 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         });
 
         command_queue.clear();
+        let t1 = Instant::now();
+        println!("upload to gpu: {} nanos", (t1 - t0).as_nanos());
     }
 
     fn step(
@@ -275,6 +278,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         view_point: &mut janus::sync::Mirror<camera::ViewPoint>,
         delta: janus::context::DeltaTime,
     ) {
+        let t0 = Instant::now();
         view_point.sync().unwrap();
 
         if !input.cursor_options().grabbed {
@@ -337,80 +341,124 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             });
         }
 
-        const WIND_FORCE: f32 = 2.0;
+        const WIND_FORCE: f32 = 1.1;
         self.lattice
-            .apply_forces_batched(glam::vec3(WIND_FORCE, -9.81, WIND_FORCE));
+            .apply_forces_batched(glam::vec3(0.0, -9.81 * WIND_FORCE, 0.0));
 
         {
-            self.lattice.register_dead_nodes();
+            {
+                let t0 = Instant::now();
+                self.lattice.register_dead_nodes();
+                let t1 = Instant::now();
+                println!(
+                    "lattice dmg (gather degens): {} nanos",
+                    (t1 - t0).as_nanos()
+                )
+            }
             let damaged_nodes = self.lattice.unique_damaged_nodes_frame();
             let degenerate_nodes = self.lattice.frame_degenerate_nodes();
 
-            let lattice = NodesRowTableView::from(self.lattice.nodes());
-            self.deforms.clear_damage_buffers();
-            self.deforms.sync_lattice_damage(degenerate_nodes);
-            self.deforms.constrain_v3(&lattice);
-            self.deforms.process_damage(&lattice);
-            let deleted_points = self.deforms.deleted_points_frame();
-            let deforms = DeformsRowTableView::from(self.deforms.data());
-
-            self.fragments.clear_damage_buffer();
-            self.fragments.sync_lattice_damage(damaged_nodes);
-            self.fragments.sync_deform_damage(deleted_points, &deforms);
-            self.fragments.compute_world_positions(&deforms);
-
-            // todo: rewrite this whole thing
-            let disabled_frags = self.fragments.frame_disabled_frags();
-            if disabled_frags.len() > 0 {
-                // todo: do not do this at all
-                let mut buffer = vec![
-                    (glam::Vec3::ZERO, glam::Vec3::ZERO, glam::Vec3::ZERO, 0.0);
-                    disabled_frags.len()
-                ];
-
-                for &frag_index in disabled_frags {
-                    if frag_index.as_int() == 0 {
-                        continue;
-                    }
-
-                    let data = self.fragments.fragments();
-                    let position = data.world_position_slice()[frag_index.as_index()];
-                    let mass_coeff = data.mass_coeff_slice()[frag_index.as_index()];
-                    let integrity = data.integrity_slice()[frag_index.as_index()];
-                    let mass = integrity * mass_coeff;
-
-                    buffer.push((position, glam::Vec3::ZERO, glam::Vec3::ZERO, mass));
-                }
-
-                println!("creating {} debris", buffer.len());
-                buffer.drain(..).for_each(|(p, v, f, w)| {
-                    self.fragments
-                        .debris_mut()
-                        .insert((FragmentState::Debris, 0, p, v, f, w));
-                });
+            {
+                let t0 = Instant::now();
+                let lattice = NodesRowTableView::from(self.lattice.nodes());
+                self.deforms.clear_damage_buffers();
+                self.deforms.sync_lattice_damage(degenerate_nodes);
+                self.deforms.constrain_v3(&lattice);
+                self.deforms.process_damage(&lattice);
+                let t1 = Instant::now();
+                println!(
+                    "deform dmg (sync lattice, constrain, finalize): {} nanos",
+                    (t1 - t0).as_nanos()
+                )
             }
 
-            // for &(frag_index, _) in broken_frags {
-            //     let renderable_id = *unsafe { self.frag_map.get_unchecked(frag_index.as_index()) };
-            //     let entity_id = self.renderables[renderable_id as usize].data_handle;
-            //     let e_index = unsafe { self.entity_data.solve_indirect_unchecked(entity_id) };
+            {
+                let t0 = Instant::now();
+                let deleted_points = self.deforms.deleted_points_frame();
+                let deforms = DeformsRowTableView::from(self.deforms.data());
+                self.fragments.clear_damage_buffer();
+                self.fragments.sync_lattice_damage(damaged_nodes);
+                self.fragments.sync_deform_damage(deleted_points, &deforms);
+                self.fragments.compute_world_positions(&deforms);
+                let t1 = Instant::now();
+                println!(
+                    "fragment dmg (sync lattice, sync_deform, compute world pos): {} nanos",
+                    (t1 - t0).as_nanos()
+                )
+            }
 
-            //     let pos = unsafe {
-            //         self.entity_data
-            //             .position_mut_slice()
-            //             .get_unchecked_mut(e_index.as_index())
-            //     };
+            {
+                let t0 = Instant::now();
+                // todo: rewrite this whole thing
+                let disabled_frags = self.fragments.frame_disabled_frags();
+                if disabled_frags.len() > 0 {
+                    // todo: do not do this at all
+                    let mut buffer =
+                        vec![
+                            (glam::Vec3::ZERO, glam::Vec3::ZERO, glam::Vec3::ZERO, 0.0);
+                            disabled_frags.len()
+                        ];
 
-            //     pos.w = 0.0;
-            // }
+                    for &frag_index in disabled_frags {
+                        if frag_index.as_int() == 0 {
+                            continue;
+                        }
+
+                        let data = self.fragments.fragments();
+                        let position = data.world_position_slice()[frag_index.as_index()];
+                        let mass_coeff = data.mass_coeff_slice()[frag_index.as_index()];
+                        let integrity = data.integrity_slice()[frag_index.as_index()];
+                        let mass = integrity * mass_coeff;
+
+                        buffer.push((position, glam::Vec3::splat(-0.1), glam::Vec3::ZERO, mass));
+                    }
+
+                    println!("creating {} debris", buffer.len());
+                    buffer
+                        .drain(..)
+                        .for_each(|(position, velocity, forces, mass)| {
+                            self.fragments.debris_mut().insert((
+                                FragmentState::Debris,
+                                0,
+                                position,
+                                glam::Quat::IDENTITY,
+                                velocity,
+                                glam::Vec3::ZERO,
+                                forces,
+                                glam::Vec3::ZERO,
+                                mass,
+                                glam::Mat3::IDENTITY,
+                                glam::Mat3::IDENTITY,
+                            ));
+                        });
+                }
+                let t1 = Instant::now();
+                println!(
+                    "generate debris (inefficient): {} nanos",
+                    (t1 - t0).as_nanos()
+                )
+            }
         }
 
-        self.lattice.update(delta);
-
-        let lattice = NodesRowTableView::from(self.lattice.nodes());
-        self.deforms.deform(&lattice);
-
-        self.fragments.simulate_debris(delta);
+        {
+            let t0 = Instant::now();
+            self.lattice.update(delta);
+            let t1 = Instant::now();
+            println!("lattice pass: {} nanos", (t1 - t0).as_nanos())
+        }
+        {
+            let t0 = Instant::now();
+            let lattice = NodesRowTableView::from(self.lattice.nodes());
+            self.deforms.deform(&lattice);
+            let t1 = Instant::now();
+            println!("deform pass: {} nanos", (t1 - t0).as_nanos())
+        }
+        {
+            let t0 = Instant::now();
+            self.fragments.simulate_debris(delta);
+            let t1 = Instant::now();
+            println!("deform physics pass: {} nanos", (t1 - t0).as_nanos())
+        }
 
         // random demo
         if input.keys().key_pressed(janus::input::KeyCode::KeyH) {
@@ -450,6 +498,9 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 opt.grabbed = false;
             });
         }
+
+        let t1 = Instant::now();
+        println!("total step: {} nanos", (t1 - t0).as_nanos());
     }
 }
 

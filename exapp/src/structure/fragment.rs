@@ -3,7 +3,7 @@ use ethel::state::data::{
 };
 use glam::Vec4Swizzles;
 use janus::context::DeltaTime;
-use physics::{particle::ParticleSolver, xpbd::NodesRowTableView};
+use physics::{rigid::RigidBodySolver, xpbd::NodesRowTableView};
 use rustc_hash::FxHashSet;
 
 use crate::{structure::deforms::DeformsRowTableView, voxel::VoxelGrid};
@@ -74,9 +74,14 @@ ethel::table_spec! {
         rotation: glam::Quat;
 
         velocity: glam::Vec3;
+        angular_velocity: glam::Vec3;
+
         forces: glam::Vec3;
+        torques: glam::Vec3;
 
         mass: f32;
+        inv_inertia_loc: glam::Mat3;
+        inv_inertia_abs: glam::Mat3;
     }
 }
 
@@ -111,7 +116,7 @@ pub struct FragmentSystem {
     uninitialised: Vec<UninitFragment>,
 
     debris: DebrisRowTable,
-    debris_phys: ParticleSolver,
+    debris_phys: RigidBodySolver,
 
     /// sparse map of deform ID to sequence of fragment IDs
     deform_map: Vec<Vec<IndirectIndex>>,
@@ -141,7 +146,7 @@ impl FragmentSystem {
             uninitialised: Vec::new(),
 
             debris: DebrisRowTable::new(),
-            debris_phys: ParticleSolver::default(),
+            debris_phys: RigidBodySolver::default(),
 
             // account for degenerate
             deform_map: vec![Vec::new()],
@@ -168,7 +173,7 @@ impl FragmentSystem {
             uninitialised: Vec::with_capacity(capacity),
 
             debris: DebrisRowTable::with_capacity(capacity),
-            debris_phys: ParticleSolver::default(),
+            debris_phys: RigidBodySolver::default(),
 
             deform_map,
             node_map,
@@ -227,13 +232,29 @@ impl FragmentSystem {
 
     pub fn simulate_debris(&mut self, delta: DeltaTime) {
         let positions = &mut self.debris.position;
+        let rotations = &mut self.debris.rotation;
         let velocities = &mut self.debris.velocity;
+        let ang_velocities = &mut self.debris.angular_velocity;
         let forces = &mut self.debris.forces;
+        let torques = &mut self.debris.torques;
         let masses = &self.debris.mass;
+        let inv_inertia_loc = &self.debris.inv_inertia_loc;
+        let inv_inertia_abs = &mut self.debris.inv_inertia_abs;
 
-        self.debris_phys.pre_pass_gravity(forces);
         self.debris_phys
-            .step(positions, velocities, forces, masses, delta);
+            .pre_pass_inertia(rotations, inv_inertia_loc, inv_inertia_abs);
+        self.debris_phys.pre_pass_gravity(forces, torques);
+        self.debris_phys.step(
+            positions,
+            rotations,
+            velocities,
+            ang_velocities,
+            forces,
+            torques,
+            masses,
+            inv_inertia_abs,
+            delta,
+        );
     }
 
     pub fn fragments(&self) -> &FragmentsRowTable {
