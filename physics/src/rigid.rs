@@ -14,7 +14,7 @@ pub struct RigidBodyOptions {
 
 pub const DEFAULT_GRAVITY: f32 = 9.807;
 pub const DEFAULT_DAMPING: f32 = 0.85;
-pub const DEFAULT_RESTITUTION: f32 = 0.225;
+pub const DEFAULT_RESTITUTION: f32 = 0.125;
 
 const INTERNAL_STEP_MULT: f32 = 1.0;
 
@@ -133,36 +133,33 @@ impl RigidBodySolver {
 
     pub fn solve_collisions(
         &mut self,
-        positions: &[glam::Vec3],
-        forces: &mut [glam::Vec3],
-        torques: &mut [glam::Vec3],
+        positions: &mut [glam::Vec3],
+        velocities: &mut [glam::Vec3],
+        ang_velocities: &mut [glam::Vec3],
         id_map: &[IndirectIndex],
     ) {
         self.collision_buffer.drain(..).for_each(|collision| {
-            let contact = collision.point;
             let index0 = collision.index_a;
             let index1 = collision.index_b;
             let id0 = id_map[index0.as_index()].as_index();
             let id1 = id_map[index1.as_index()].as_index();
 
-            {
-                let p0 = positions[id0];
-                let f0 = &mut forces[id0];
-                let t0 = &mut torques[id0];
+            let correction = collision.depth * collision.normal;
+            positions[id0] += correction * 0.5;
+            positions[id1] -= correction * 0.5;
 
-                let d0 = (p0 - contact).normalize();
-                *f0 += d0;
-                *t0 += d0;
-            }
+            let rel_v = velocities[id0] - velocities[id1];
+            let d_v = rel_v.dot(collision.normal);
 
-            {
-                let p1 = positions[id1];
-                let f1 = &mut forces[id1];
-                let t1 = &mut torques[id1];
+            if d_v < 0.0 && collision.depth > 0.0 {
+                let j = -(1.0 - self.options.restitution) * d_v;
+                let impulse = collision.normal * j;
 
-                let d1 = (p1 - contact).normalize();
-                *f1 += d1;
-                *t1 += d1;
+                velocities[id0] += impulse * 0.5;
+                velocities[id1] -= impulse * 0.5;
+
+                ang_velocities[id0] *= 0.8;
+                ang_velocities[id1] *= 0.8;
             }
         });
     }
@@ -201,7 +198,6 @@ impl RigidBodySolver {
         delta: DeltaTime,
     ) {
         let h = delta.as_f32() * self.options.step_multiplier * INTERNAL_STEP_MULT;
-        let h2 = h * h;
 
         velocities
             .iter_mut()

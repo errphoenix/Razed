@@ -245,10 +245,12 @@ impl FragmentSystem {
         let volumes = &self.debris.volume;
         let handles = &self.debris.handles;
 
-        self.debris_phys
-            .detect_collisions(positions, volumes, handles);
-        self.debris_phys
-            .solve_collisions(positions, forces, torques, handles);
+        for _ in 0..3 {
+            self.debris_phys
+                .detect_collisions(positions, volumes, handles);
+            self.debris_phys
+                .solve_collisions(positions, velocities, ang_velocities, handles);
+        }
 
         self.debris_phys
             .pre_pass_inertia(rotations, inv_inertia_loc, inv_inertia_abs);

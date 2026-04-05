@@ -7,6 +7,7 @@ pub struct Sphere {
 
 impl Sphere {
     pub const UNIT: Self = Self::new(1.0);
+    pub const HALF_UNIT: Self = Self::new(0.5);
 
     pub const fn new(radius: f32) -> Self {
         Self { radius }
@@ -22,13 +23,15 @@ impl Sphere {
 
 /// A very basic collision.
 ///
-/// Stores the indices of the bodies involved and the single point of contact.
+/// Stores the indices of the bodies involved, and contact data (direction
+/// and depth).
 ///
 /// The indices of the bodies depend on the ID map passed to the collision
 /// detection function, they are intended to be global indices.
 #[derive(Debug, Clone, Copy)]
 pub struct LightCollision {
-    pub point: glam::Vec3,
+    pub normal: glam::Vec3,
+    pub depth: f32,
     pub index_a: IndirectIndex,
     pub index_b: IndirectIndex,
 }
@@ -55,14 +58,18 @@ pub fn detect_n2(
             let v1 = volumes[j];
 
             let d_sq = p0.distance_squared(p1);
-            if v0.intersects(v1, d_sq) {
-                let m = p0.midpoint(p1);
+            if v0.intersects(v1, d_sq) && d_sq > 0.01 {
+                let d = d_sq.sqrt();
+                let dir = p0 - p1;
+                let n = dir.normalize_or_zero();
+                let depth = v0.radius + v1.radius - d;
 
                 let id0 = id_map[i];
                 let id1 = id_map[j];
 
                 results.push(LightCollision {
-                    point: m,
+                    normal: n,
+                    depth,
                     index_a: id0,
                     index_b: id1,
                 });
