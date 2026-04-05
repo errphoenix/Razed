@@ -341,7 +341,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             });
         }
 
-        const WIND_FORCE: f32 = 1.1;
+        const WIND_FORCE: f32 = 1.0;
         self.lattice
             .apply_forces_batched(glam::vec3(0.0, -9.81 * WIND_FORCE, 0.0));
 
@@ -410,7 +410,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                         let integrity = data.integrity_slice()[frag_index.as_index()];
                         let mass = integrity * mass_coeff;
 
-                        buffer.push((position, glam::Vec3::splat(-0.1), glam::Vec3::ZERO, mass));
+                        buffer.push((position, glam::Vec3::ZERO, glam::Vec3::ZERO, mass));
                     }
 
                     println!("creating {} debris", buffer.len());

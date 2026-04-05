@@ -14,7 +14,7 @@ pub struct RigidBodyOptions {
 
 pub const DEFAULT_GRAVITY: f32 = 9.807;
 pub const DEFAULT_DAMPING: f32 = 0.85;
-pub const DEFAULT_RESTITUTION: f32 = 0.125;
+pub const DEFAULT_RESTITUTION: f32 = 0.025;
 
 const INTERNAL_STEP_MULT: f32 = 1.0;
 
@@ -182,8 +182,8 @@ impl RigidBodySolver {
     pub fn pre_pass_gravity(&self, forces: &mut [glam::Vec3], torques: &mut [glam::Vec3]) {
         forces.iter_mut().for_each(|f| f.y -= self.options.gravity);
         torques.iter_mut().for_each(|t| {
-            t.x += self.options.gravity;
-            t.z += self.options.gravity;
+            t.x += self.options.gravity * 0.5;
+            t.z += self.options.gravity * 0.5;
         });
     }
 
@@ -213,7 +213,7 @@ impl RigidBodySolver {
             .zip(inertia)
             .for_each(|((v, t), i)| {
                 let t = std::mem::take(t);
-                *v += h * i.mul_vec3(t) + f32::EPSILON;
+                *v += h * i.mul_vec3(t);
             });
     }
 

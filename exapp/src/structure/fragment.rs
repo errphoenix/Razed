@@ -599,7 +599,7 @@ impl FragmentSystem {
                 [0f32; ANCHORS_COUNT],
                 position,
                 1.0, // todo: health contribution
-                1.0, // todo: debris rigid body
+                0.5, // todo: debris rigid body
                 1.0, // todo: damage and integrity
                 fragment_world,
             ));
