@@ -388,16 +388,17 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             }
 
             {
-                let t0 = Instant::now();
-                // todo: rewrite this whole thing
                 let disabled_frags = self.fragments.frame_disabled_frags();
                 if disabled_frags.len() > 0 {
-                    // todo: do not do this at all
-                    let mut buffer =
-                        vec![
-                            (glam::Vec3::ZERO, glam::Vec3::ZERO, glam::Vec3::ZERO, 0.0);
-                            disabled_frags.len()
-                        ];
+                    struct DebrisData {
+                        position: glam::Vec3,
+                        velocity: glam::Vec3,
+                        forces: glam::Vec3,
+                        torque: glam::Vec3,
+                        mass: f32,
+                    }
+
+                    let mut buffer = Vec::<DebrisData>::with_capacity(disabled_frags.len());
 
                     for &frag_index in disabled_frags {
                         if frag_index.as_int() == 0 {
@@ -410,13 +411,24 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                         let integrity = data.integrity_slice()[frag_index.as_index()];
                         let mass = integrity * mass_coeff;
 
-                        buffer.push((position, glam::Vec3::ZERO, glam::Vec3::ZERO, mass));
+                        buffer.push(DebrisData {
+                            position,
+                            velocity: glam::Vec3::ZERO,
+                            forces: glam::Vec3::ZERO,
+                            torque: glam::Vec3::ZERO,
+                            mass,
+                        });
                     }
 
                     println!("creating {} debris", buffer.len());
-                    buffer
-                        .drain(..)
-                        .for_each(|(position, velocity, forces, mass)| {
+                    buffer.drain(..).for_each(
+                        |DebrisData {
+                             position,
+                             velocity,
+                             forces,
+                             torque,
+                             mass,
+                         }| {
                             self.fragments.debris_mut().insert((
                                 FragmentState::Debris,
                                 0,
@@ -425,19 +437,15 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                                 velocity,
                                 glam::Vec3::ZERO,
                                 forces,
-                                glam::Vec3::ZERO,
+                                torque,
                                 mass,
                                 glam::Mat3::IDENTITY,
                                 glam::Mat3::IDENTITY,
-                                ::physics::Sphere::UNIT,
+                                ::physics::Sphere::new(0.65),
                             ));
-                        });
+                        },
+                    );
                 }
-                let t1 = Instant::now();
-                println!(
-                    "generate debris (inefficient): {} nanos",
-                    (t1 - t0).as_nanos()
-                )
             }
         }
 
