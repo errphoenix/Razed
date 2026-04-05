@@ -393,6 +393,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     struct DebrisData {
                         position: glam::Vec3,
                         velocity: glam::Vec3,
+                        ang_velocity: glam::Vec3,
                         forces: glam::Vec3,
                         torque: glam::Vec3,
                         mass: f32,
@@ -406,15 +407,34 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                         }
 
                         let data = self.fragments.fragments();
-                        let position = data.world_position_slice()[frag_index.as_index()];
-                        let mass_coeff = data.mass_coeff_slice()[frag_index.as_index()];
-                        let integrity = data.integrity_slice()[frag_index.as_index()];
+                        let position = data.world_position[frag_index.as_index()];
+                        let mass_coeff = data.mass_coeff[frag_index.as_index()];
+                        let integrity = data.integrity[frag_index.as_index()];
                         let mass = integrity * mass_coeff;
+
+                        let mut inherit_v = glam::Vec3::ZERO;
+                        let mut inherit_a = glam::Vec3::ZERO;
+                        let mut inherit_av = glam::Vec3::ZERO;
+                        {
+                            let lattice = NodesRowTableView::from(self.lattice.nodes());
+                            let parents = data.parents[frag_index.as_index()];
+                            parents.iter().for_each(|id| {
+                                let velocity = lattice.velocity(*id);
+                                let forces = lattice.forces(*id);
+                                inherit_v += velocity;
+                                inherit_a += forces;
+
+                                let p = lattice.current_pos(*id);
+                                let contact = p.midpoint(position);
+                                inherit_av += contact.cross(*velocity);
+                            });
+                        }
 
                         buffer.push(DebrisData {
                             position,
-                            velocity: glam::Vec3::ZERO,
-                            forces: glam::Vec3::ZERO,
+                            velocity: inherit_v,
+                            ang_velocity: inherit_av,
+                            forces: inherit_a,
                             torque: glam::Vec3::ZERO,
                             mass,
                         });
@@ -424,6 +444,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     buffer.drain(..).for_each(
                         |DebrisData {
                              position,
+                             ang_velocity,
                              velocity,
                              forces,
                              torque,
@@ -435,13 +456,13 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                                 position,
                                 glam::Quat::IDENTITY,
                                 velocity,
-                                glam::Vec3::ZERO,
+                                ang_velocity,
                                 forces,
                                 torque,
                                 mass,
                                 glam::Mat3::IDENTITY,
                                 glam::Mat3::IDENTITY,
-                                ::physics::Sphere::new(0.65),
+                                ::physics::Sphere::new(0.5),
                             ));
                         },
                     );
