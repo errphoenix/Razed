@@ -418,15 +418,16 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                         {
                             let lattice = NodesRowTableView::from(self.lattice.nodes());
                             let parents = data.parents[frag_index.as_index()];
-                            parents.iter().for_each(|id| {
+                            let weights = data.parents_weights[frag_index.as_index()];
+                            parents.iter().zip(weights).for_each(|(id, w)| {
                                 let velocity = lattice.velocity(*id);
                                 let forces = lattice.forces(*id);
-                                inherit_v += velocity;
-                                inherit_a += forces;
+                                inherit_v += velocity * 4.0 * w;
+                                inherit_a += forces * 4.0 * w;
 
                                 let p = lattice.current_pos(*id);
                                 let contact = p.midpoint(position);
-                                inherit_av += contact.cross(*velocity);
+                                inherit_av += contact.cross(*velocity) * 4.0 * w;
                             });
                         }
 

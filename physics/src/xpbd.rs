@@ -313,6 +313,7 @@ pub struct XpbdSolver {
     substeps: u32,
     h: f32,
     h2: f32,
+    step_multiplier: f32,
 
     allow_breaking: bool,
     clear_degenerate_nodes: bool,
@@ -328,10 +329,11 @@ pub struct XpbdSolver {
 impl Default for XpbdSolver {
     fn default() -> Self {
         Self {
-            iterations: DEFAULT_SOLVE_ITERATIONS,
-            substeps: DEFAULT_SUB_STEPS,
             h: 0.0,
             h2: 0.0,
+            iterations: DEFAULT_SOLVE_ITERATIONS,
+            substeps: DEFAULT_SUB_STEPS,
+            step_multiplier: DEFAULT_STEP_MULT,
 
             allow_breaking: true,
             clear_degenerate_nodes: true,
@@ -345,10 +347,13 @@ impl Default for XpbdSolver {
     }
 }
 
+pub const DEFAULT_STEP_MULT: f32 = 1.2;
+
 #[derive(Clone, Copy, Debug)]
 pub struct XpbdOptions {
     pub iterations: u32,
     pub substeps: u32,
+    pub step_multiplier: f32,
     pub allow_breaking: bool,
     pub clear_degenerate_nodes: bool,
     pub ground_level: Option<f32>,
@@ -358,6 +363,7 @@ impl XpbdOptions {
     pub const fn new(
         iterations: u32,
         substeps: u32,
+        step_multiplier: f32,
         allow_breaking: bool,
         clear_degenerate_nodes: bool,
         ground_level: Option<f32>,
@@ -365,6 +371,7 @@ impl XpbdOptions {
         Self {
             iterations,
             substeps,
+            step_multiplier,
             allow_breaking,
             clear_degenerate_nodes,
             ground_level,
@@ -374,6 +381,7 @@ impl XpbdOptions {
     pub const fn with_iterations(self, iterations: u32) -> Self {
         Self {
             iterations,
+            step_multiplier: self.step_multiplier,
             substeps: self.substeps,
             allow_breaking: self.allow_breaking,
             clear_degenerate_nodes: self.clear_degenerate_nodes,
@@ -385,6 +393,7 @@ impl XpbdOptions {
         Self {
             substeps,
             iterations: self.iterations,
+            step_multiplier: self.step_multiplier,
             allow_breaking: self.allow_breaking,
             clear_degenerate_nodes: self.clear_degenerate_nodes,
             ground_level: self.ground_level,
@@ -396,6 +405,7 @@ impl XpbdOptions {
             allow_breaking: breaking,
             iterations: self.iterations,
             substeps: self.substeps,
+            step_multiplier: self.step_multiplier,
             clear_degenerate_nodes: self.clear_degenerate_nodes,
             ground_level: self.ground_level,
         }
@@ -406,8 +416,20 @@ impl XpbdOptions {
             ground_level,
             iterations: self.iterations,
             substeps: self.substeps,
+            step_multiplier: self.step_multiplier,
             allow_breaking: self.allow_breaking,
             clear_degenerate_nodes: self.clear_degenerate_nodes,
+        }
+    }
+
+    pub const fn with_step_multiplier(self, step_multiplier: f32) -> Self {
+        Self {
+            step_multiplier,
+            iterations: self.iterations,
+            substeps: self.substeps,
+            allow_breaking: self.allow_breaking,
+            clear_degenerate_nodes: self.clear_degenerate_nodes,
+            ground_level: self.ground_level,
         }
     }
 }
@@ -417,6 +439,7 @@ impl Default for XpbdOptions {
         Self {
             iterations: DEFAULT_SOLVE_ITERATIONS,
             substeps: DEFAULT_SUB_STEPS,
+            step_multiplier: DEFAULT_STEP_MULT,
             allow_breaking: true,
             clear_degenerate_nodes: true,
             ground_level: None,
@@ -430,8 +453,10 @@ impl XpbdSolver {
         Self {
             h: 0.0,
             h2: 0.0,
+
             iterations: options.iterations,
             substeps: options.substeps,
+            step_multiplier: options.step_multiplier,
 
             allow_breaking: options.allow_breaking,
             clear_degenerate_nodes: options.clear_degenerate_nodes,
@@ -466,7 +491,7 @@ impl XpbdSolver {
 
     #[inline]
     pub const fn set_step_time(&mut self, delta: DeltaTime) {
-        self.h = delta.as_f32() / self.substeps as f32;
+        self.h = delta.as_f32() / self.substeps as f32 * self.step_multiplier;
         self.h2 = self.h * self.h;
     }
 
@@ -573,8 +598,8 @@ impl XpbdSolver {
             // external systems to act on accumulated broken links
             self.broken_links.clear();
 
-            const LAMBDA_STRAIN_THRESHOLD: f32 = 28_000.0;
-            const LAMBDA_COMPRESSION_THRESHOLD: f32 = -12_000.0;
+            const LAMBDA_STRAIN_THRESHOLD: f32 = 10_000.0;
+            const LAMBDA_COMPRESSION_THRESHOLD: f32 = -5_000.0;
 
             for (handle, lambda) in links.handles().iter().zip(links.lambda_slice()) {
                 let force_strain = *lambda / self.h2;

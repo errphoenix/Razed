@@ -1,4 +1,4 @@
-use std::sync::atomic::Ordering;
+use std::{sync::atomic::Ordering, time::Instant};
 
 use ethel::{render::command::GpuCommandDispatch, shader::ShaderHandle};
 
@@ -76,6 +76,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         frame_data: &FrameDataBuffers,
         section: ethel::render::buffer::StorageSection,
     ) {
+        let t0 = Instant::now();
+
         unsafe {
             janus::gl::Clear(janus::gl::COLOR_BUFFER_BIT | janus::gl::DEPTH_BUFFER_BIT);
         }
@@ -151,12 +153,14 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 Some(DEFORM_NODES_POS_SSBO as u32),
             );
 
-            let control_counts = count * deforms::CONTROL_POINTS_COUNT as u32;
-            unsafe {
-                //janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 2, control_counts as i32);
-            }
+            // let control_counts = count * deforms::CONTROL_POINTS_COUNT as u32;
+            // unsafe {
+            //     janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 2, control_counts as i32);
+            // }
         }
 
+        let t1 = Instant::now();
+        println!("render_frame: {} nanos", (t1 - t0).as_nanos());
     }
 
     fn init_resources(&mut self, _resolution: ethel::render::Resolution) {
