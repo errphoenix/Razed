@@ -16,7 +16,7 @@ pub const DEFAULT_GRAVITY: f32 = 9.807;
 pub const DEFAULT_DAMPING: f32 = 0.85;
 pub const DEFAULT_RESTITUTION: f32 = 0.225;
 
-const INTERNAL_STEP_MULT: f32 = 3.2;
+const INTERNAL_STEP_MULT: f32 = 1.0;
 
 impl Default for RigidBodyOptions {
     fn default() -> Self {
@@ -209,7 +209,7 @@ impl RigidBodySolver {
             .zip(masses)
             .for_each(|((v, f), w)| {
                 let f = std::mem::take(f);
-                *v += h2 * f * w;
+                *v += h * f * w;
             });
         ang_velocities
             .iter_mut()
@@ -217,7 +217,7 @@ impl RigidBodySolver {
             .zip(inertia)
             .for_each(|((v, t), i)| {
                 let t = std::mem::take(t);
-                *v += h2 * i.mul_vec3(t) + f32::EPSILON;
+                *v += h * i.mul_vec3(t) + f32::EPSILON;
             });
     }
 
@@ -240,7 +240,7 @@ impl RigidBodySolver {
                 let a = v / l;
                 glam::Quat::from_axis_angle(a, lh)
             };
-            *r *= q;
+            *r = q * *r;
             *r = r.normalize();
         });
     }
@@ -272,8 +272,8 @@ impl RigidBodySolver {
                 .zip(ang_velocities)
                 .for_each(|((p, v), a_v)| {
                     if p.y < ground_level {
-                        p.y = 0.0;
-                        *v *= -self.options.restitution;
+                        p.y = ground_level;
+                        *v *= -self.options.restitution; //todo: friction
                         *a_v *= -self.options.restitution * 2.0;
                     }
                 });
