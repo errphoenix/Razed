@@ -466,7 +466,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             let t0 = Instant::now();
             self.fragments.simulate_debris(delta);
             let t1 = Instant::now();
-            println!("deform physics pass: {} nanos", (t1 - t0).as_nanos())
+            println!("debris physics pass: {} nanos", (t1 - t0).as_nanos())
         }
 
         // random demo

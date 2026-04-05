@@ -164,7 +164,7 @@ impl RigidBodySolver {
         });
     }
 
-    pub fn pre_pass_inertia(
+    pub fn sync_inertia(
         &self,
         rotations: &[glam::Quat],
         inertia_loc: &[glam::Mat3],
@@ -179,12 +179,8 @@ impl RigidBodySolver {
             });
     }
 
-    pub fn pre_pass_gravity(&self, forces: &mut [glam::Vec3], torques: &mut [glam::Vec3]) {
+    pub fn apply_gravity(&self, forces: &mut [glam::Vec3]) {
         forces.iter_mut().for_each(|f| f.y -= self.options.gravity);
-        torques.iter_mut().for_each(|t| {
-            t.x += self.options.gravity * 0.5;
-            t.z += self.options.gravity * 0.5;
-        });
     }
 
     pub fn integrate(
@@ -241,7 +237,7 @@ impl RigidBodySolver {
         });
     }
 
-    pub fn post_damp_velocities(
+    pub fn damp_velocity(
         &self,
         velocities: &mut [glam::Vec3],
         ang_velocities: &mut [glam::Vec3],
@@ -255,7 +251,7 @@ impl RigidBodySolver {
         ang_velocities.iter_mut().for_each(|v| *v *= dh2e);
     }
 
-    pub fn post_ground_constraint(
+    pub fn constrain_ground(
         &self,
         positions: &mut [glam::Vec3],
         velocities: &mut [glam::Vec3],

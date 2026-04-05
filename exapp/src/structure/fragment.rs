@@ -245,16 +245,13 @@ impl FragmentSystem {
         let volumes = &self.debris.volume;
         let handles = &self.debris.handles;
 
-        for _ in 0..3 {
-            self.debris_phys
-                .detect_collisions(positions, volumes, handles);
-            self.debris_phys
-                .solve_collisions(positions, velocities, ang_velocities, handles);
-        }
+        self.debris_phys
+            .detect_collisions(positions, volumes, handles);
+        self.debris_phys
+            .solve_collisions(positions, velocities, ang_velocities, handles);
 
         self.debris_phys
-            .pre_pass_inertia(rotations, inv_inertia_loc, inv_inertia_abs);
-        self.debris_phys.pre_pass_gravity(forces, torques);
+            .sync_inertia(rotations, inv_inertia_loc, inv_inertia_abs);
 
         self.debris_phys.integrate(
             velocities,
@@ -269,9 +266,11 @@ impl FragmentSystem {
             .update_bodies(positions, rotations, velocities, ang_velocities, delta);
 
         self.debris_phys
-            .post_damp_velocities(velocities, ang_velocities, delta);
+            .damp_velocity(velocities, ang_velocities, delta);
         self.debris_phys
-            .post_ground_constraint(positions, velocities, ang_velocities);
+            .constrain_ground(positions, velocities, ang_velocities);
+
+        self.debris_phys.apply_gravity(forces);
     }
 
     pub fn fragments(&self) -> &FragmentsRowTable {
