@@ -1,5 +1,7 @@
 use ethel::state::data::{
-    Column, DirectIndex, IndirectIndex, hash::FxSpatialHash, table::TableView,
+    Column, DirectIndex, IndirectIndex,
+    hash::{FxLsSpatialHash, FxSpatialHash, SpatialResolution},
+    table::TableView,
 };
 use glam::Vec4Swizzles;
 use janus::context::DeltaTime;
@@ -112,6 +114,39 @@ impl UninitFragment {
     }
 }
 
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct DebrisVolumeBuffer {
+    pub positions: Vec<glam::Vec3>,
+    pub volumes: Vec<::physics::Sphere>,
+    pub handles: Vec<IndirectIndex>,
+}
+
+impl DebrisVolumeBuffer {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            positions: Vec::with_capacity(capacity),
+            volumes: Vec::with_capacity(capacity),
+            handles: Vec::with_capacity(capacity),
+        }
+    }
+
+    pub fn push(&mut self, position: glam::Vec3, volume: ::physics::Sphere, handle: IndirectIndex) {
+        self.positions.push(position);
+        self.volumes.push(volume);
+        self.handles.push(handle);
+    }
+
+    pub fn clear(&mut self) {
+        self.positions.clear();
+        self.volumes.clear();
+        self.handles.clear();
+    }
+}
+
 #[derive(Debug)]
 pub struct FragmentSystem {
     fragments: FragmentsRowTable,
@@ -119,6 +154,8 @@ pub struct FragmentSystem {
 
     debris: DebrisRowTable,
     debris_phys: RigidBodySolver,
+    debris_hash: FxLsSpatialHash<DirectIndex>,
+    debris_volume_buffer: DebrisVolumeBuffer,
 
     /// sparse map of deform ID to sequence of fragment IDs
     deform_map: Vec<Vec<IndirectIndex>>,
@@ -141,6 +178,8 @@ impl Default for FragmentSystem {
     }
 }
 
+const DEBRIS_HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(2.0);
+
 impl FragmentSystem {
     pub fn new() -> Self {
         Self {
@@ -149,6 +188,8 @@ impl FragmentSystem {
 
             debris: DebrisRowTable::new(),
             debris_phys: RigidBodySolver::default(),
+            debris_hash: FxLsSpatialHash::new(DEBRIS_HASH_RESOLUTION),
+            debris_volume_buffer: DebrisVolumeBuffer::new(),
 
             // account for degenerate
             deform_map: vec![Vec::new()],
@@ -176,6 +217,8 @@ impl FragmentSystem {
 
             debris: DebrisRowTable::with_capacity(capacity),
             debris_phys: RigidBodySolver::default(),
+            debris_hash: FxLsSpatialHash::with_capacity(DEBRIS_HASH_RESOLUTION, capacity),
+            debris_volume_buffer: DebrisVolumeBuffer::new(),
 
             deform_map,
             node_map,
@@ -232,6 +275,17 @@ impl FragmentSystem {
         &mut self.debris
     }
 
+    pub fn hash_debris(&mut self) {
+        self.debris_hash.clear();
+
+        let positions = &self.debris.position;
+        for i in 1..positions.len() {
+            let pos = positions[i];
+            let cell = self.debris_hash.cell_at(pos);
+            self.debris_hash.put(cell, DirectIndex::from_index(i));
+        }
+    }
+
     pub fn simulate_debris(&mut self, delta: DeltaTime) {
         let positions = &mut self.debris.position;
         let rotations = &mut self.debris.rotation;
@@ -245,8 +299,28 @@ impl FragmentSystem {
         let volumes = &self.debris.volume;
         let handles = &self.debris.handles;
 
-        self.debris_phys
-            .detect_collisions(positions, volumes, handles);
+        self.debris_hash
+            .elements()
+            .filter(|vec| !vec.is_empty())
+            .for_each(|debris| {
+                self.debris_volume_buffer.clear();
+
+                debris.iter().for_each(|index| {
+                    let position = positions[index.as_index()];
+                    let volume = volumes[index.as_index()];
+                    let handle = handles[index.as_index()];
+                    self.debris_volume_buffer.push(position, volume, handle);
+                });
+
+                let DebrisVolumeBuffer {
+                    positions,
+                    volumes,
+                    handles,
+                } = &self.debris_volume_buffer;
+
+                self.debris_phys
+                    .detect_collisions(positions, volumes, handles);
+            });
         self.debris_phys
             .solve_collisions(positions, velocities, ang_velocities, handles);
 
