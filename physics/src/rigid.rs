@@ -13,8 +13,8 @@ pub struct RigidBodyOptions {
 }
 
 pub const DEFAULT_GRAVITY: f32 = 9.807;
-pub const DEFAULT_DAMPING: f32 = 0.85;
-pub const DEFAULT_RESTITUTION: f32 = 0.025;
+pub const DEFAULT_DAMPING: f32 = 0.725;
+pub const DEFAULT_RESTITUTION: f32 = 0.001;
 
 const INTERNAL_STEP_MULT: f32 = 1.0;
 
@@ -158,8 +158,8 @@ impl RigidBodySolver {
                 velocities[id0] += impulse * 0.5;
                 velocities[id1] -= impulse * 0.5;
 
-                ang_velocities[id0] *= 0.8;
-                ang_velocities[id1] *= 0.8;
+                ang_velocities[id0] *= 0.5;
+                ang_velocities[id1] *= 0.5;
             }
         });
     }
@@ -265,7 +265,9 @@ impl RigidBodySolver {
                 .for_each(|((p, v), a_v)| {
                     if p.y < ground_level {
                         p.y = ground_level;
-                        *v *= -self.options.restitution; //todo: friction
+                        v.y *= -self.options.restitution; //todo: friction
+                        v.x *= 0.001;
+                        v.z *= 0.001;
                         *a_v *= -self.options.restitution * 2.0;
                     }
                 });

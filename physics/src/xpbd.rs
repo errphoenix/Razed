@@ -347,7 +347,7 @@ impl Default for XpbdSolver {
     }
 }
 
-pub const DEFAULT_STEP_MULT: f32 = 1.2;
+pub const DEFAULT_STEP_MULT: f32 = 1.1;
 
 #[derive(Clone, Copy, Debug)]
 pub struct XpbdOptions {
