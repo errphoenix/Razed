@@ -10,11 +10,13 @@ pub struct RigidBodyOptions {
     step_multiplier: f32,
     damping: f32,
     restitution: f32,
+    friction: f32,
 }
 
 pub const DEFAULT_GRAVITY: f32 = 9.807;
 pub const DEFAULT_DAMPING: f32 = 0.725;
 pub const DEFAULT_RESTITUTION: f32 = 0.001;
+pub const DEFAULT_FRICTION: f32 = 0.00215;
 
 const INTERNAL_STEP_MULT: f32 = 1.0;
 
@@ -26,6 +28,7 @@ impl Default for RigidBodyOptions {
             step_multiplier: 1.0,
             damping: DEFAULT_DAMPING,
             restitution: DEFAULT_RESTITUTION,
+            friction: DEFAULT_FRICTION,
         }
     }
 }
@@ -37,6 +40,7 @@ impl RigidBodyOptions {
         step_multiplier: f32,
         damping: f32,
         restitution: f32,
+        friction: f32,
     ) -> Self {
         Self {
             gravity,
@@ -44,6 +48,7 @@ impl RigidBodyOptions {
             step_multiplier,
             damping,
             restitution,
+            friction,
         }
     }
 
@@ -54,6 +59,7 @@ impl RigidBodyOptions {
             step_multiplier: self.step_multiplier,
             damping: self.damping,
             restitution: self.restitution,
+            friction: self.friction,
         }
     }
 
@@ -64,6 +70,7 @@ impl RigidBodyOptions {
             step_multiplier: self.step_multiplier,
             damping: self.damping,
             restitution: self.restitution,
+            friction: self.friction,
         }
     }
 
@@ -74,6 +81,7 @@ impl RigidBodyOptions {
             ground_level: self.ground_level,
             damping: self.damping,
             restitution: self.restitution,
+            friction: self.friction,
         }
     }
 
@@ -84,6 +92,7 @@ impl RigidBodyOptions {
             ground_level: self.ground_level,
             step_multiplier: self.step_multiplier,
             restitution: self.restitution,
+            friction: self.friction,
         }
     }
 
@@ -94,6 +103,18 @@ impl RigidBodyOptions {
             ground_level: self.ground_level,
             step_multiplier: self.step_multiplier,
             damping: self.damping,
+            friction: self.friction,
+        }
+    }
+
+    pub fn with_friction(self, friction: f32) -> Self {
+        Self {
+            friction,
+            gravity: self.gravity,
+            ground_level: self.ground_level,
+            step_multiplier: self.step_multiplier,
+            damping: self.damping,
+            restitution: self.restitution,
         }
     }
 }
@@ -265,9 +286,9 @@ impl RigidBodySolver {
                 .for_each(|((p, v), a_v)| {
                     if p.y < ground_level {
                         p.y = ground_level;
-                        v.y *= -self.options.restitution; //todo: friction
-                        v.x *= 0.001;
-                        v.z *= 0.001;
+                        v.y *= -self.options.restitution;
+                        v.x *= self.options.friction;
+                        v.z *= self.options.friction;
                         *a_v *= -self.options.restitution * 2.0;
                     }
                 });
