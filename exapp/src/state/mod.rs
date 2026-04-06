@@ -422,12 +422,12 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                             parents.iter().zip(weights).for_each(|(id, w)| {
                                 let velocity = lattice.velocity(*id);
                                 let forces = lattice.forces(*id);
-                                inherit_v += velocity * 4.0 * w;
-                                inherit_a += forces * 4.0 * w;
+                                inherit_v += velocity * w;
+                                inherit_a += forces * w;
 
                                 let p = lattice.current_pos(*id);
                                 let contact = p.midpoint(position);
-                                inherit_av += contact.cross(*velocity) * 4.0 * w;
+                                inherit_av += contact.cross(*velocity) * w;
                             });
                         }
 

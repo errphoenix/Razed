@@ -324,6 +324,7 @@ impl FragmentSystem {
         self.debris_phys
             .solve_collisions(positions, velocities, ang_velocities, handles);
 
+        self.debris_phys.apply_gravity(forces);
         self.debris_phys
             .sync_inertia(rotations, inv_inertia_loc, inv_inertia_abs);
 
@@ -343,8 +344,6 @@ impl FragmentSystem {
             .damp_velocity(velocities, ang_velocities, delta);
         self.debris_phys
             .constrain_ground(positions, velocities, ang_velocities);
-
-        self.debris_phys.apply_gravity(forces);
     }
 
     pub fn fragments(&self) -> &FragmentsRowTable {
