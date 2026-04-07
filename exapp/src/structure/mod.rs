@@ -22,9 +22,9 @@ pub fn create_structure_lattice(
 
     const MASS: f32 = 100.0;
 
-    const VERY_STIFF_COMPL: f32 = 0.1e-6;
-    const STIFF_COMPL: f32 = 0.15e-4;
-    const SOFT_COMPL: f32 = 0.17e-2;
+    const VERY_STIFF_COMPL: f32 = 0.1e-7;
+    const STIFF_COMPL: f32 = 0.25e-5;
+    const SOFT_COMPL: f32 = 0.5e-1;
 
     const STRONG_LINK: XpbdLinkOptions = XpbdLinkOptions::new(VERY_STIFF_COMPL);
     const MID_LINK: XpbdLinkOptions = XpbdLinkOptions::new(STIFF_COMPL);
