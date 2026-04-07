@@ -387,6 +387,9 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 )
             }
 
+            self.deforms.delete_dead_points();
+            println!("deform count: {}", self.deforms.data().len());
+
             {
                 let disabled_frags = self.fragments.frame_disabled_frags();
                 if disabled_frags.len() > 0 {

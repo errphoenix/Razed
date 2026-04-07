@@ -63,17 +63,16 @@ impl DeformSystem {
         &self.node_map
     }
 
-    /// Slice of indirect indices to all points deleted during the last
-    /// constrain pass.
+    /// Slice of indirect indices to all points that may be deleted.
     ///
-    /// Note: by this point, all the deform points returned by this function
-    /// have already been freed from their tables and are no longer accessible.
-    ///
-    /// This data must only be used as a back-reference to other systems that
-    /// rely on indirect indices to track deforms and need to track their
-    /// lifetime.
+    /// Tip: they probably should. You can do this with
+    /// [`delete_dead_points`](Self::delete_dead_points);
     pub fn deleted_points_frame(&self) -> &[IndirectIndex] {
         &self.deleted_points
+    }
+
+    pub fn delete_dead_points(&mut self) {
+        self.data.free_many(&self.deleted_points);
     }
 
     pub fn clear_damage_buffers(&mut self) {
@@ -122,12 +121,8 @@ impl DeformSystem {
         self.damaged_buffer.drain(..).for_each(|indirect| {
             let ii = IndirectIndex::from_index(indirect.as_index());
 
-            // temporary: do not delete, reset bind pose to 0 to avoid clutter
-            // from disabled deforms
-            //self.data.free(ii);
             let di = self.data.solve_indirect(ii).unwrap();
             self.data.pose[di.as_index()] = glam::Vec3::ZERO;
-
             self.deleted_points.push(ii);
         });
     }
