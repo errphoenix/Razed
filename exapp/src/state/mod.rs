@@ -16,15 +16,16 @@ use crate::{
 };
 use ::physics::xpbd::{LatticeIds, NodesRowTableView, XpbdLatticeBuilder, XpbdOptions, XpbdSolver};
 use ethel::{
-    render::{ScreenSpace, command::DrawArraysIndirectCommand},
+    render::{Resolution, ScreenSpace, command::DrawArraysIndirectCommand},
     state::{
-        camera,
+        camera::{self, ViewPoint},
         data::{
             Column, IndirectIndex,
             hash::{FxSpatialHash, SpatialResolution},
         },
     },
 };
+use janus::context::DeltaTime;
 use tracing::{Level, event};
 
 ethel::table_spec! {
@@ -277,284 +278,49 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         view_point.sync().unwrap();
 
         if input.keys().key_pressed(janus::input::KeyCode::KeyP) {
-            let path = PathBuf::from_str("framestack_latest.bin").unwrap();
-            if path.exists() {
-                if let Ok(creation_time) = path.metadata().map(|meta| meta.created()).flatten() {
-                    let date: chrono::DateTime<chrono::Utc> = creation_time.into();
-                    let formatted_date = date.format("%d_%m_%y-%H_%M_%S");
-                    let new_path = format!("framestack_old_{}.bin", formatted_date);
-
-                    std::fs::rename(&path, new_path)
-                        .expect("assumed user has sufficient permissions");
-
-                    event!(
-                        Level::INFO,
-                        "Created backup of previous latest framestack file to: framestack_old_{}.bin",
-                        formatted_date
-                    )
-                } else {
-                    event!(
-                        Level::WARN,
-                        "There was an error trying to backup the previous framestack_latest file: it will be deleted."
-                    );
-                    std::fs::remove_file(&path).expect("assumed user has file delete permissions");
-                }
-            }
-
-            let mut out = BufWriter::new(std::fs::File::create(&path).unwrap());
-            self.profiler.present_encoded(&mut out).unwrap();
-            event!(
-                Level::INFO,
-                "Exported performance statistics to file: {:?}",
-                path.canonicalize().unwrap()
-            );
+            self.save_profiler_report();
         }
 
-        self.profiler.capture_duration("select_raycast", || {
-            if !input.cursor_options().grabbed {
-                screen.sync().unwrap();
+        if !input.cursor_options().grabbed {
+            screen.sync().unwrap();
+            self.select_lattice_raycast(input, screen.get(), view_point.get());
+        } else {
+            let (dx, dy) = input.cursor().delta_f32();
+            let (dx, dy) = (dx.to_radians(), dy.to_radians());
+            self.camera.update(dx, dy);
 
-                if let Some(selected) = self.selection.take()
-                    && input.keys().key_pressed(janus::input::KeyCode::Delete)
-                {
-                    self.lattice.break_constraint(selected);
-                }
+            let dw = *input.mouse_wheel();
+            *self.camera.distance_mut() -= dw * delta.as_f32() * 100.0;
 
-                let cursor = input.cursor().current_f32();
-                let inverse_view = view_point.into_mat4();
-
-                let mouse_world_dir = screen.to_world_space(cursor, inverse_view);
-                if input.keys().key_pressed(janus::input::KeyCode::Space) {
-                    let dy = mouse_world_dir.y;
-                    if dy.abs() > 0.001 {
-                        let t = -view_point.position.y / dy;
-                        let anchor = view_point.position + mouse_world_dir * t;
-                        self.camera.set_anchor(anchor);
-                    }
-                }
-
-                let mouse_ray = ::physics::Ray::new(view_point.position, mouse_world_dir);
-
-                let node_positions = self.lattice.nodes().current_pos_slice();
-                let constraints = self.lattice.links().relation_view();
-                let mut closest = None::<f32>;
-
-                for (i, ::physics::xpbd::LinkNodes(a, b)) in constraints.into_iter().enumerate() {
-                    const RAY_SIZE: f32 = 0.05;
-
-                    let a_i = unsafe { self.lattice.nodes().solve_indirect_unchecked(*a) };
-                    let b_i = unsafe { self.lattice.nodes().solve_indirect_unchecked(*b) };
-                    let a_p = *unsafe { node_positions.get_unchecked(a_i.as_index()) };
-                    let b_p = *unsafe { node_positions.get_unchecked(b_i.as_index()) };
-
-                    if let Some(t) =
-                        ::physics::intersect_ray_segment(mouse_ray, (a_p, b_p), RAY_SIZE)
-                    {
-                        if let Some(ct) = closest
-                            && t > ct
-                        {
-                            continue;
-                        }
-
-                        closest = Some(t);
-                        self.selection = self.lattice.links().handles().get(i).copied();
-                    }
-                }
-            } else {
-                let (dx, dy) = input.cursor().delta_f32();
-                let (dx, dy) = (dx.to_radians(), dy.to_radians());
-                self.camera.update(dx, dy);
-
-                let dw = *input.mouse_wheel();
-                *self.camera.distance_mut() -= dw * delta.as_f32() * 100.0;
-
-                view_point.publish_with(|vp| {
-                    *vp = *self.camera.viewpoint();
-                });
-            }
-        });
+            view_point.publish_with(|vp| {
+                *vp = *self.camera.viewpoint();
+            });
+        }
 
         const WIND_FORCE: f32 = 1.0;
         self.lattice
             .apply_forces_batched(glam::vec3(0.0, -9.81 * WIND_FORCE, 0.0));
 
-        {
-            self.profiler
-                .capture_duration("lattice_damage_register", || {
-                    self.lattice.register_dead_nodes()
-                });
-            let damaged_nodes = self.lattice.unique_damaged_nodes_frame();
-            let degenerate_nodes = self.lattice.frame_degenerate_nodes();
+        self.profiler.push_trace("simulation");
 
-            {
-                self.profiler.push_trace("deform_damage");
-
-                let lattice = NodesRowTableView::from(self.lattice.nodes());
-                self.profiler
-                    .capture_duration("cage_damage_sync_lattice", || {
-                        self.deforms.clear_damage_buffers();
-                        self.deforms.sync_lattice_damage(degenerate_nodes);
-                    });
-                self.profiler.capture_duration("cage_damage_constrain", || {
-                    self.deforms.constrain_v3(&lattice);
-                });
-                self.profiler.capture_duration("cage_damage_finalize", || {
-                    self.deforms.process_damage(&lattice)
-                });
-
-                self.profiler.pop_trace();
-            }
-
-            {
-                self.profiler.push_trace("fragment_damage");
-
-                let deleted_points = self.deforms.deleted_points_frame();
-                let deforms = DeformsRowTableView::from(self.deforms.data());
-
-                self.profiler
-                    .capture_duration("fragment_damage_sync_lattice", || {
-                        self.fragments.clear_damage_buffer();
-                        self.fragments.sync_lattice_damage(damaged_nodes);
-                    });
-                self.profiler
-                    .capture_duration("fragment_damage_sync_cage", || {
-                        self.fragments.sync_deform_damage(deleted_points, &deforms);
-                    });
-                self.profiler
-                    .capture_duration("fragment_damage_rebind", || {
-                        self.fragments.compute_world_positions(&deforms);
-                    });
-
-                self.profiler.pop_trace();
-            }
-            self.deforms.delete_dead_points();
-
-            {
-                let disabled_frags = self.fragments.frame_disabled_frags();
-                if disabled_frags.len() > 0 {
-                    struct DebrisData {
-                        position: glam::Vec3,
-                        velocity: glam::Vec3,
-                        ang_velocity: glam::Vec3,
-                        forces: glam::Vec3,
-                        torque: glam::Vec3,
-                        mass: f32,
-                    }
-
-                    let mut buffer = Vec::<DebrisData>::with_capacity(disabled_frags.len());
-
-                    for &frag_index in disabled_frags {
-                        if frag_index.as_int() == 0 {
-                            continue;
-                        }
-
-                        let data = self.fragments.fragments();
-                        let position = data.world_position[frag_index.as_index()];
-                        let mass_coeff = data.mass_coeff[frag_index.as_index()];
-                        let integrity = data.integrity[frag_index.as_index()];
-                        let mass = integrity * mass_coeff;
-
-                        let mut inherit_v = glam::Vec3::ZERO;
-                        let mut inherit_a = glam::Vec3::ZERO;
-                        let mut inherit_av = glam::Vec3::ZERO;
-                        {
-                            let lattice = NodesRowTableView::from(self.lattice.nodes());
-                            let parents = data.parents[frag_index.as_index()];
-                            let weights = data.parents_weights[frag_index.as_index()];
-                            parents.iter().zip(weights).for_each(|(id, w)| {
-                                let velocity = lattice.velocity(*id);
-                                let forces = lattice.forces(*id);
-                                inherit_v += velocity * w;
-                                inherit_a += forces * w;
-
-                                let p = lattice.current_pos(*id);
-                                let contact = p.midpoint(position);
-                                inherit_av += contact.cross(*velocity) * w;
-                            });
-                        }
-
-                        buffer.push(DebrisData {
-                            position,
-                            velocity: inherit_v,
-                            ang_velocity: inherit_av,
-                            forces: inherit_a,
-                            torque: glam::Vec3::ZERO,
-                            mass,
-                        });
-                    }
-
-                    println!("creating {} debris", buffer.len());
-                    buffer.drain(..).for_each(
-                        |DebrisData {
-                             position,
-                             ang_velocity,
-                             velocity,
-                             forces,
-                             torque,
-                             mass,
-                         }| {
-                            self.fragments.debris_mut().insert((
-                                FragmentState::Debris,
-                                0,
-                                position,
-                                glam::Quat::IDENTITY,
-                                velocity,
-                                ang_velocity,
-                                forces,
-                                torque,
-                                mass,
-                                glam::Mat3::IDENTITY,
-                                glam::Mat3::IDENTITY,
-                                ::physics::Sphere::new(0.5),
-                            ));
-                        },
-                    );
-                }
-            }
-        }
+        self.profiler
+            .capture_duration("lattice_damage_register", || {
+                self.lattice.register_dead_nodes()
+            });
+        self.process_cage_damage();
+        self.process_fragment_damage();
+        self.deforms.delete_dead_points();
+        self.release_debris_bodies();
 
         self.profiler.push_trace("update_structures");
-        {
-            self.profiler
-                .capture_duration("update_lattice", || self.lattice.update(delta));
-            self.profiler.capture_duration("update_cage", || {
-                let lattice = NodesRowTableView::from(self.lattice.nodes());
-                self.deforms.deform(&lattice)
-            });
-
-            self.profiler.capture_duration("simulate_debris_phys", || {
-                self.fragments.hash_debris();
-                self.fragments.simulate_debris(delta);
-            });
-        }
-
+        self.update_subsystems(delta);
+        self.update_debris_rb(delta);
         self.profiler.pop_trace();
 
-        // random demo
+        self.profiler.pop_trace(); // end simulation trace group
+
         if input.keys().key_pressed(janus::input::KeyCode::KeyH) {
-            let vp = view_point.get();
-
-            const WIDTH: f32 = 8.0;
-            const HEIGHT: f32 = 4.0;
-            const DEPTH: f32 = 8.0;
-            const FLOORS: u32 = 8;
-            const TOTAL_HEIGHT: f32 = HEIGHT * FLOORS as f32;
-
-            let center = glam::vec3(vp.position.x, GROUND_LEVEL, vp.position.z);
-            let lattice = structure::create_structure_lattice(center, WIDTH, HEIGHT, DEPTH, FLOORS);
-
-            const INNER_SPACE: i32 = 2;
-            let mut voxel_grid = VoxelGrid::new(
-                |cell| cell.x.abs() > INNER_SPACE || cell.z.abs() > INNER_SPACE,
-                VoxelGridOptions::default()
-                    .with_width(WIDTH)
-                    .with_height(TOTAL_HEIGHT)
-                    .with_depth(DEPTH),
-            );
-            voxel_grid.repopulate();
-
-            let center = center + glam::vec3(0.0, TOTAL_HEIGHT * 0.5, 0.0);
-            self.register_structure(center, &voxel_grid, lattice);
+            self.spawn_debug_structure(view_point.get());
         }
 
         const CAMERA_KEY: janus::input::KeyCode = janus::input::KeyCode::Tab;
@@ -572,6 +338,258 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
 }
 
 impl State {
+    fn release_debris_bodies(&mut self) {
+        let disabled_frags = self.fragments.frame_disabled_frags();
+        if disabled_frags.len() > 0 {
+            struct DebrisData {
+                position: glam::Vec3,
+                velocity: glam::Vec3,
+                ang_velocity: glam::Vec3,
+                forces: glam::Vec3,
+                torque: glam::Vec3,
+                mass: f32,
+            }
+
+            let mut buffer = Vec::<DebrisData>::with_capacity(disabled_frags.len());
+
+            for &frag_index in disabled_frags {
+                if frag_index.as_int() == 0 {
+                    continue;
+                }
+
+                let data = self.fragments.fragments();
+                let position = data.world_position[frag_index.as_index()];
+                let mass_coeff = data.mass_coeff[frag_index.as_index()];
+                let integrity = data.integrity[frag_index.as_index()];
+                let mass = integrity * mass_coeff;
+
+                let mut inherit_v = glam::Vec3::ZERO;
+                let mut inherit_a = glam::Vec3::ZERO;
+                let mut inherit_av = glam::Vec3::ZERO;
+                {
+                    let lattice = NodesRowTableView::from(self.lattice.nodes());
+                    let parents = data.parents[frag_index.as_index()];
+                    let weights = data.parents_weights[frag_index.as_index()];
+                    parents.iter().zip(weights).for_each(|(id, w)| {
+                        let velocity = lattice.velocity(*id);
+                        let forces = lattice.forces(*id);
+                        inherit_v += velocity * w;
+                        inherit_a += forces * w;
+
+                        let p = lattice.current_pos(*id);
+                        let contact = p.midpoint(position);
+                        inherit_av += contact.cross(*velocity) * w;
+                    });
+                }
+
+                buffer.push(DebrisData {
+                    position,
+                    velocity: inherit_v,
+                    ang_velocity: inherit_av,
+                    forces: inherit_a,
+                    torque: glam::Vec3::ZERO,
+                    mass,
+                });
+            }
+
+            println!("creating {} debris", buffer.len());
+            buffer.drain(..).for_each(
+                |DebrisData {
+                     position,
+                     ang_velocity,
+                     velocity,
+                     forces,
+                     torque,
+                     mass,
+                 }| {
+                    self.fragments.debris_mut().insert((
+                        FragmentState::Debris,
+                        0,
+                        position,
+                        glam::Quat::IDENTITY,
+                        velocity,
+                        ang_velocity,
+                        forces,
+                        torque,
+                        mass,
+                        glam::Mat3::IDENTITY,
+                        glam::Mat3::IDENTITY,
+                        ::physics::Sphere::new(0.5),
+                    ));
+                },
+            );
+        }
+    }
+
+    fn process_fragment_damage(&mut self) {
+        self.profiler.push_trace("fragment_damage");
+
+        let deleted_points = self.deforms.deleted_points_frame();
+        let deforms = DeformsRowTableView::from(self.deforms.data());
+        let damaged_nodes = self.lattice.unique_damaged_nodes_frame();
+
+        self.profiler
+            .capture_duration("fragment_damage_sync_lattice", || {
+                self.fragments.clear_damage_buffer();
+                self.fragments.sync_lattice_damage(damaged_nodes);
+            });
+        self.profiler
+            .capture_duration("fragment_damage_sync_cage", || {
+                self.fragments.sync_deform_damage(deleted_points, &deforms);
+            });
+        self.profiler
+            .capture_duration("fragment_damage_rebind", || {
+                self.fragments.compute_world_positions(&deforms);
+            });
+
+        self.profiler.pop_trace();
+    }
+
+    fn process_cage_damage(&mut self) {
+        self.profiler.push_trace("deform_damage");
+        let degenerate_nodes = self.lattice.frame_degenerate_nodes();
+        let lattice = NodesRowTableView::from(self.lattice.nodes());
+
+        self.profiler
+            .capture_duration("cage_damage_sync_lattice", || {
+                self.deforms.clear_damage_buffers();
+                self.deforms.sync_lattice_damage(degenerate_nodes);
+            });
+        self.profiler.capture_duration("cage_damage_constrain", || {
+            self.deforms.constrain_v3(&lattice);
+        });
+        self.profiler.capture_duration("cage_damage_finalize", || {
+            self.deforms.process_damage(&lattice)
+        });
+
+        self.profiler.pop_trace();
+    }
+
+    fn update_debris_rb(&mut self, delta: DeltaTime) {
+        self.profiler.capture_duration("simulate_debris_phys", || {
+            self.fragments.hash_debris();
+            self.fragments.simulate_debris(delta);
+        });
+    }
+
+    fn update_subsystems(&mut self, delta: DeltaTime) {
+        self.profiler
+            .capture_duration("update_lattice", || self.lattice.update(delta));
+        self.profiler.capture_duration("update_cage", || {
+            let lattice = NodesRowTableView::from(self.lattice.nodes());
+            self.deforms.deform(&lattice)
+        });
+    }
+
+    fn spawn_debug_structure(&mut self, view_point: &ViewPoint) {
+        const WIDTH: f32 = 8.0;
+        const HEIGHT: f32 = 4.0;
+        const DEPTH: f32 = 8.0;
+        const FLOORS: u32 = 8;
+        const TOTAL_HEIGHT: f32 = HEIGHT * FLOORS as f32;
+
+        let center = glam::vec3(view_point.position.x, GROUND_LEVEL, view_point.position.z);
+        let lattice = structure::create_structure_lattice(center, WIDTH, HEIGHT, DEPTH, FLOORS);
+
+        const INNER_SPACE: i32 = 2;
+        let mut voxel_grid = VoxelGrid::new(
+            |cell| cell.x.abs() > INNER_SPACE || cell.z.abs() > INNER_SPACE,
+            VoxelGridOptions::default()
+                .with_width(WIDTH)
+                .with_height(TOTAL_HEIGHT)
+                .with_depth(DEPTH),
+        );
+        voxel_grid.repopulate();
+
+        let center = center + glam::vec3(0.0, TOTAL_HEIGHT * 0.5, 0.0);
+        self.register_structure(center, &voxel_grid, lattice);
+    }
+
+    fn save_profiler_report(&mut self) {
+        let path = PathBuf::from_str("framestack_latest.bin").unwrap();
+        if path.exists() {
+            if let Ok(creation_time) = path.metadata().map(|meta| meta.created()).flatten() {
+                let date: chrono::DateTime<chrono::Utc> = creation_time.into();
+                let formatted_date = date.format("%d_%m_%y-%H_%M_%S");
+                let new_path = format!("framestack_old_{}.bin", formatted_date);
+
+                std::fs::rename(&path, new_path).expect("assumed user has sufficient permissions");
+
+                event!(
+                    Level::INFO,
+                    "Created backup of previous latest framestack file to: framestack_old_{}.bin",
+                    formatted_date
+                )
+            } else {
+                event!(
+                    Level::WARN,
+                    "There was an error trying to backup the previous framestack_latest file: it will be deleted."
+                );
+                std::fs::remove_file(&path).expect("assumed user has file delete permissions");
+            }
+        }
+
+        let mut out = BufWriter::new(std::fs::File::create(&path).unwrap());
+        self.profiler.present_encoded(&mut out).unwrap();
+        event!(
+            Level::INFO,
+            "Exported performance statistics to file: {:?}",
+            path.canonicalize().unwrap()
+        );
+    }
+
+    fn select_lattice_raycast(
+        &mut self,
+        input: &mut ethel::InputSystem,
+        screen: &ScreenSpace,
+        view_point: &ViewPoint,
+    ) {
+        if let Some(selected) = self.selection.take()
+            && input.keys().key_pressed(janus::input::KeyCode::Delete)
+        {
+            self.lattice.break_constraint(selected);
+        }
+
+        let cursor = input.cursor().current_f32();
+        let inverse_view = view_point.into_mat4();
+
+        let mouse_world_dir = screen.to_world_space(cursor, inverse_view);
+        if input.keys().key_pressed(janus::input::KeyCode::Space) {
+            let dy = mouse_world_dir.y;
+            if dy.abs() > 0.001 {
+                let t = -view_point.position.y / dy;
+                let anchor = view_point.position + mouse_world_dir * t;
+                self.camera.set_anchor(anchor);
+            }
+        }
+
+        let mouse_ray = ::physics::Ray::new(view_point.position, mouse_world_dir);
+
+        let node_positions = self.lattice.nodes().current_pos_slice();
+        let constraints = self.lattice.links().relation_view();
+        let mut closest = None::<f32>;
+
+        for (i, ::physics::xpbd::LinkNodes(a, b)) in constraints.into_iter().enumerate() {
+            const RAY_SIZE: f32 = 0.05;
+
+            let a_i = unsafe { self.lattice.nodes().solve_indirect_unchecked(*a) };
+            let b_i = unsafe { self.lattice.nodes().solve_indirect_unchecked(*b) };
+            let a_p = *unsafe { node_positions.get_unchecked(a_i.as_index()) };
+            let b_p = *unsafe { node_positions.get_unchecked(b_i.as_index()) };
+
+            if let Some(t) = ::physics::intersect_ray_segment(mouse_ray, (a_p, b_p), RAY_SIZE) {
+                if let Some(ct) = closest
+                    && t > ct
+                {
+                    continue;
+                }
+
+                closest = Some(t);
+                self.selection = self.lattice.links().handles().get(i).copied();
+            }
+        }
+    }
+
     pub fn create_renderable(
         &mut self,
         mesh_id: u32,
