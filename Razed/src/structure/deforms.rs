@@ -8,8 +8,8 @@ use physics::xpbd::NodesRowTableView;
 use crate::voxel::VoxelGrid;
 
 pub const CONTROL_POINTS_COUNT: usize = 8;
-pub const CONTROL_POINTS_MIN_THRESHOLD: usize = 4;
-pub const CONTROL_POINT_CONSTRAIN_THRESHOLD: f32 = 1.0;
+pub const CONTROL_POINTS_MIN_THRESHOLD: usize = 1;
+pub const CONTROL_POINT_CONSTRAIN_THRESHOLD: f32 = 0.0001;
 
 ethel::table_spec! {
     struct Deforms {
@@ -178,7 +178,7 @@ impl DeformSystem {
                 |(ControlPoint { id, weight }, cur_weight)| {
                     if id.as_int() != 0 {
                         let constraint = cur_weight - *weight;
-                        if constraint < -CONTROL_POINT_CONSTRAIN_THRESHOLD {
+                        if constraint < 0.0 && constraint > -CONTROL_POINT_CONSTRAIN_THRESHOLD {
                             // sync reverse-map
                             self.node_map[id.as_index()].retain(|&deform| deform != *id);
 
