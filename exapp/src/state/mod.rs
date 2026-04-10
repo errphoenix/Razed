@@ -1,6 +1,6 @@
 pub(crate) mod physics;
 
-use std::{io::BufWriter, path::PathBuf, str::FromStr, sync::atomic::Ordering, time::Instant};
+use std::{io::BufWriter, path::PathBuf, str::FromStr, sync::atomic::Ordering};
 
 use crate::{
     data::{
@@ -277,7 +277,30 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         view_point.sync().unwrap();
 
         if input.keys().key_pressed(janus::input::KeyCode::KeyP) {
-            let path = PathBuf::from_str("framestack.bin").unwrap();
+            let path = PathBuf::from_str("framestack_latest.bin").unwrap();
+            if path.exists() {
+                if let Ok(creation_time) = path.metadata().map(|meta| meta.created()).flatten() {
+                    let date: chrono::DateTime<chrono::Utc> = creation_time.into();
+                    let formatted_date = date.format("%d_%m_%y-%H_%M_%S");
+                    let new_path = format!("framestack_old_{}.bin", formatted_date);
+
+                    std::fs::rename(&path, new_path)
+                        .expect("assumed user has sufficient permissions");
+
+                    event!(
+                        Level::INFO,
+                        "Created backup of previous latest framestack file to: framestack_old_{}.bin",
+                        formatted_date
+                    )
+                } else {
+                    event!(
+                        Level::WARN,
+                        "There was an error trying to backup the previous framestack_latest file: it will be deleted."
+                    );
+                    std::fs::remove_file(&path).expect("assumed user has file delete permissions");
+                }
+            }
+
             let mut out = BufWriter::new(std::fs::File::create(&path).unwrap());
             self.profiler.present_encoded(&mut out).unwrap();
             event!(
