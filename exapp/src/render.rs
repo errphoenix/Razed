@@ -2,10 +2,7 @@ use std::{sync::atomic::Ordering, time::Instant};
 
 use ethel::{render::command::GpuCommandDispatch, shader::ShaderHandle};
 
-use crate::{
-    data::{FrameDataBuffers, LayoutXpbdDebugData},
-    structure::deforms,
-};
+use crate::data::{FrameDataBuffers, LayoutXpbdDebugData};
 
 #[derive(Debug, Default)]
 pub struct Renderer {
@@ -76,8 +73,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         frame_data: &FrameDataBuffers,
         section: ethel::render::buffer::StorageSection,
     ) {
-        let t0 = Instant::now();
-
         unsafe {
             janus::gl::Clear(janus::gl::COLOR_BUFFER_BIT | janus::gl::DEPTH_BUFFER_BIT);
         }
@@ -158,9 +153,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             //     janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 2, control_counts as i32);
             // }
         }
-
-        let t1 = Instant::now();
-        println!("render_frame: {} nanos", (t1 - t0).as_nanos());
     }
 
     fn init_resources(&mut self, _resolution: ethel::render::Resolution) {
