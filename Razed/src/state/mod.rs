@@ -16,7 +16,7 @@ use crate::{
 };
 use ::physics::xpbd::{LatticeIds, NodesRowTableView, XpbdLatticeBuilder, XpbdOptions, XpbdSolver};
 use ethel::{
-    render::{Resolution, ScreenSpace, command::DrawArraysIndirectCommand},
+    render::{ScreenSpace, command::DrawArraysIndirectCommand},
     state::{
         camera::{self, ViewPoint},
         data::{
