@@ -9,7 +9,6 @@ use crate::voxel::VoxelGrid;
 
 pub const CONTROL_POINTS_COUNT: usize = 8;
 pub const CONTROL_POINTS_MIN_THRESHOLD: usize = 1;
-pub const CONTROL_POINT_CONSTRAIN_THRESHOLD: f32 = 0.0001;
 
 ethel::table_spec! {
     struct Deforms {
@@ -80,7 +79,31 @@ impl DeformSystem {
         self.deleted_points.clear();
     }
 
-    pub fn process_damage(&mut self, lattice: &NodesRowTableView) {
+    pub fn sync_lattice_damage(
+        &mut self,
+        broken_nodes: &[IndirectIndex],
+        lattice: &NodesRowTableView,
+    ) {
+        broken_nodes.iter().for_each(|node| {
+            if let Some(deforms) = self.node_map.get_mut(node.as_index()) {
+                deforms.iter_mut().for_each(|deform| {
+                    if deform.as_int() != 0 {
+                        let direct = self.data.solve_indirect(*deform).unwrap();
+                        for ControlPoint { id, weight } in
+                            &mut self.data.controllers[direct.as_index()]
+                        {
+                            if *id == *node {
+                                *id = IndirectIndex::default();
+                                *weight = 0.0;
+                                self.damaged_buffer.push(direct);
+                                break;
+                            }
+                        }
+                    }
+                });
+            }
+        });
+
         self.damaged_buffer.retain(|direct| {
             let controllers = &mut self.data.controllers[direct.as_index()];
             let binds = &mut self.data.binds[direct.as_index()];
@@ -124,277 +147,6 @@ impl DeformSystem {
             let di = self.data.solve_indirect(ii).unwrap();
             self.data.pose[di.as_index()] = glam::Vec3::ZERO;
             self.deleted_points.push(ii);
-        });
-    }
-
-    /// Unbind all `broken_nodes` attached to any deforms and flag them for
-    /// damage.
-    pub fn sync_lattice_damage(&mut self, broken_nodes: &[IndirectIndex]) {
-        broken_nodes.iter().for_each(|node| {
-            if let Some(deforms) = self.node_map.get_mut(node.as_index()) {
-                deforms.iter_mut().for_each(|deform| {
-                    if deform.as_int() != 0 {
-                        let direct = self.data.solve_indirect(*deform).unwrap();
-                        for ControlPoint { id, weight } in
-                            &mut self.data.controllers[direct.as_index()]
-                        {
-                            if *id == *node {
-                                *id = IndirectIndex::default();
-                                *weight = 0.0;
-                                self.damaged_buffer.push(direct);
-                                break;
-                            }
-                        }
-                    }
-                });
-            }
-        });
-    }
-
-    pub fn constrain_v3(&mut self, lattice: &NodesRowTableView) {
-        let mut weights_buf = [0f32; CONTROL_POINTS_COUNT];
-
-        let mut i = 0;
-        let (deforms, _, controllers, _) = self.data.split_mut();
-        for (deform, controllers) in deforms.join(controllers) {
-            for j in 0..CONTROL_POINTS_COUNT {
-                let controller_id = controllers[j].id;
-                if controller_id.as_int() == 0 {
-                    continue;
-                }
-
-                let position = lattice.current_pos(controller_id);
-                let dist_sq = deform.distance_squared(*position) + f32::EPSILON;
-                weights_buf[j] = 1.0 / dist_sq.powf(RIGIDITY);
-            }
-
-            // the strain must be calibrated according to the w_t from the
-            // original weights of the controllers.
-            let w_t = controllers.iter().fold(0f32, |s, c| s + c.weight);
-            weights_buf.iter_mut().for_each(|w| *w /= w_t);
-
-            let mut flagged = false;
-            controllers.iter_mut().zip(weights_buf).for_each(
-                |(ControlPoint { id, weight }, cur_weight)| {
-                    if id.as_int() != 0 {
-                        let constraint = cur_weight - *weight;
-                        if constraint < 0.0 && constraint > -CONTROL_POINT_CONSTRAIN_THRESHOLD {
-                            // sync reverse-map
-                            self.node_map[id.as_index()].retain(|&deform| deform != *id);
-
-                            *id = IndirectIndex::default();
-                            if !flagged {
-                                flagged = true;
-                                self.damaged_buffer.push(DirectIndex::from_index(i));
-                            }
-                        }
-                    }
-                },
-            );
-
-            weights_buf.fill(0.0);
-            i += 1;
-        }
-    }
-
-    pub fn constrain_v2(&mut self, lattice: &NodesRowTableView) {
-        self.deleted_points.clear();
-
-        let mut weights_buf = [0f32; CONTROL_POINTS_COUNT];
-        let mut flagged = Vec::<(u32, f32)>::new(); // todo: do not alloc
-
-        // invalidate control points constraint weights
-        // stores direct indices
-        {
-            let mut i = 0;
-            let (deforms, _, controllers, _) = self.data.split_mut();
-            for (deform, controllers) in deforms.join(controllers) {
-                for j in 0..CONTROL_POINTS_COUNT {
-                    //let controller_id = *&unsafe { controllers.get_unchecked(j) }.id;
-                    let controller_id = controllers[j].id;
-                    if controller_id.as_int() == 0 {
-                        continue;
-                    }
-
-                    let position = unsafe { lattice.current_pos_unchecked(controller_id) };
-                    let dist_sq = deform.distance_squared(*position) + f32::EPSILON;
-                    weights_buf[j] = 1.0 / dist_sq.powf(RIGIDITY);
-                }
-
-                let w_t = weights_buf.iter().fold(0f32, |t, v| t + v);
-                weights_buf.iter_mut().for_each(|w| *w /= w_t);
-
-                let mut b = false;
-                let mut dead_weight = 0.0;
-
-                controllers.iter_mut().zip(weights_buf).for_each(
-                    |(ControlPoint { id, weight }, current_weight)| {
-                        let constraint = (current_weight - *weight).abs();
-                        if constraint * constraint > CONTROL_POINT_CONSTRAIN_THRESHOLD {
-                            *id = IndirectIndex::default();
-                            dead_weight += *weight;
-                            *weight = 0f32;
-                            if !b {
-                                flagged.push((i, dead_weight));
-                            } else {
-                                flagged.last_mut().as_mut().unwrap().1 += dead_weight;
-                            }
-                            b = true;
-                        }
-                    },
-                );
-
-                weights_buf.fill(0f32);
-                i += 1;
-            }
-        }
-
-        {
-            let (deformed, pose, controllers, binds) = self.data_mut().split_mut();
-            flagged.retain(|&(id, _)| {
-                let idx = id as usize;
-
-                // update bind pose to current position
-                let deform = deformed.alpha[idx];
-                pose.alpha[idx] = deform;
-
-                let controllers = &mut controllers.alpha[idx];
-                let binds = &mut binds.alpha[idx];
-                controllers.iter_mut().zip(binds.iter_mut()).for_each(
-                    |(ControlPoint { id, weight }, bind)| {
-                        if id.as_int() != 0 {
-                            *bind = *lattice.current_pos(*id);
-                            let ds = deform.distance_squared(*bind) + f32::EPSILON;
-                            *weight = 1.0 / ds.powf(RIGIDITY);
-                        }
-                    },
-                );
-
-                let w_t = controllers.iter_mut().fold(0f32, |s, ctl| s + ctl.weight);
-                controllers
-                    .iter_mut()
-                    .for_each(|ControlPoint { weight, .. }| *weight /= w_t);
-
-                // if all 0, we keep deforms flagged to remove them in the next pass
-                controllers.iter().all(|ctl| ctl.id.as_int() == 0)
-            });
-        }
-
-        // resolve direct indices to stable indirect indices
-        flagged.iter_mut().for_each(|(indirect, _)| {
-            let direct = DirectIndex::from_index(*indirect as usize);
-            *indirect = self.data.handles()[direct.as_index()].as_int()
-        });
-
-        // delete dead deforms
-        flagged.drain(..).for_each(|(indirect, _)| {
-            if indirect != 0 {
-                let ii = IndirectIndex::from_index(indirect as usize);
-                self.deleted_points.push(ii);
-                self.data.free(ii);
-            }
-        });
-    }
-
-    pub fn constrain(&mut self, lattice: &NodesRowTableView) {
-        self.deleted_points.clear();
-        let mut weights_buf = [0f32; CONTROL_POINTS_COUNT];
-        let mut flagged = Vec::<(u32, f32)>::new(); // todo: do not alloc
-
-        // invalidate control points constraint weights
-        // stores direct indices
-        {
-            let mut i = 0;
-            let (deforms, _, controllers, _) = self.data.split_mut();
-            for (deform, controllers) in deforms.join(controllers) {
-                for j in 0..CONTROL_POINTS_COUNT {
-                    //let controller_id = *&unsafe { controllers.get_unchecked(j) }.id;
-                    let controller_id = controllers[j].id;
-                    if controller_id.as_int() == 0 {
-                        continue;
-                    }
-
-                    let position = unsafe { lattice.current_pos_unchecked(controller_id) };
-                    let dist_sq = deform.distance_squared(*position) + f32::EPSILON;
-                    weights_buf[j] = 1.0 / dist_sq.powf(RIGIDITY);
-                }
-
-                let w_t = weights_buf.iter().fold(0f32, |t, v| t + v);
-                weights_buf.iter_mut().for_each(|w| *w /= w_t);
-
-                let mut b = false;
-                let mut dead_weight = 0.0;
-
-                controllers.iter_mut().zip(weights_buf).for_each(
-                    |(ControlPoint { id, weight }, current_weight)| {
-                        let constraint = (current_weight - *weight).abs();
-                        if constraint * constraint > CONTROL_POINT_CONSTRAIN_THRESHOLD {
-                            *id = IndirectIndex::default();
-                            dead_weight += *weight;
-                            *weight = 0f32;
-                            if !b {
-                                flagged.push((i, dead_weight));
-                            } else {
-                                flagged.last_mut().as_mut().unwrap().1 += dead_weight;
-                            }
-                            b = true;
-                        }
-                    },
-                );
-
-                weights_buf.fill(0f32);
-                i += 1;
-            }
-        }
-
-        // resolve to stable indirect indices of flagged deforms
-        // flagged
-        //     .iter_mut()
-        //     .for_each(|direct| *direct = self.data.handles()[*direct as usize]);
-
-        // recompute invalidated control points
-        // this retains all deforms for which total weight equals to 0 to be
-        // deleted in the next pass.
-        {
-            let (_, _, controllers, _) = self.data.split_mut();
-            flagged.retain(|&(direct, dead_weight)| {
-                let direct = DirectIndex::from_index(direct as usize);
-                let controllers = &mut controllers.alpha[direct.as_index()];
-                controllers.iter_mut().for_each(|controller| {
-                    controller.weight += dead_weight * controller.weight;
-                });
-
-                // controllers
-                //     .iter_mut()
-                //     .zip(bind)
-                //     .for_each(|(ControlPoint { weight, .. }, bind)| {
-                //         let dist_sq = pose.distance_squared(bind) + f32::EPSILON;
-                //         *weight = 1.0 / dist_sq.powf(DeformPoint::RIGIDITY);
-                //     });
-
-                // let w_t = controllers.iter().fold(0f32, |t, v| t + v.weight);
-                // controllers
-                //     .iter_mut()
-                //     .for_each(|ControlPoint { weight, .. }| *weight /= w_t);
-
-                // if all 0, we keep deforms flagged to remove them in the next pass
-                controllers.iter().all(|ctl| ctl.id.as_int() == 0)
-            });
-        }
-
-        // resolve direct indices to stable indirect indices
-        flagged.iter_mut().for_each(|(indirect, _)| {
-            let direct = DirectIndex::from_index(*indirect as usize);
-            *indirect = self.data.handles()[direct.as_index()].as_int()
-        });
-
-        // delete dead deforms
-        flagged.drain(..).for_each(|(indirect, _)| {
-            if indirect != 0 {
-                let ii = IndirectIndex::from_index(indirect as usize);
-                self.deleted_points.push(ii);
-                self.data.free(ii);
-            }
         });
     }
 

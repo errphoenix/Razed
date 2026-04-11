@@ -453,14 +453,8 @@ impl State {
         self.profiler
             .capture_duration("cage_damage_sync_lattice", || {
                 self.deforms.clear_damage_buffers();
-                self.deforms.sync_lattice_damage(degenerate_nodes);
+                self.deforms.sync_lattice_damage(degenerate_nodes, &lattice);
             });
-        self.profiler.capture_duration("cage_damage_constrain", || {
-            self.deforms.constrain_v3(&lattice);
-        });
-        self.profiler.capture_duration("cage_damage_finalize", || {
-            self.deforms.process_damage(&lattice)
-        });
 
         self.profiler.pop_trace();
     }
