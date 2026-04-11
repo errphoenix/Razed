@@ -10,6 +10,7 @@ use crate::{
     state::physics::LatticeSystem,
     structure::{
         self, FragmentState, FragmentSystem,
+        debris::DebrisSystem,
         deforms::{DeformSystem, DeformsRowTableView},
     },
     voxel::{VoxelGrid, VoxelGridOptions},
@@ -47,8 +48,9 @@ pub struct State {
 
     entity_data: EntityDataRowTable,
     lattice: LatticeSystem,
-    fragments: FragmentSystem,
     deforms: DeformSystem,
+    fragments: FragmentSystem,
+    debris: DebrisSystem,
 
     /// Parallel to NodesRowTable of LatticeSystem
     lattice_bind_pose: Vec<glam::Vec3>,
@@ -74,8 +76,9 @@ impl Default for State {
                 XpbdOptions::default().with_ground_level(Some(GROUND_LEVEL)),
             )),
             lattice_bind_pose: Default::default(),
-            fragments: Default::default(),
             deforms: Default::default(),
+            fragments: Default::default(),
+            debris: Default::default(),
             renderables: Default::default(),
             mesh_ids: Default::default(),
             entity_data: Default::default(),
@@ -102,7 +105,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         command_queue: &mut ethel::render::command::GpuCommandQueue<ethel::DrawCommand>,
     ) {
         self.profiler.capture_duration("upload_gpu", || {
-            let fragment_count = self.fragments.fragments().len() as u32;
+            let fragment_count = self.fragments.data().len() as u32;
             command_queue.push(DrawArraysIndirectCommand {
                 count: 36,
                 // degenerate 0 offset handled in shader
@@ -123,10 +126,10 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     let imap_deforms = self.deforms.data().handles();
                     let pod_deforms_positions = self.deforms.data().deformed_slice();
                     let pod_deforms_bind_pose = &self.deforms.data().pose_slice();
-                    let pod_anchors = self.fragments.fragments().anchors_slice();
-                    let pod_anchor_weights = self.fragments.fragments().anchors_weights_slice();
-                    let pod_bind_pose = self.fragments.fragments().bind_position_slice();
-                    let pod_states = self.fragments.fragments().state_slice();
+                    let pod_anchors = self.fragments.data().anchors_slice();
+                    let pod_anchor_weights = self.fragments.data().anchors_weights_slice();
+                    let pod_bind_pose = self.fragments.data().bind_position_slice();
+                    let pod_states = self.fragments.data().state_slice();
 
                     // SAFETY: the use of LayoutFragmentData ensures we blit to a
                     // valid section of the partitioned buffer.
@@ -144,8 +147,8 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 // debris upload
                 {
                     let debris = &storage.debris;
-                    let pod_positions = self.fragments.debris().position_slice();
-                    let pod_rotations = self.fragments.debris().rotation_slice();
+                    let pod_positions = self.debris.data().position_slice();
+                    let pod_rotations = self.debris.data().rotation_slice();
 
                     // SAFETY: the use of LayoutDebrisData ensures we blit to a
                     // valid section of the partitioned buffer.
@@ -154,7 +157,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                         debris.blit_part(buf_idx, LayoutDebrisData::PodRotations as usize, pod_rotations, 0);
                     }
 
-                    let debris_count = self.fragments.debris().len() as u32 - 1;
+                    let debris_count = self.debris.data().len() as u32 - 1;
                     storage.debris_count.store(debris_count, Ordering::Release);
                 }
 
@@ -314,7 +317,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
 
         self.profiler.push_trace("update_structures");
         self.update_subsystems(delta);
-        self.update_debris_rb(delta);
+        self.update_debris(delta);
         self.profiler.pop_trace();
 
         self.profiler.pop_trace(); // end simulation trace group
@@ -357,7 +360,7 @@ impl State {
                     continue;
                 }
 
-                let data = self.fragments.fragments();
+                let data = self.fragments.data();
                 let position = data.world_position[frag_index.as_index()];
                 let mass_coeff = data.mass_coeff[frag_index.as_index()];
                 let integrity = data.integrity[frag_index.as_index()];
@@ -402,8 +405,7 @@ impl State {
                      torque,
                      mass,
                  }| {
-                    self.fragments.debris_mut().insert((
-                        FragmentState::Debris,
+                    self.debris.data_mut().insert((
                         0,
                         position,
                         glam::Quat::IDENTITY,
@@ -459,10 +461,11 @@ impl State {
         self.profiler.pop_trace();
     }
 
-    fn update_debris_rb(&mut self, delta: DeltaTime) {
-        self.profiler.capture_duration("simulate_debris_phys", || {
-            self.fragments.hash_debris();
-            self.fragments.simulate_debris(delta);
+    fn update_debris(&mut self, delta: DeltaTime) {
+        self.profiler
+            .capture_duration("debris_hash", || self.debris.hash_all());
+        self.profiler.capture_duration("debris_phys_rb", || {
+            self.debris.simulate_bodies(delta);
         });
     }
 
@@ -655,11 +658,11 @@ impl State {
         let new_positions = &self.lattice.nodes().current_pos_slice()[l0..l1];
         self.lattice_bind_pose.extend(new_positions);
 
-        let l0 = self.fragments.fragments().handles().len();
+        let l0 = self.fragments.data().handles().len();
         self.fragments.generate_fragments(origin, voxel_grid);
         self.fragments.bind_lattice(&lattice_hash, &lattice);
         self.fragments.bind_deforms(&deforms_hash, &deforms);
-        let l1 = self.fragments.fragments().handles().len();
+        let l1 = self.fragments.data().handles().len();
 
         // currently unnecessary
         // fragments are rendered directly, not as renderables

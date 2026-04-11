@@ -67,28 +67,6 @@ ethel::table_spec! {
     }
 }
 
-ethel::table_spec! {
-    struct Debris {
-        state: FragmentState;
-        age: u32;
-
-        position: glam::Vec3;
-        rotation: glam::Quat;
-
-        velocity: glam::Vec3;
-        angular_velocity: glam::Vec3;
-
-        forces: glam::Vec3;
-        torques: glam::Vec3;
-
-        mass: f32;
-        inv_inertia_loc: glam::Mat3;
-        inv_inertia_abs: glam::Mat3;
-
-        volume: physics::Sphere;
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum UninitFragmentStage {
     #[default]
@@ -114,48 +92,10 @@ impl UninitFragment {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct DebrisVolumeBuffer {
-    pub positions: Vec<glam::Vec3>,
-    pub volumes: Vec<::physics::Sphere>,
-    pub handles: Vec<IndirectIndex>,
-}
-
-impl DebrisVolumeBuffer {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            positions: Vec::with_capacity(capacity),
-            volumes: Vec::with_capacity(capacity),
-            handles: Vec::with_capacity(capacity),
-        }
-    }
-
-    pub fn push(&mut self, position: glam::Vec3, volume: ::physics::Sphere, handle: IndirectIndex) {
-        self.positions.push(position);
-        self.volumes.push(volume);
-        self.handles.push(handle);
-    }
-
-    pub fn clear(&mut self) {
-        self.positions.clear();
-        self.volumes.clear();
-        self.handles.clear();
-    }
-}
-
 #[derive(Debug)]
 pub struct FragmentSystem {
     fragments: FragmentsRowTable,
     uninitialised: Vec<UninitFragment>,
-
-    debris: DebrisRowTable,
-    debris_phys: RigidBodySolver,
-    debris_hash: FxLsSpatialHash<DirectIndex>,
-    debris_volume_buffer: DebrisVolumeBuffer,
 
     /// sparse map of deform ID to sequence of fragment IDs
     deform_map: Vec<Vec<IndirectIndex>>,
@@ -178,18 +118,11 @@ impl Default for FragmentSystem {
     }
 }
 
-const DEBRIS_HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(2.0);
-
 impl FragmentSystem {
     pub fn new() -> Self {
         Self {
             fragments: FragmentsRowTable::new(),
             uninitialised: Vec::new(),
-
-            debris: DebrisRowTable::new(),
-            debris_phys: RigidBodySolver::default(),
-            debris_hash: FxLsSpatialHash::new(DEBRIS_HASH_RESOLUTION),
-            debris_volume_buffer: DebrisVolumeBuffer::new(),
 
             // account for degenerate
             deform_map: vec![Vec::new()],
@@ -214,11 +147,6 @@ impl FragmentSystem {
         Self {
             fragments: FragmentsRowTable::with_capacity(capacity),
             uninitialised: Vec::with_capacity(capacity),
-
-            debris: DebrisRowTable::with_capacity(capacity),
-            debris_phys: RigidBodySolver::default(),
-            debris_hash: FxLsSpatialHash::with_capacity(DEBRIS_HASH_RESOLUTION, capacity),
-            debris_volume_buffer: DebrisVolumeBuffer::new(),
 
             deform_map,
             node_map,
@@ -267,90 +195,11 @@ impl FragmentSystem {
         &mut self.deform_map[deform.as_index()]
     }
 
-    pub fn debris(&self) -> &DebrisRowTable {
-        &self.debris
-    }
-
-    pub fn debris_mut(&mut self) -> &mut DebrisRowTable {
-        &mut self.debris
-    }
-
-    pub fn hash_debris(&mut self) {
-        self.debris_hash.clear();
-
-        let positions = &self.debris.position;
-        for i in 1..positions.len() {
-            let pos = positions[i];
-            let cell = self.debris_hash.cell_at(pos);
-            self.debris_hash.put(cell, DirectIndex::from_index(i));
-        }
-    }
-
-    pub fn simulate_debris(&mut self, delta: DeltaTime) {
-        let positions = &mut self.debris.position;
-        let rotations = &mut self.debris.rotation;
-        let velocities = &mut self.debris.velocity;
-        let ang_velocities = &mut self.debris.angular_velocity;
-        let forces = &mut self.debris.forces;
-        let torques = &mut self.debris.torques;
-        let masses = &self.debris.mass;
-        let inv_inertia_loc = &self.debris.inv_inertia_loc;
-        let inv_inertia_abs = &mut self.debris.inv_inertia_abs;
-        let volumes = &self.debris.volume;
-        let handles = &self.debris.handles;
-
-        self.debris_hash
-            .elements()
-            .filter(|vec| !vec.is_empty())
-            .for_each(|debris| {
-                self.debris_volume_buffer.clear();
-
-                debris.iter().for_each(|index| {
-                    let position = positions[index.as_index()];
-                    let volume = volumes[index.as_index()];
-                    let handle = handles[index.as_index()];
-                    self.debris_volume_buffer.push(position, volume, handle);
-                });
-
-                let DebrisVolumeBuffer {
-                    positions,
-                    volumes,
-                    handles,
-                } = &self.debris_volume_buffer;
-
-                self.debris_phys
-                    .detect_collisions(positions, volumes, handles);
-            });
-        self.debris_phys
-            .solve_collisions(positions, velocities, ang_velocities, handles);
-
-        self.debris_phys.apply_gravity(forces);
-        self.debris_phys
-            .sync_inertia(rotations, inv_inertia_loc, inv_inertia_abs);
-
-        self.debris_phys.integrate(
-            velocities,
-            ang_velocities,
-            forces,
-            torques,
-            masses,
-            inv_inertia_abs,
-            delta,
-        );
-        self.debris_phys
-            .update_bodies(positions, rotations, velocities, ang_velocities, delta);
-
-        self.debris_phys
-            .damp_velocity(velocities, ang_velocities, delta);
-        self.debris_phys
-            .constrain_ground(positions, velocities, ang_velocities);
-    }
-
-    pub fn fragments(&self) -> &FragmentsRowTable {
+    pub fn data(&self) -> &FragmentsRowTable {
         &self.fragments
     }
 
-    pub fn fragments_mut(&mut self) -> &mut FragmentsRowTable {
+    pub fn data_mut(&mut self) -> &mut FragmentsRowTable {
         &mut self.fragments
     }
 
