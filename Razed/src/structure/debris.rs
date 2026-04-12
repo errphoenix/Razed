@@ -161,43 +161,50 @@ impl DebrisSystem {
         let volumes = &self.debris.volume;
         let handles = &self.debris.handles;
 
-        {
-            let r_positions = &self.rubber.position;
-            let r_volumes = &self.rubber.volume;
+        self.debris_hash
+            .elements()
+            .filter(|vec| !vec.is_empty())
+            .for_each(|debris| {
+                self.debris_volume_buffer.clear();
 
-            self.debris_hash
-                .elements()
-                .filter(|vec| !vec.is_empty())
-                .for_each(|debris| {
-                    self.debris_volume_buffer.clear();
+                debris.iter().for_each(|index| {
+                    let index = index.as_index();
 
-                    debris.iter().for_each(|index| {
-                        let index = index.as_index();
+                    let position = positions[index];
+                    let volume = volumes[index];
+                    let handle = handles[index];
 
-                        if index > slice_offset {
-                            let index = index - slice_offset;
-                            let position = r_positions[index];
-                            let volume = r_volumes[index];
-                            let handle = IndirectIndex::default();
-                            self.debris_volume_buffer.push(position, volume, handle);
-                        } else {
-                            let position = positions[index];
-                            let volume = volumes[index];
-                            let handle = handles[index];
-                            self.debris_volume_buffer.push(position, volume, handle);
-                        }
-                    });
-
-                    let DebrisVolumeBuffer {
-                        positions,
-                        volumes,
-                        handles,
-                    } = &self.debris_volume_buffer;
-
-                    self.debris_phys
-                        .detect_collisions(positions, volumes, handles);
+                    self.debris_volume_buffer.push(position, volume, handle);
                 });
+
+                let DebrisVolumeBuffer {
+                    positions,
+                    volumes,
+                    handles,
+                } = &self.debris_volume_buffer;
+
+                self.debris_phys
+                    .detect_collisions(positions, volumes, handles);
+            });
+
+        {
+            self.debris_phys.clear_static_volumes();
+            let static_volumes = {
+                let (_, pos, _, volumes) = self.rubber.split();
+                pos.join(volumes)
+            };
+            for (&p, &v) in static_volumes {
+                self.debris_phys.add_static_volume(p, v);
+            }
+
+            self.debris_phys.detect_static_collisions(
+                &self.debris_hash,
+                positions,
+                volumes,
+                handles,
+            );
         }
+
         self.debris_phys
             .solve_collisions(positions, velocities, ang_velocities, handles);
 

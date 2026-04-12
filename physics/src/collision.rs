@@ -19,6 +19,21 @@ impl Sphere {
         let rr2 = (r1 + r2) * (r1 + r2);
         distance_squared < rr2
     }
+
+    /// Returns the normalized intersection direction and the depth of the penetration.
+    pub fn peneration_with(
+        &self,
+        other: Sphere,
+        origin: glam::Vec3,
+        other_center: glam::Vec3,
+        distance_squared: f32,
+    ) -> (glam::Vec3, f32) {
+        let d = distance_squared.sqrt();
+        let dir = origin - other_center;
+        let n = dir.normalize_or_zero();
+        let depth = self.radius + other.radius - d;
+        (n, depth)
+    }
 }
 
 /// A very basic collision.
@@ -59,10 +74,7 @@ pub fn detect_n2(
 
             let d_sq = p0.distance_squared(p1);
             if v0.intersects(v1, d_sq) && d_sq > 0.01 {
-                let d = d_sq.sqrt();
-                let dir = p0 - p1;
-                let n = dir.normalize_or_zero();
-                let depth = v0.radius + v1.radius - d;
+                let (n, depth) = v0.peneration_with(v1, p0, p1, d_sq);
 
                 let id0 = id_map[i];
                 let id1 = id_map[j];

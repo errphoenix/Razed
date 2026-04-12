@@ -1,4 +1,7 @@
-use ethel::state::data::IndirectIndex;
+use ethel::state::data::{
+    Column, DirectIndex, IndirectIndex, SparseSlot,
+    hash::{FxLsSpatialHash, SpatialResolution},
+};
 use janus::context::DeltaTime;
 
 use crate::collision::{self, LightCollision, Sphere};
@@ -11,12 +14,14 @@ pub struct RigidBodyOptions {
     damping: f32,
     restitution: f32,
     friction: f32,
+    static_volumes_hash_resolution: SpatialResolution,
 }
 
 pub const DEFAULT_GRAVITY: f32 = 9.807;
 pub const DEFAULT_DAMPING: f32 = 0.725;
 pub const DEFAULT_RESTITUTION: f32 = 0.001;
 pub const DEFAULT_FRICTION: f32 = 0.00215;
+pub const DEFAULT_STATIC_VOLUMES_HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(2.0);
 
 const INTERNAL_STEP_MULT: f32 = 1.0;
 
@@ -29,6 +34,7 @@ impl Default for RigidBodyOptions {
             damping: DEFAULT_DAMPING,
             restitution: DEFAULT_RESTITUTION,
             friction: DEFAULT_FRICTION,
+            static_volumes_hash_resolution: DEFAULT_STATIC_VOLUMES_HASH_RESOLUTION,
         }
     }
 }
@@ -41,6 +47,7 @@ impl RigidBodyOptions {
         damping: f32,
         restitution: f32,
         friction: f32,
+        static_volumes_hash_resolution: SpatialResolution,
     ) -> Self {
         Self {
             gravity,
@@ -49,6 +56,7 @@ impl RigidBodyOptions {
             damping,
             restitution,
             friction,
+            static_volumes_hash_resolution,
         }
     }
 
@@ -60,6 +68,7 @@ impl RigidBodyOptions {
             damping: self.damping,
             restitution: self.restitution,
             friction: self.friction,
+            static_volumes_hash_resolution: self.static_volumes_hash_resolution,
         }
     }
 
@@ -71,6 +80,7 @@ impl RigidBodyOptions {
             damping: self.damping,
             restitution: self.restitution,
             friction: self.friction,
+            static_volumes_hash_resolution: self.static_volumes_hash_resolution,
         }
     }
 
@@ -82,6 +92,7 @@ impl RigidBodyOptions {
             damping: self.damping,
             restitution: self.restitution,
             friction: self.friction,
+            static_volumes_hash_resolution: self.static_volumes_hash_resolution,
         }
     }
 
@@ -93,6 +104,7 @@ impl RigidBodyOptions {
             step_multiplier: self.step_multiplier,
             restitution: self.restitution,
             friction: self.friction,
+            static_volumes_hash_resolution: self.static_volumes_hash_resolution,
         }
     }
 
@@ -104,6 +116,7 @@ impl RigidBodyOptions {
             step_multiplier: self.step_multiplier,
             damping: self.damping,
             friction: self.friction,
+            static_volumes_hash_resolution: self.static_volumes_hash_resolution,
         }
     }
 
@@ -115,15 +128,45 @@ impl RigidBodyOptions {
             step_multiplier: self.step_multiplier,
             damping: self.damping,
             restitution: self.restitution,
+            static_volumes_hash_resolution: self.static_volumes_hash_resolution,
+        }
+    }
+
+    pub fn with_static_volumes_hash_resolution(
+        self,
+        static_volumes_hash_resolution: SpatialResolution,
+    ) -> Self {
+        Self {
+            static_volumes_hash_resolution,
+            gravity: self.gravity,
+            ground_level: self.ground_level,
+            step_multiplier: self.step_multiplier,
+            damping: self.damping,
+            restitution: self.restitution,
+            friction: self.friction,
         }
     }
 }
 
-#[derive(Debug, Clone)]
+ethel::table_spec! {
+    struct StaticVolume {
+        position: glam::Vec3;
+        volume: Sphere;
+    }
+}
+
+#[derive(Debug)]
 pub struct RigidBodySolver {
     options: RigidBodyOptions,
 
     collision_buffer: Vec<LightCollision>,
+
+    /// Static non-physical bodies that still contribute during the collision
+    /// pass for dynamic bodies.
+    ///
+    /// Currently only supports [`spheres`](Sphere).
+    static_volumes: StaticVolumeRowTable,
+    static_volumes_hash: FxLsSpatialHash<IndirectIndex>,
 }
 
 impl Default for RigidBodySolver {
@@ -131,16 +174,91 @@ impl Default for RigidBodySolver {
         Self {
             options: Default::default(),
             collision_buffer: Vec::default(),
+            static_volumes: StaticVolumeRowTable::default(),
+            static_volumes_hash: FxLsSpatialHash::new(DEFAULT_STATIC_VOLUMES_HASH_RESOLUTION),
         }
     }
 }
 
 impl RigidBodySolver {
-    pub const fn new(options: RigidBodyOptions) -> Self {
+    pub fn new(options: RigidBodyOptions) -> Self {
         Self {
             options,
             collision_buffer: Vec::new(),
+            static_volumes: StaticVolumeRowTable::new(),
+            static_volumes_hash: FxLsSpatialHash::new(options.static_volumes_hash_resolution),
         }
+    }
+
+    pub fn clear_static_volumes(&mut self) {
+        self.static_volumes.clear();
+        self.static_volumes_hash.clear();
+    }
+
+    pub fn add_static_volume(&mut self, position: glam::Vec3, volume: Sphere) -> IndirectIndex {
+        let id = self.static_volumes.insert((position, volume));
+        let cell = self.static_volumes_hash.cell_at(position);
+        self.static_volumes_hash.put(cell, id);
+        id
+    }
+
+    pub fn remove_static_volume(&mut self, id: IndirectIndex) {
+        if let Some(direct) = self.static_volumes.solve_indirect(id) {
+            let position = self.static_volumes.position[direct.as_index()];
+
+            let cell = self.static_volumes_hash.cell_at(position);
+            let bucket = self.static_volumes_hash.get_mut(cell).unwrap();
+
+            bucket.retain(|&h_id| h_id != id);
+            self.static_volumes.free(id);
+        }
+    }
+
+    pub fn detect_static_collisions(
+        &mut self,
+        rb_hash: &FxLsSpatialHash<DirectIndex>,
+        positions: &[glam::Vec3],
+        volumes: &[Sphere],
+        handles: &[IndirectIndex],
+    ) {
+        self.static_volumes_hash.cells().for_each(|&cell| {
+            let static_bodies = self.static_volumes_hash.get(cell);
+            let dynamic_bodies = rb_hash.get(cell);
+
+            if let Some(static_bodies) = static_bodies
+                && !static_bodies.is_empty()
+                && let Some(dynamic_bodies) = dynamic_bodies
+                && !dynamic_bodies.is_empty()
+            {
+                static_bodies.iter().for_each(|&static_body| {
+                    let static_index = self.static_volumes.solve_indirect(static_body).unwrap();
+                    let static_volume = self.static_volumes.volume[static_index.as_index()];
+                    let static_position = self.static_volumes.position[static_index.as_index()];
+
+                    dynamic_bodies.iter().for_each(|dynamic_index| {
+                        let dynamic_volume = volumes[dynamic_index.as_index()];
+                        let dynamic_position = positions[dynamic_index.as_index()];
+
+                        let d_sq = static_position.distance_squared(dynamic_position);
+                        if static_volume.intersects(dynamic_volume, d_sq) {
+                            let (n, depth) = static_volume.peneration_with(
+                                dynamic_volume,
+                                static_position,
+                                dynamic_position,
+                                d_sq,
+                            );
+
+                            self.collision_buffer.push(LightCollision {
+                                normal: n,
+                                depth,
+                                index_a: IndirectIndex::default(),
+                                index_b: handles[dynamic_index.as_index()],
+                            });
+                        }
+                    });
+                });
+            }
+        });
     }
 
     pub fn detect_collisions(
