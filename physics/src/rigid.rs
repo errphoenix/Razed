@@ -219,7 +219,6 @@ impl RigidBodySolver {
         rb_hash: &FxLsSpatialHash<DirectIndex>,
         positions: &[glam::Vec3],
         volumes: &[Sphere],
-        handles: &[IndirectIndex],
     ) {
         self.static_volumes_hash.cells().for_each(|&cell| {
             let static_bodies = self.static_volumes_hash.get(cell);
@@ -251,8 +250,8 @@ impl RigidBodySolver {
                             self.collision_buffer.push(LightCollision {
                                 normal: n,
                                 depth,
-                                index_a: IndirectIndex::default(),
-                                index_b: handles[dynamic_index.as_index()],
+                                index_a: DirectIndex::default(),
+                                index_b: *dynamic_index,
                             });
                         }
                     });
@@ -265,9 +264,14 @@ impl RigidBodySolver {
         &mut self,
         positions: &[glam::Vec3],
         volumes: &[Sphere],
-        id_map: &[IndirectIndex],
+        direct_indices: &[DirectIndex],
     ) {
-        collision::detect_n2(positions, volumes, id_map, &mut self.collision_buffer);
+        collision::detect_n2(
+            positions,
+            volumes,
+            direct_indices,
+            &mut self.collision_buffer,
+        );
     }
 
     pub fn solve_collisions(
@@ -275,13 +279,13 @@ impl RigidBodySolver {
         positions: &mut [glam::Vec3],
         velocities: &mut [glam::Vec3],
         ang_velocities: &mut [glam::Vec3],
-        id_map: &[IndirectIndex],
     ) {
+        assert_eq!(positions.len(), velocities.len());
+        assert_eq!(velocities.len(), ang_velocities.len());
+
         self.collision_buffer.drain(..).for_each(|collision| {
-            let index0 = collision.index_a;
-            let index1 = collision.index_b;
-            let id0 = id_map[index0.as_index()].as_index();
-            let id1 = id_map[index1.as_index()].as_index();
+            let id0 = collision.index_a.as_index();
+            let id1 = collision.index_b.as_index();
 
             let correction = collision.depth * collision.normal;
             positions[id0] += correction * 0.5;

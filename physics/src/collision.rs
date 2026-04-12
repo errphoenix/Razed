@@ -1,4 +1,4 @@
-use ethel::state::data::IndirectIndex;
+use ethel::state::data::DirectIndex;
 
 #[derive(Clone, Copy, PartialEq, PartialOrd, Debug, Default)]
 pub struct Sphere {
@@ -47,23 +47,21 @@ impl Sphere {
 pub struct LightCollision {
     pub normal: glam::Vec3,
     pub depth: f32,
-    pub index_a: IndirectIndex,
-    pub index_b: IndirectIndex,
+    pub index_a: DirectIndex,
+    pub index_b: DirectIndex,
 }
 
 /// Detect collisions between all bodies, given their `positions` and
 /// `volumes`.
-///
-/// The indices in `id_map` are intended to be a mapping of the local indices
-/// of the given slices and a global stable ID to recognize them by later.
 pub fn detect_n2(
     positions: &[glam::Vec3],
     volumes: &[Sphere],
-    id_map: &[IndirectIndex],
+    direct_indices: &[DirectIndex],
     results: &mut Vec<LightCollision>,
 ) {
     let len = positions.len();
     assert_eq!(len, volumes.len());
+    assert_eq!(len, direct_indices.len());
 
     for i in 0..len {
         for j in (i + 1)..len {
@@ -76,8 +74,8 @@ pub fn detect_n2(
             if v0.intersects(v1, d_sq) && d_sq > 0.01 {
                 let (n, depth) = v0.peneration_with(v1, p0, p1, d_sq);
 
-                let id0 = id_map[i];
-                let id1 = id_map[j];
+                let id0 = direct_indices[i];
+                let id1 = direct_indices[j];
 
                 results.push(LightCollision {
                     normal: n,

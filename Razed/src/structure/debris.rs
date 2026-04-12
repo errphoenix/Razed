@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use ethel::state::data::{
     Column, DirectIndex, IndirectIndex,
     hash::{FxLsSpatialHash, SpatialResolution},
@@ -46,7 +44,7 @@ ethel::table_spec! {
 pub struct DebrisVolumeBuffer {
     pub positions: Vec<glam::Vec3>,
     pub volumes: Vec<::physics::Sphere>,
-    pub handles: Vec<IndirectIndex>,
+    pub direct_indices: Vec<DirectIndex>,
 }
 
 impl DebrisVolumeBuffer {
@@ -58,20 +56,20 @@ impl DebrisVolumeBuffer {
         Self {
             positions: Vec::with_capacity(capacity),
             volumes: Vec::with_capacity(capacity),
-            handles: Vec::with_capacity(capacity),
+            direct_indices: Vec::with_capacity(capacity),
         }
     }
 
-    pub fn push(&mut self, position: glam::Vec3, volume: ::physics::Sphere, handle: IndirectIndex) {
+    pub fn push(&mut self, position: glam::Vec3, volume: ::physics::Sphere, index: DirectIndex) {
         self.positions.push(position);
         self.volumes.push(volume);
-        self.handles.push(handle);
+        self.direct_indices.push(index);
     }
 
     pub fn clear(&mut self) {
         self.positions.clear();
         self.volumes.clear();
-        self.handles.clear();
+        self.direct_indices.clear();
     }
 }
 
@@ -159,7 +157,6 @@ impl DebrisSystem {
         let inv_inertia_loc = &self.debris.inv_inertia_loc;
         let inv_inertia_abs = &mut self.debris.inv_inertia_abs;
         let volumes = &self.debris.volume;
-        let handles = &self.debris.handles;
 
         self.debris_hash
             .elements()
@@ -168,45 +165,41 @@ impl DebrisSystem {
                 self.debris_volume_buffer.clear();
 
                 debris.iter().for_each(|index| {
-                    let index = index.as_index();
-
-                    let position = positions[index];
-                    let volume = volumes[index];
-                    let handle = handles[index];
-
-                    self.debris_volume_buffer.push(position, volume, handle);
+                    let position = positions[index.as_index()];
+                    let volume = volumes[index.as_index()];
+                    self.debris_volume_buffer.push(position, volume, *index);
                 });
 
                 let DebrisVolumeBuffer {
                     positions,
                     volumes,
-                    handles,
+                    direct_indices,
                 } = &self.debris_volume_buffer;
 
                 self.debris_phys
-                    .detect_collisions(positions, volumes, handles);
+                    .detect_collisions(positions, volumes, direct_indices);
             });
 
-        {
-            self.debris_phys.clear_static_volumes();
-            let static_volumes = {
-                let (_, pos, _, volumes) = self.rubber.split();
-                pos.join(volumes)
-            };
-            for (&p, &v) in static_volumes {
-                self.debris_phys.add_static_volume(p, v);
-            }
+        // {
+        //     self.debris_phys.clear_static_volumes();
+        //     let static_volumes = {
+        //         let (_, pos, _, volumes) = self.rubber.split();
+        //         pos.join(volumes)
+        //     };
+        //     for (&p, &v) in static_volumes {
+        //         self.debris_phys.add_static_volume(p, v);
+        //     }
 
-            self.debris_phys.detect_static_collisions(
-                &self.debris_hash,
-                positions,
-                volumes,
-                handles,
-            );
-        }
+        //     self.debris_phys.detect_static_collisions(
+        //         &self.debris_hash,
+        //         positions,
+        //         volumes,
+        //         handles,
+        //     );
+        // }
 
         self.debris_phys
-            .solve_collisions(positions, velocities, ang_velocities, handles);
+            .solve_collisions(positions, velocities, ang_velocities);
 
         self.debris_phys.apply_gravity(forces);
         self.debris_phys
