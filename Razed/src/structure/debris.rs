@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use ethel::state::data::{
     Column, DirectIndex, IndirectIndex,
     hash::{FxLsSpatialHash, SpatialResolution},
@@ -7,8 +9,8 @@ use physics::rigid::RigidBodySolver;
 
 ethel::table_spec! {
     struct Debris {
-        // milliseconds since spawned
-        age: u32;
+        // seconds since spawned (nanosecond detail)
+        age: f32;
 
         position: glam::Vec3;
         rotation: glam::Quat;
@@ -29,7 +31,9 @@ ethel::table_spec! {
 
 ethel::table_spec! {
     struct Rubber {
-        age: u32;
+        // seconds since spawned (nanosecond detail)
+        // includes its original age as non-rubber debris
+        age: f32;
 
         position: glam::Vec3;
         rotation: glam::Quat;
@@ -71,6 +75,9 @@ impl DebrisVolumeBuffer {
     }
 }
 
+/// Time in seconds threshold to transform dynamic debris to
+/// static debris (rubber)
+const DEBRIS_TRASH_AGE_THRESHOLD: f32 = 5.0;
 const HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(2.0);
 
 #[derive(Debug)]
@@ -78,7 +85,9 @@ pub struct DebrisSystem {
     debris: DebrisRowTable,
     debris_phys: RigidBodySolver,
     debris_hash: FxLsSpatialHash<DirectIndex>,
+
     debris_volume_buffer: DebrisVolumeBuffer,
+    debris_trash_buffer: Vec<IndirectIndex>,
 
     rubber: RubberRowTable,
 }
@@ -90,6 +99,7 @@ impl Default for DebrisSystem {
             debris_phys: RigidBodySolver::default(),
             debris_hash: FxLsSpatialHash::new(HASH_RESOLUTION),
             debris_volume_buffer: DebrisVolumeBuffer::default(),
+            debris_trash_buffer: Vec::new(),
             rubber: RubberRowTable::default(),
         }
     }
@@ -106,6 +116,7 @@ impl DebrisSystem {
             debris_phys: RigidBodySolver::default(),
             debris_hash: FxLsSpatialHash::with_capacity(HASH_RESOLUTION, capacity),
             debris_volume_buffer: DebrisVolumeBuffer::new(),
+            debris_trash_buffer: Vec::with_capacity(capacity / 2),
             rubber: RubberRowTable::with_capacity(capacity / 2),
         }
     }
@@ -126,13 +137,7 @@ impl DebrisSystem {
         &mut self.rubber
     }
 
-    /// this offset is used to determine whether the indices used in
-    /// `debris_hash` are debris or rubber data.
-    fn internal_debris_rubber_offset(&self) -> usize {
-        self.debris.len().max(self.rubber.len())
-    }
-
-    pub fn hash_all(&mut self) {
+    pub fn hash_debris(&mut self) {
         self.debris_hash.clear();
 
         let positions = &self.debris.position;
@@ -141,20 +146,9 @@ impl DebrisSystem {
             let cell = self.debris_hash.cell_at(pos);
             self.debris_hash.put(cell, DirectIndex::from_index(i));
         }
-
-        let positions = &self.rubber.position;
-        let offset = self.internal_debris_rubber_offset();
-
-        for i in 1..positions.len() {
-            let pos = positions[i];
-            let i = i + offset;
-            let cell = self.debris_hash.cell_at(pos);
-            self.debris_hash.put(cell, DirectIndex::from_index(i));
-        }
     }
 
     pub fn simulate_bodies(&mut self, delta: DeltaTime) {
-        let slice_offset = self.internal_debris_rubber_offset();
         let positions = &mut self.debris.position;
         let rotations = &mut self.debris.rotation;
         let velocities = &mut self.debris.velocity;
@@ -227,5 +221,29 @@ impl DebrisSystem {
             .damp_velocity(velocities, ang_velocities, delta);
         self.debris_phys
             .constrain_ground(positions, velocities, ang_velocities);
+    }
+
+    pub fn freeze_old_debris(&mut self, delta: DeltaTime) {
+        let age = &mut self.debris.age;
+        let handles = &self.debris.handles;
+
+        for (age, &id) in age.iter_mut().zip(handles).skip(1) {
+            if *age > DEBRIS_TRASH_AGE_THRESHOLD {
+                self.debris_trash_buffer.push(id);
+            }
+            *age += delta.as_f32();
+        }
+
+        self.debris_trash_buffer.drain(..).for_each(|debris_id| {
+            let direct = self.debris.solve_indirect(debris_id).unwrap();
+
+            let position = self.debris.position[direct.as_index()];
+            let rotation = self.debris.rotation[direct.as_index()];
+            let volume = self.debris.volume[direct.as_index()];
+            let age = self.debris.age[direct.as_index()];
+
+            self.rubber.insert((age, position, rotation, volume));
+            self.debris.free(debris_id);
+        });
     }
 }
