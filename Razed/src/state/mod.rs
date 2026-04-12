@@ -149,15 +149,21 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     let debris = &storage.debris;
                     let pod_positions = self.debris.data().position_slice();
                     let pod_rotations = self.debris.data().rotation_slice();
+                    let pod_positions_rubber = &self.debris.rubber().position_slice()[1..];
+                    let pod_rotations_rubber = &self.debris.rubber().rotation_slice()[1..];
+                    let debris_offset = self.debris.data().len() * size_of::<f32>() * 4;
 
                     // SAFETY: the use of LayoutDebrisData ensures we blit to a
                     // valid section of the partitioned buffer.
                     unsafe {
                         debris.blit_part_padded(buf_idx, LayoutDebrisData::PodPositions as usize, pod_positions, 0, VEC3_VEC4_PADDING);
                         debris.blit_part(buf_idx, LayoutDebrisData::PodRotations as usize, pod_rotations, 0);
+                        debris.blit_part_padded(buf_idx, LayoutDebrisData::PodPositions as usize, pod_positions_rubber, debris_offset, VEC3_VEC4_PADDING);
+                        debris.blit_part(buf_idx, LayoutDebrisData::PodRotations as usize, pod_rotations_rubber, debris_offset);
                     }
 
-                    let debris_count = self.debris.data().len() as u32 - 1;
+                    // subtract 2 to ignore degenerate 0 in both tables
+                    let debris_count = (self.debris.data().len() + self.debris.rubber().len()) as u32 - 2;
                     storage.debris_count.store(debris_count, Ordering::Release);
                 }
 
@@ -406,7 +412,7 @@ impl State {
                      mass,
                  }| {
                     self.debris.data_mut().insert((
-                        0,
+                        0.0,
                         position,
                         glam::Quat::IDENTITY,
                         velocity,
@@ -463,9 +469,12 @@ impl State {
 
     fn update_debris(&mut self, delta: DeltaTime) {
         self.profiler
-            .capture_duration("debris_hash", || self.debris.hash_all());
+            .capture_duration("debris_hash", || self.debris.hash_debris());
         self.profiler.capture_duration("debris_phys_rb", || {
             self.debris.simulate_bodies(delta);
+        });
+        self.profiler.capture_duration("debris_age_and_freeze", || {
+            self.debris.freeze_old_debris(delta);
         });
     }
 
@@ -568,6 +577,9 @@ impl State {
 
         for (i, ::physics::xpbd::LinkNodes(a, b)) in constraints.into_iter().enumerate() {
             const RAY_SIZE: f32 = 0.05;
+
+            // view start at 1 to ignore degenerate element 0
+            let i = i + 1;
 
             let a_i = unsafe { self.lattice.nodes().solve_indirect_unchecked(*a) };
             let b_i = unsafe { self.lattice.nodes().solve_indirect_unchecked(*b) };
