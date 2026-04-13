@@ -18,10 +18,10 @@ pub struct RigidBodyOptions {
 }
 
 pub const DEFAULT_GRAVITY: f32 = 9.807;
-pub const DEFAULT_DAMPING: f32 = 0.725;
+pub const DEFAULT_DAMPING: f32 = 0.785;
 pub const DEFAULT_RESTITUTION: f32 = 0.001;
-pub const DEFAULT_FRICTION: f32 = 0.00215;
-pub const DEFAULT_STATIC_VOLUMES_HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(2.0);
+pub const DEFAULT_FRICTION: f32 = 0.05;
+pub const DEFAULT_STATIC_VOLUMES_HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(4.0);
 
 const INTERNAL_STEP_MULT: f32 = 1.0;
 
@@ -279,9 +279,9 @@ impl RigidBodySolver {
         positions: &mut [glam::Vec3],
         velocities: &mut [glam::Vec3],
         ang_velocities: &mut [glam::Vec3],
+        masses: &[f32],
     ) {
         assert_eq!(positions.len(), velocities.len());
-        assert_eq!(velocities.len(), ang_velocities.len());
 
         self.collision_buffer.drain(..).for_each(|collision| {
             let id0 = collision.index_a.as_index();
@@ -294,15 +294,16 @@ impl RigidBodySolver {
             let rel_v = velocities[id0] - velocities[id1];
             let d_v = rel_v.dot(collision.normal);
 
-            if d_v < 0.0 && collision.depth > 0.0 {
+            if d_v < 0.1 && collision.depth > 0.0 {
                 let j = -(1.0 - self.options.restitution) * d_v;
                 let impulse = collision.normal * j;
 
-                velocities[id0] += impulse * 0.5;
-                velocities[id1] -= impulse * 0.5;
+                velocities[id0] += impulse * 0.5 * masses[id0];
+                velocities[id1] -= impulse * 0.5 * masses[id1];
 
-                ang_velocities[id0] *= 0.5;
-                ang_velocities[id1] *= 0.5;
+                let t = collision.normal.any_orthonormal_vector();
+                ang_velocities[id0] += t * rel_v;
+                ang_velocities[id1] -= t * rel_v;
             }
         });
     }
@@ -351,8 +352,8 @@ impl RigidBodySolver {
             .zip(torques)
             .zip(inertia)
             .for_each(|((v, t), i)| {
-                let t = std::mem::take(t);
-                *v += h * i.mul_vec3(t);
+                *v += h * i.mul_vec3(*t);
+                *t *= self.options.damping;
             });
     }
 
@@ -391,7 +392,9 @@ impl RigidBodySolver {
         let dh2 = dh * dh;
         let dh2e = (-dh2).exp();
         velocities.iter_mut().for_each(|v| *v *= dh2e);
-        ang_velocities.iter_mut().for_each(|v| *v *= dh2e);
+        ang_velocities
+            .iter_mut()
+            .for_each(|v| *v *= dh2e * self.options.damping);
     }
 
     pub fn constrain_ground(
@@ -411,7 +414,7 @@ impl RigidBodySolver {
                         v.y *= -self.options.restitution;
                         v.x *= self.options.friction;
                         v.z *= self.options.friction;
-                        *a_v *= -self.options.restitution * 2.0;
+                        *a_v *= self.options.friction;
                     }
                 });
         }

@@ -195,7 +195,7 @@ impl DebrisSystem {
         }
 
         self.debris_phys
-            .solve_collisions(positions, velocities, ang_velocities);
+            .solve_collisions(positions, velocities, ang_velocities, masses);
 
         self.debris_phys.apply_gravity(forces);
         self.debris_phys
