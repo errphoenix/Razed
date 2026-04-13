@@ -1,5 +1,5 @@
 use ethel::state::data::{
-    Column, DirectIndex, IndirectIndex, SparseSlot,
+    Column, DirectIndex, IndirectIndex,
     hash::{FxLsSpatialHash, SpatialResolution},
 };
 use janus::context::DeltaTime;

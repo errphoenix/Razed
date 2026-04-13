@@ -180,23 +180,19 @@ impl DebrisSystem {
                     .detect_collisions(positions, volumes, direct_indices);
             });
 
-        // {
-        //     self.debris_phys.clear_static_volumes();
-        //     let static_volumes = {
-        //         let (_, pos, _, volumes) = self.rubber.split();
-        //         pos.join(volumes)
-        //     };
-        //     for (&p, &v) in static_volumes {
-        //         self.debris_phys.add_static_volume(p, v);
-        //     }
+        {
+            self.debris_phys.clear_static_volumes();
+            let static_volumes = {
+                let (_, pos, _, volumes) = self.rubber.split();
+                pos.join(volumes)
+            };
+            for (&p, &v) in static_volumes {
+                self.debris_phys.add_static_volume(p, v);
+            }
 
-        //     self.debris_phys.detect_static_collisions(
-        //         &self.debris_hash,
-        //         positions,
-        //         volumes,
-        //         handles,
-        //     );
-        // }
+            self.debris_phys
+                .detect_static_collisions(&self.debris_hash, positions, volumes);
+        }
 
         self.debris_phys
             .solve_collisions(positions, velocities, ang_velocities);
