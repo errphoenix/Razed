@@ -64,7 +64,7 @@ impl VoxelGridOptions {
 pub type VoxelGridFn = fn(Cell) -> bool;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct VoxelIndex(i32);
+pub struct VoxelIndex(pub(crate) i32);
 
 impl VoxelIndex {
     pub fn as_i32(&self) -> i32 {
@@ -159,9 +159,9 @@ impl VoxelGrid {
     pub fn point_from_id(&self, index: VoxelIndex) -> glam::Vec3 {
         let cell = self.cell_from_id(index);
         glam::vec3(
-            (cell.x as f32 + 0.5) / self.options.cell_size as f32,
-            (cell.y as f32 + 0.5) / self.options.cell_size as f32,
-            (cell.z as f32 + 0.5) / self.options.cell_size as f32,
+            cell.x as f32 / self.options.cell_size + 0.5,
+            cell.y as f32 / self.options.cell_size + 0.5,
+            cell.z as f32 / self.options.cell_size + 0.5,
         )
     }
 
@@ -249,9 +249,59 @@ impl VoxelGrid {
         let d = self.options.depth;
         let i = self.options.cell_size;
         (
-            (w * i as f32).round() as i32,
-            (h * i as f32).round() as i32,
-            (d * i as f32).round() as i32,
+            (w / i as f32).round() as i32,
+            (h / i as f32).round() as i32,
+            (d / i as f32).round() as i32,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn voxel_index_encoding() {
+        const SIZE: f32 = 10.0;
+        const CELL: f32 = 1.0;
+
+        let grid = VoxelGrid::new(
+            |_| true,
+            VoxelGridOptions::default()
+                .with_width(SIZE)
+                .with_height(SIZE)
+                .with_depth(SIZE)
+                .with_cell_size(CELL),
+        );
+
+        const VOLUME: f32 = SIZE * SIZE * SIZE;
+        const BOUNDS: usize = (VOLUME / CELL) as usize;
+
+        let mut v = Vec::with_capacity(VOLUME.round() as usize);
+        for i in 0..BOUNDS {
+            let index = VoxelIndex(i as i32);
+            let cell = grid.cell_from_id(index);
+            let point = grid.point_from_id(index);
+            v.push(((cell, index), point));
+        }
+
+        const SIDE_BOUNDS: i32 = (SIZE / CELL) as i32 / 2;
+        let mut i = 0;
+        for x in -SIDE_BOUNDS..SIDE_BOUNDS {
+            for y in -SIDE_BOUNDS..SIDE_BOUNDS {
+                for z in -SIDE_BOUNDS..SIDE_BOUNDS {
+                    let cell = Cell::new(x, y, z);
+                    let index = grid.voxel_index(cell);
+
+                    let (cmp, cmp_point) = v[i];
+                    assert_eq!(cmp, (cell, index));
+
+                    let point = glam::vec3(x as f32 * CELL, y as f32 * CELL, z as f32 * CELL) + 0.5;
+                    assert_eq!(cmp_point, point);
+
+                    i += 1;
+                }
+            }
+        }
     }
 }
