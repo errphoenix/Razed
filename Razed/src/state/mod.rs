@@ -10,7 +10,7 @@ use crate::{
     state::physics::LatticeSystem,
     structure::{
         self, FragmentState, FragmentSystem,
-        debris::DebrisSystem,
+        debris::{self, DebrisSystem},
         deforms::{DeformSystem, DeformsRowTableView},
     },
     voxel::{VoxelGrid, VoxelGridOptions},
@@ -423,6 +423,7 @@ impl State {
                         glam::Mat3::IDENTITY,
                         glam::Mat3::IDENTITY,
                         ::physics::Sphere::new(0.5),
+                        debris::MotionAccumulator::default(),
                     ));
                 },
             );
@@ -473,7 +474,8 @@ impl State {
         self.profiler.capture_duration("debris_phys_rb", || {
             self.debris.simulate_bodies(delta);
         });
-        self.profiler.capture_duration("debris_age_and_freeze", || {
+        self.profiler.capture_duration("debris_sleep", || {
+            self.debris.accumulate_motion();
             self.debris.freeze_old_debris(delta);
         });
     }

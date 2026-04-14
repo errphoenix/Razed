@@ -1,9 +1,29 @@
+use std::time::{Duration, Instant};
+
 use ethel::state::data::{
     Column, DirectIndex, IndirectIndex,
     hash::{FxLsSpatialHash, SpatialResolution},
 };
 use janus::context::DeltaTime;
 use physics::rigid::RigidBodySolver;
+
+const MOTION_ACCUM_BUCKET_SIZE: Duration = Duration::from_millis(300);
+const MOTION_ACCUM_BUCKET_COUNT: usize = 6;
+
+#[derive(Clone, Copy, Debug)]
+pub struct MotionAccumulator {
+    pub window: ethel::state::time::AccumulationWindow<{ MOTION_ACCUM_BUCKET_COUNT }, f32>,
+    pub last_position: glam::Vec3,
+}
+
+impl Default for MotionAccumulator {
+    fn default() -> Self {
+        Self {
+            window: ethel::state::time::AccumulationWindow::new(MOTION_ACCUM_BUCKET_SIZE),
+            last_position: glam::Vec3::default(),
+        }
+    }
+}
 
 ethel::table_spec! {
     struct Debris {
@@ -24,6 +44,8 @@ ethel::table_spec! {
         inv_inertia_abs: glam::Mat3;
 
         volume: physics::Sphere;
+
+        motion: MotionAccumulator;
     }
 }
 
@@ -73,10 +95,9 @@ impl DebrisVolumeBuffer {
     }
 }
 
-/// Time in seconds threshold to transform dynamic debris to
-/// static debris (rubber)
-const DEBRIS_TRASH_AGE_THRESHOLD: f32 = 5.0;
-const HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(2.0);
+const DEBRIS_FREEZE_TIME_THRESHOLD: f32 = 8.0;
+const DEBRIS_FREEZE_MOVE_THRESHOLD: f32 = 0.35;
+const HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(5.0);
 
 #[derive(Debug)]
 pub struct DebrisSystem {
@@ -219,14 +240,39 @@ impl DebrisSystem {
             .constrain_ground(positions, velocities, ang_velocities);
     }
 
+    pub fn accumulate_motion(&mut self) {
+        let time = Instant::now();
+
+        let positions = &mut self.debris.position;
+        let accums = &mut self.debris.motion;
+
+        for (
+            live_position,
+            MotionAccumulator {
+                window,
+                last_position,
+            },
+        ) in positions.iter_mut().zip(accums)
+        {
+            let d = *live_position - *last_position;
+            let f = d.length_squared();
+            window.register(f, time);
+            *last_position = *live_position;
+        }
+    }
+
     pub fn freeze_old_debris(&mut self, delta: DeltaTime) {
         let age = &mut self.debris.age;
         let handles = &self.debris.handles;
+        let motion = &self.debris.motion;
 
-        for (age, &id) in age.iter_mut().zip(handles).skip(1) {
-            if *age > DEBRIS_TRASH_AGE_THRESHOLD {
+        for ((age, motion), &id) in age.iter_mut().zip(motion).zip(handles).skip(1) {
+            if motion.window.accumulated() < DEBRIS_FREEZE_MOVE_THRESHOLD
+                && *age > DEBRIS_FREEZE_TIME_THRESHOLD
+            {
                 self.debris_trash_buffer.push(id);
             }
+
             *age += delta.as_f32();
         }
 
