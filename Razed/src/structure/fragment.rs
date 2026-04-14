@@ -1,16 +1,13 @@
 use ethel::state::data::{
-    Column, DirectIndex, IndirectIndex,
-    hash::{FxLsSpatialHash, FxSpatialHash, SpatialResolution},
-    table::TableView,
+    Column, DirectIndex, IndirectIndex, hash::FxSpatialHash, table::TableView,
 };
 use glam::Vec4Swizzles;
-use janus::context::DeltaTime;
-use physics::{rigid::RigidBodySolver, xpbd::NodesRowTableView};
+use physics::xpbd::NodesRowTableView;
 use rustc_hash::FxHashSet;
 
 use crate::{structure::deforms::DeformsRowTableView, voxel::VoxelGrid};
 
-const MIN_CLUSTER_SIZE: u32 = 3;
+const MIN_CLUSTER_SIZE: u32 = 2;
 
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]

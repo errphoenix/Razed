@@ -312,6 +312,11 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
 
         self.profiler.push_trace("simulation");
 
+        self.profiler.capture_duration("fragment_sync_cage", || {
+            let deforms = DeformsRowTableView::from(self.deforms.data());
+            self.fragments.compute_world_positions(&deforms);
+        });
+
         self.profiler
             .capture_duration("lattice_damage_register", || {
                 self.lattice.register_dead_nodes()
@@ -445,10 +450,6 @@ impl State {
         self.profiler
             .capture_duration("fragment_damage_sync_cage", || {
                 self.fragments.sync_deform_damage(deleted_points, &deforms);
-            });
-        self.profiler
-            .capture_duration("fragment_damage_rebind", || {
-                self.fragments.compute_world_positions(&deforms);
             });
 
         self.profiler.pop_trace();
