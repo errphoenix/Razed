@@ -112,7 +112,10 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 .deform_debug
                 .bind_shader_storage(buf_idx, DEFORM_POINTS_SSBO);
 
-            let count = frame_data.deform_debug_count.load(Ordering::Acquire) - 1;
+            let count = frame_data
+                .deform_debug_count
+                .load(Ordering::Acquire)
+                .saturating_sub(1);
             unsafe {
                 janus::gl::PointSize(5.0);
                 janus::gl::DrawArrays(janus::gl::POINTS, 0, count as i32);

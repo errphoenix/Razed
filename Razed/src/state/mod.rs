@@ -629,7 +629,7 @@ impl State {
             return lattice_map;
         }
 
-        let lattice = NodesRowTableView::from_range(self.lattice.nodes(), l0, l1 - l0);
+        let lattice = NodesRowTableView::from_range(self.lattice.nodes(), l0, l1 - l0 - 1);
         let mut lattice_hash = FxSpatialHash::new(SpatialResolution::new(1.0));
         lattice_hash.dump_soa(lattice.current_pos, lattice.handles);
 
@@ -645,7 +645,7 @@ impl State {
         let deforms = DeformsRowTableView::from_range(
             self.deforms.data(),
             generated_len.start,
-            generated_len.end - generated_len.start,
+            generated_len.end - generated_len.start - 1,
         );
         let mut deforms_hash = FxSpatialHash::new(SpatialResolution::new(1.0));
         deforms_hash.dump_soa(deforms.pose, deforms.handles);
