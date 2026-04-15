@@ -59,6 +59,7 @@ pub struct State {
 
     /// Selected lattice link id
     selection: Option<IndirectIndex>,
+    dead_fragments: Vec<IndirectIndex>,
 
     camera: camera::Orbital,
 }
@@ -83,6 +84,7 @@ impl Default for State {
             entity_data: Default::default(),
             frag_map: Default::default(),
             selection: Default::default(),
+            dead_fragments: Default::default(),
             camera: camera::Orbital::new(
                 Default::default(),
                 Default::default(),
@@ -309,14 +311,22 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             self.fragments.compute_world_positions(&deforms);
         });
 
+        // synchronizes lattice damage from xpbd-lattice solver
         self.profiler
             .capture_duration("lattice_damage_register", || {
                 self.lattice.register_dead_nodes()
             });
+
         self.process_cage_damage();
+
+        // synchronizes lattice and cage damage to fragments.
+        // after this point, the order of fragment elements must not change;
+        // i.e. there must be no free operations on the fragment table until
+        // after the release_debris_bodies function.
         self.process_fragment_damage();
         self.deforms.delete_dead_points();
         self.release_debris_bodies();
+        self.delete_disabled_fragments();
 
         self.profiler.push_trace("update_structures");
         self.update_subsystems(delta);
@@ -344,6 +354,25 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
 }
 
 impl State {
+    fn delete_disabled_fragments(&mut self) {
+        self.profiler.capture_duration("fragment_delete_old", || {
+            {
+                let disabled_frags = self.fragments.frame_disabled_frags();
+                let handles = self.fragments.data().handles();
+                for index in disabled_frags {
+                    let h = handles[index.as_index()];
+                    if h.as_index() == 0 {
+                        println!("{index:?} => {h:?}")
+                    }
+                    self.dead_fragments.push(h);
+                }
+            }
+
+            self.fragments.data_mut().free_many(&self.dead_fragments);
+            self.dead_fragments.clear();
+        });
+    }
+
     fn release_debris_bodies(&mut self) {
         let disabled_frags = self.fragments.frame_disabled_frags();
         if disabled_frags.len() > 0 {
