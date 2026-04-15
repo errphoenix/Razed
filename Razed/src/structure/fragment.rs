@@ -72,9 +72,6 @@ pub struct FragmentSystem {
     /// sparse map of node ID to sequence of fragment IDs
     node_map: Vec<Vec<IndirectIndex>>,
 
-    /// accumulated hash set of disabled fragment IDs; avoids dedup op
-    /// these are the fragments' indirect indices (stable)
-    disabled_frags_hash: FxHashSet<IndirectIndex>,
     /// per-frame list of damaged fragments from nodes
     /// these are the fragments' direct indices (unstable)
     fragment_damage_frame: Vec<(DirectIndex, IndirectIndex)>,
@@ -99,7 +96,6 @@ impl FragmentSystem {
             // account for degenerate
             node_map: vec![Vec::new()],
 
-            disabled_frags_hash: FxHashSet::default(),
             fragment_damage_frame: Vec::new(),
             disabled_frags_frame: Vec::new(),
         }
@@ -121,7 +117,6 @@ impl FragmentSystem {
             deform_map,
             node_map,
 
-            disabled_frags_hash: FxHashSet::default(),
             fragment_damage_frame: Vec::new(),
             disabled_frags_frame: Vec::new(),
         }
@@ -179,7 +174,6 @@ impl FragmentSystem {
     }
 
     pub fn clear_damage_buffer(&mut self) {
-        self.disabled_frags_hash.clear();
         self.disabled_frags_frame.clear();
         self.fragment_damage_frame.clear();
     }
@@ -245,9 +239,7 @@ impl FragmentSystem {
                     let w_t = weights.iter().sum::<f32>();
                     weights.iter_mut().for_each(|w| *w /= w_t);
 
-                    if self.disabled_frags_hash.insert(frag_id) {
-                        self.disabled_frags_frame.push(direct);
-                    }
+                    self.disabled_frags_frame.push(direct);
                 }
             }
         }
@@ -262,8 +254,9 @@ impl FragmentSystem {
                     continue;
                 }
 
-                let direct = unsafe { self.fragments.solve_indirect_unchecked(frag_id) };
-                self.fragment_damage_frame.push((direct, node));
+                if let Some(direct) = self.fragments.solve_indirect(frag_id) {
+                    self.fragment_damage_frame.push((direct, node));
+                }
             }
         }
 
@@ -294,10 +287,7 @@ impl FragmentSystem {
 
                 let active_count = parents.iter().filter(|id| id.as_int() != 0).count();
                 if active_count < MIN_CLUSTER_SIZE as usize {
-                    let indirect = self.fragments.handles[frag_idx.as_index()];
-                    if self.disabled_frags_hash.insert(indirect) {
-                        self.disabled_frags_frame.push(frag_idx);
-                    }
+                    self.disabled_frags_frame.push(frag_idx);
                 }
             });
     }
@@ -320,10 +310,6 @@ impl FragmentSystem {
 
     pub fn frame_disabled_frags(&self) -> &[DirectIndex] {
         &self.disabled_frags_frame
-    }
-
-    pub fn frame_disabled_frags_hash(&self) -> &FxHashSet<IndirectIndex> {
-        &self.disabled_frags_hash
     }
 
     const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 16;
@@ -402,11 +388,7 @@ impl FragmentSystem {
         lattice_hash: &FxSpatialHash<IndirectIndex>,
         lattice: &NodesRowTableView,
     ) {
-        {
-            let lattice_len = lattice.view_offset() + lattice.len();
-            self.node_map.resize_with(lattice_len, || Vec::new());
-        }
-
+        self.node_map.resize_with(lattice.size(), || Vec::new());
         let mut near_buf = Vec::with_capacity(PARENTS_COUNT);
 
         self.uninitialised.iter_mut().for_each(|frag| {

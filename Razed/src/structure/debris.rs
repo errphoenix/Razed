@@ -280,6 +280,9 @@ impl DebrisSystem {
         }
 
         self.debris_trash_buffer.drain(..).for_each(|debris_id| {
+            if debris_id.as_int() == 0 {
+                return;
+            }
             let direct = self.debris.solve_indirect(debris_id).unwrap();
 
             let position = self.debris.position[direct.as_index()];

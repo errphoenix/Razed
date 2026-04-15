@@ -88,15 +88,16 @@ impl DeformSystem {
             if let Some(deforms) = self.node_map.get_mut(node.as_index()) {
                 deforms.iter_mut().for_each(|deform| {
                     if deform.as_int() != 0 {
-                        let direct = self.data.solve_indirect(*deform).unwrap();
-                        for ControlPoint { id, weight } in
-                            &mut self.data.controllers[direct.as_index()]
-                        {
-                            if *id == *node {
-                                *id = IndirectIndex::default();
-                                *weight = 0.0;
-                                self.damaged_buffer.push(direct);
-                                break;
+                        if let Some(direct) = self.data.solve_indirect(*deform) {
+                            for ControlPoint { id, weight } in
+                                &mut self.data.controllers[direct.as_index()]
+                            {
+                                if *id == *node {
+                                    *id = IndirectIndex::default();
+                                    *weight = 0.0;
+                                    self.damaged_buffer.push(direct);
+                                    break;
+                                }
                             }
                         }
                     }
