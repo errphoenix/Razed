@@ -9,9 +9,8 @@ use crate::{
     },
     state::physics::LatticeSystem,
     structure::{
-        self, FragmentState, FragmentSystem,
-        debris::{self, DebrisSystem},
-        deforms::{DeformSystem, DeformsRowTableView},
+        DebrisSystem, DeformSystem, DeformsRowTableView, FragmentSystem, create_structure_lattice,
+        debris::MotionAccumulator,
     },
     voxel::{VoxelGrid, VoxelGridOptions},
 };
@@ -129,7 +128,6 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     let pod_anchors = self.fragments.data().anchors_slice();
                     let pod_anchor_weights = self.fragments.data().anchors_weights_slice();
                     let pod_bind_pose = self.fragments.data().bind_position_slice();
-                    let pod_states = self.fragments.data().state_slice();
 
                     // SAFETY: the use of LayoutFragmentData ensures we blit to a
                     // valid section of the partitioned buffer.
@@ -140,7 +138,6 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                         fragments.blit_part(buf_idx, LayoutFragmentData::PodAnchors as usize, pod_anchors, 0);
                         fragments.blit_part(buf_idx, LayoutFragmentData::PodAnchorsWeights as usize, pod_anchor_weights, 0);
                         fragments.blit_part(buf_idx, LayoutFragmentData::PodBindPose as usize, pod_bind_pose, 0);
-                        fragments.blit_part(buf_idx, LayoutFragmentData::PodStates as usize, pod_states, 0);
                     }
                 }
 
@@ -306,9 +303,9 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             });
         }
 
-        const WIND_FORCE: f32 = 1.0;
+        const WIND_FORCE: f32 = 0.5;
         self.lattice
-            .apply_forces_batched(glam::vec3(0.0, -9.81 * WIND_FORCE, 0.0));
+            .apply_forces_batched(glam::vec3(WIND_FORCE, -9.81, WIND_FORCE));
 
         self.profiler.push_trace("simulation");
 
@@ -428,7 +425,7 @@ impl State {
                         glam::Mat3::IDENTITY,
                         glam::Mat3::IDENTITY,
                         ::physics::Sphere::new(0.5),
-                        debris::MotionAccumulator::default(),
+                        MotionAccumulator::default(),
                     ));
                 },
             );
@@ -498,7 +495,7 @@ impl State {
         const TOTAL_HEIGHT: f32 = HEIGHT * FLOORS as f32;
 
         let center = glam::vec3(view_point.position.x, GROUND_LEVEL, view_point.position.z);
-        let lattice = structure::create_structure_lattice(center, WIDTH, HEIGHT, DEPTH, FLOORS);
+        let lattice = create_structure_lattice(center, WIDTH, HEIGHT, DEPTH, FLOORS);
 
         const INNER_SPACE: i32 = 2;
         let mut voxel_grid = VoxelGrid::new(

@@ -5,7 +5,15 @@ pub mod fragment;
 use physics::xpbd::{XpbdLatticeBuilder, XpbdLinkOptions, XpbdNodeOptions as Node};
 
 #[allow(unused_imports)]
-pub use fragment::{FragmentState, FragmentSystem};
+pub use debris::{
+    DebrisRowTable, DebrisRowTableView, DebrisSystem, RubberRowTable, RubberRowTableView,
+};
+
+#[allow(unused_imports)]
+pub use deforms::{DeformSystem, DeformsRowTable, DeformsRowTableView};
+
+#[allow(unused_imports)]
+pub use fragment::{FragmentSystem, FragmentsRowTable, FragmentsRowTableView};
 
 // height is per floor, not total building; todo: docs
 pub fn create_structure_lattice(

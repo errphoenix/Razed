@@ -34,10 +34,6 @@ layout(std430, binding = 2) readonly buffer POD_BindPose
 {
     vec4 pod_bind_pose[];
 };
-layout(std430, binding = 3) readonly buffer POD_States
-{
-    uint pod_states[];
-};
 
 layout(std430, binding = 6) readonly buffer IMap_Deforms
 {
@@ -162,6 +158,5 @@ void main() {
     fs_normal = mix(normal, normalize(abs(world.xyz)), 0.35);
     fs_color = vec4(vec3(0.8), 1.0);
 
-    uint state = pod_states[fragment_id];
-    gl_Position = u_projection * u_view * world * float(state);
+    gl_Position = u_projection * u_view * world;
 }

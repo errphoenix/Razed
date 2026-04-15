@@ -19,7 +19,7 @@ pub struct RigidBodyOptions {
 
 pub const DEFAULT_GRAVITY: f32 = 9.807;
 pub const DEFAULT_DAMPING: f32 = 0.785;
-pub const DEFAULT_RESTITUTION: f32 = 0.001;
+pub const DEFAULT_RESTITUTION: f32 = 0.2;
 pub const DEFAULT_FRICTION: f32 = 0.05;
 pub const DEFAULT_STATIC_VOLUMES_HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(4.0);
 

@@ -110,25 +110,20 @@ layout_buffer! {
             bind 2;
             shader 2;
         };
-        enum PodStates: FRAGMENTS_ALLOC => {
-            type u32;
-            bind 3;
-            shader 3;
-        };
 
         enum IMapDeforms: DEFORM_POINTS_ALLOC => {
             type u32;
-            bind 4;
+            bind 3;
             shader 6;
         };
         enum PodDeformsPositions: DEFORM_POINTS_ALLOC => {
             type [f32; 4];
-            bind 5;
+            bind 4;
             shader 7;
         };
         enum PodDeformsBindPose: DEFORM_POINTS_ALLOC => {
             type [f32; 4];
-            bind 6;
+            bind 5;
             shader 8;
         };
     }

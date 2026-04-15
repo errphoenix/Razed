@@ -5,42 +5,15 @@ use glam::Vec4Swizzles;
 use physics::xpbd::NodesRowTableView;
 use rustc_hash::FxHashSet;
 
-use crate::{structure::deforms::DeformsRowTableView, voxel::VoxelGrid};
+use crate::{structure::DeformsRowTableView, voxel::VoxelGrid};
 
-const MIN_CLUSTER_SIZE: u32 = 2;
-
-#[repr(u32)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum FragmentState {
-    /// The fragment is attached to the lattice structure.
-    ///
-    /// The behaviour of the fragment is entirely driven by the lattice nodes
-    /// it is attached to.
-    #[default]
-    Attached = 1,
-
-    /// The fragment is an independent physical body.
-    ///
-    /// It is not attached to any structure and it is most likely in movement
-    /// heading towards the ground.
-    Debris = 0,
-
-    /// Static/inactive
-    ///
-    /// The then fragment, and now debris has been on the ground for a
-    /// prolonged period of time.
-    ///
-    /// It is likely scheduled for removal.
-    InactiveDebris = 2,
-}
+const MIN_CLUSTER_SIZE: u32 = 3;
 
 pub const PARENTS_COUNT: usize = 4;
 pub const ANCHORS_COUNT: usize = 8;
 
 ethel::table_spec! {
     struct Fragments {
-        state: FragmentState;
-
         parents: [IndirectIndex; PARENTS_COUNT];
         parents_weights: [f32; PARENTS_COUNT];
 
@@ -213,7 +186,6 @@ impl FragmentSystem {
 
     pub fn compute_world_positions(&mut self, deforms: &DeformsRowTableView) {
         let length = self.fragments.len();
-        let state = &self.fragments.state;
         let anchors = &self.fragments.anchors;
         let anchor_weights = &self.fragments.anchors_weights;
         let bind = &self.fragments.bind_position;
@@ -223,11 +195,6 @@ impl FragmentSystem {
         let deform_now = &deforms.deformed;
 
         for i in 1..length {
-            let state = state[i];
-            if !matches!(state, FragmentState::Attached) {
-                continue;
-            }
-
             let mut pos = bind[i].xyz();
             let anchors = anchors[i];
             let weights = anchor_weights[i];
@@ -256,11 +223,6 @@ impl FragmentSystem {
                 }
 
                 if let Some(direct) = self.fragments.solve_indirect(frag_id) {
-                    let state = self.fragments.state[direct.as_index()];
-                    if !matches!(state, FragmentState::Attached) {
-                        continue;
-                    }
-
                     let fragment_world = self.fragments.world_position[direct.as_index()];
                     let anchors = &mut self.fragments.anchors[direct.as_index()];
                     let weights = &mut self.fragments.anchors_weights[direct.as_index()];
@@ -301,11 +263,6 @@ impl FragmentSystem {
                 }
 
                 let direct = unsafe { self.fragments.solve_indirect_unchecked(frag_id) };
-                let state = self.fragments.state[direct.as_index()];
-                if !matches!(state, FragmentState::Attached) {
-                    continue;
-                }
-
                 self.fragment_damage_frame.push((direct, node));
             }
         }
@@ -313,7 +270,6 @@ impl FragmentSystem {
         // validate disabled fragments and invalidate relations
         let parents = &mut self.fragments.parents;
         let weights = &mut self.fragments.parents_weights;
-        let states = &mut self.fragments.state;
 
         self.fragment_damage_frame
             .drain(..)
@@ -338,9 +294,6 @@ impl FragmentSystem {
 
                 let active_count = parents.iter().filter(|id| id.as_int() != 0).count();
                 if active_count < MIN_CLUSTER_SIZE as usize {
-                    let state = unsafe { states.get_unchecked_mut(frag_idx.as_index()) };
-                    *state = FragmentState::Debris;
-
                     let indirect = self.fragments.handles[frag_idx.as_index()];
                     if self.disabled_frags_hash.insert(indirect) {
                         self.disabled_frags_frame.push(frag_idx);
@@ -510,7 +463,6 @@ impl FragmentSystem {
 
             let position = glam::vec4(fragment_world.x, fragment_world.y, fragment_world.z, 1.0);
             let handle = self.fragments.insert((
-                FragmentState::Attached,
                 parents,
                 weights,
                 [IndirectIndex::default(); ANCHORS_COUNT],
