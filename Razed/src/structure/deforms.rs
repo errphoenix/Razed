@@ -138,11 +138,11 @@ impl DeformSystem {
         // temporarily solve indices
         self.damaged_buffer.iter_mut().for_each(|i| {
             let indirect = self.data.handles()[i.as_index()];
-            *i = DirectIndex::from_index(indirect.as_index());
+            *i = DirectIndex::from_index(indirect.as_index(), indirect.generation());
         });
 
         self.damaged_buffer.drain(..).for_each(|indirect| {
-            let ii = IndirectIndex::from_index(indirect.as_index());
+            let ii = IndirectIndex::from_index(indirect.as_index(), indirect.generation());
 
             let di = self.data.solve_indirect(ii).unwrap();
             self.data.pose[di.as_index()] = glam::Vec3::ZERO;

@@ -159,12 +159,15 @@ impl DebrisSystem {
     pub fn hash_debris(&mut self) {
         self.debris_hash.clear();
 
-        let positions = &self.debris.position;
-        for i in 1..positions.len() {
-            let pos = positions[i];
-            let cell = self.debris_hash.cell_at(pos);
-            self.debris_hash.put(cell, DirectIndex::from_index(i));
-        }
+        let debris_pos = self.debris.position_view().join(self.debris.handles_view());
+        debris_pos
+            .into_iter()
+            .enumerate()
+            .for_each(|(i, (&pos, &handle))| {
+                let cell = self.debris_hash.cell_at(pos);
+                let direct_id = DirectIndex::from_index(i, handle.generation());
+                self.debris_hash.put(cell, direct_id);
+            });
     }
 
     pub fn simulate_bodies(&mut self, delta: DeltaTime) {

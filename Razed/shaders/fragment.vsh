@@ -4,10 +4,18 @@ struct Metadata {
     uint offset;
     uint length;
 };
-
 struct Vertex {
     vec4 position;
     vec4 normal;
+};
+
+struct IndirectIndex {
+    uint index;
+    uint generation;
+};
+struct DirectIndex {
+    uint index;
+    uint generation;
 };
 
 layout(std430, binding = 10) readonly buffer VertexStorage
@@ -19,11 +27,9 @@ layout(std430, binding = 11) readonly buffer MeshMetadata {
     Metadata metadata[];
 };
 
-// bidimensional array of parenting nodes to support 8 anchors per fragment.
-// each entry is a 2-sized array of vec4, contiguous in memory
 layout(std430, binding = 0) readonly buffer POD_Anchors
 {
-    uvec4 pod_anchors[][2];
+    IndirectIndex pod_anchors[][8];
 };
 layout(std430, binding = 1) readonly buffer POD_Weights
 {
@@ -37,7 +43,7 @@ layout(std430, binding = 2) readonly buffer POD_BindPose
 
 layout(std430, binding = 6) readonly buffer IMap_Deforms
 {
-    uint imap_deforms[];
+    IndirectIndex imap_deforms[];
 };
 layout(std430, binding = 7) readonly buffer POD_Deforms_Positions
 {
@@ -71,19 +77,19 @@ void main() {
 
     // account for degenerate 0
     uint fragment_id = gl_InstanceID + 1;
-    uvec4[2] anchors = pod_anchors[fragment_id];
+    IndirectIndex[8] anchors = pod_anchors[fragment_id];
     vec4[2] weights = pod_weights[fragment_id];
     vec3 bind_pose = pod_bind_pose[fragment_id].xyz;
 
     // common ids and weights gather
-    uint i0 = imap_deforms[anchors[0].x];
-    uint i1 = imap_deforms[anchors[0].y];
-    uint i2 = imap_deforms[anchors[0].z];
-    uint i3 = imap_deforms[anchors[0].w];
-    uint i4 = imap_deforms[anchors[1].x];
-    uint i5 = imap_deforms[anchors[1].y];
-    uint i6 = imap_deforms[anchors[1].z];
-    uint i7 = imap_deforms[anchors[1].w];
+    uint i0 = imap_deforms[anchors[0].index].index;
+    uint i1 = imap_deforms[anchors[1].index].index;
+    uint i2 = imap_deforms[anchors[2].index].index;
+    uint i3 = imap_deforms[anchors[3].index].index;
+    uint i4 = imap_deforms[anchors[4].index].index;
+    uint i5 = imap_deforms[anchors[5].index].index;
+    uint i6 = imap_deforms[anchors[6].index].index;
+    uint i7 = imap_deforms[anchors[7].index].index;
 
     float w0 = weights[0].x;
     float w1 = weights[0].y;

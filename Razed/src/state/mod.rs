@@ -246,13 +246,8 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 // cage deforms debug upload
                 {
                     let deform_dbg = &storage.deform_debug;
-                    let deform_dbg_ctl = &storage.deform_debug_controls;
-
                     let deform_points = self.deforms.data().deformed_slice();
-                    let defrom_controls = self.deforms.data().controllers_slice();
-
                     deform_dbg.blit_section_padded(buf_idx, deform_points, 0, VEC3_VEC4_PADDING);
-                    deform_dbg_ctl.blit_section(buf_idx, defrom_controls, 0);
                     storage.deform_debug_count.store(self.deforms.data().len() as u32, Ordering::Release);
                 }
 

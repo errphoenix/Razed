@@ -3,12 +3,9 @@ use std::sync::{Arc, atomic::AtomicU32};
 use ethel::{
     DrawCommand, layout_buffer, layout_mesh_buffer,
     render::buffer::{InitStrategy, PartitionedTriBuffer, TriBuffer},
-    state::data::IndirectIndex,
+    state::data::{DirectIndex, IndirectIndex},
 };
 
-use crate::structure::deforms::{
-    CONTROL_POINTS_COUNT as DEFORM_CONTROL_POINTS_COUNT, ControlPoint,
-};
 use crate::structure::fragment::ANCHORS_COUNT as FRAGMENT_ANCHORS_COUNT;
 
 pub const RENDER_STORAGE_PARTS: usize = 8;
@@ -66,13 +63,13 @@ pub const XPBD_NODES_ALLOC: usize = 512;
 layout_buffer! {
     const XpbdDebugData: 4, {
         enum Constraints: XPBD_CONSTRAINTS_ALLOC => {
-            type [u32; 2];
+            type [IndirectIndex; 2];
             bind 0;
             shader 4;
         };
 
         enum IMapNodes: XPBD_NODES_ALLOC => {
-            type u32;
+            type IndirectIndex;
             bind 1;
             shader 5;
         };
@@ -83,7 +80,7 @@ layout_buffer! {
         };
 
         enum I_Selected: 1 => {
-            type u32;
+            type DirectIndex;
             bind 3;
             shader 7;
         };
@@ -96,7 +93,7 @@ pub const FRAGMENTS_DATA_PARTS: usize = 7;
 layout_buffer! {
     const FragmentData: FRAGMENTS_DATA_PARTS, {
         enum PodAnchors: FRAGMENTS_ALLOC => {
-            type [u32; FRAGMENT_ANCHORS_COUNT];
+            type [IndirectIndex; FRAGMENT_ANCHORS_COUNT];
             bind 0;
             shader 0;
         };
@@ -112,7 +109,7 @@ layout_buffer! {
         };
 
         enum IMapDeforms: DEFORM_POINTS_ALLOC => {
-            type u32;
+            type IndirectIndex;
             bind 3;
             shader 6;
         };
@@ -161,7 +158,6 @@ pub struct FrameDataBuffers {
     pub xpbd_debug_link_count: Arc<AtomicU32>,
 
     pub deform_debug: TriBuffer<glam::Vec4>,
-    pub deform_debug_controls: TriBuffer<[ControlPoint; DEFORM_CONTROL_POINTS_COUNT]>,
     pub deform_debug_count: Arc<AtomicU32>,
 }
 
@@ -183,10 +179,6 @@ impl FrameDataBuffers {
             DEFORM_POINTS_ALLOC,
             InitStrategy::FillWith(|| glam::Vec4::NAN),
         );
-        let deform_debug_controls = TriBuffer::new(
-            DEFORM_POINTS_ALLOC,
-            InitStrategy::FillWith(|| [ControlPoint::default(); DEFORM_CONTROL_POINTS_COUNT]),
-        );
 
         Self {
             command: TriBuffer::zeroed(COMMAND_QUEUE_ALLOC),
@@ -200,7 +192,6 @@ impl FrameDataBuffers {
             xpbd_debug_link_count: Arc::new(AtomicU32::new(0)),
 
             deform_debug,
-            deform_debug_controls,
             deform_debug_count: Arc::new(AtomicU32::new(0)),
         }
     }

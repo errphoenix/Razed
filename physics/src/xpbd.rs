@@ -254,8 +254,12 @@ impl XpbdLatticeBuilder {
                 let lambda = 0f32;
                 let compliance = link.options.compliance;
                 let rest_length = link.options.rest_length.unwrap_or_else(|| {
-                    let ip_a = unsafe { nodes.solve_indirect_unchecked(relation.0) };
-                    let ip_b = unsafe { nodes.solve_indirect_unchecked(relation.1) };
+                    let ip_a = nodes
+                        .solve_indirect(relation.0)
+                        .expect("lattice linking indirection should not fail");
+                    let ip_b = nodes
+                        .solve_indirect(relation.1)
+                        .expect("lattice linking indirection should not fail");
 
                     let node_positions = nodes.current_pos_slice();
                     let p_a = unsafe { node_positions.get_unchecked(ip_a.as_index()) };

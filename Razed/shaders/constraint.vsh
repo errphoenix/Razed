@@ -1,7 +1,16 @@
 #version 460 core
 
+struct IndirectIndex {
+    uint index;
+    uint generation;
+};
+struct DirectIndex {
+    uint index;
+    uint generation;
+};
+
 struct Constraint {
-    uint node_pair[2];
+    IndirectIndex node_pair[2];
 };
 
 layout(std430, binding = 4) readonly buffer POD_Constraints
@@ -11,7 +20,7 @@ layout(std430, binding = 4) readonly buffer POD_Constraints
 
 layout(std430, binding = 5) readonly buffer IMap_Nodes
 {
-    uint imap_nodes[];
+    IndirectIndex imap_nodes[];
 };
 layout(std430, binding = 6) readonly buffer POD_Nodes
 {
@@ -20,7 +29,7 @@ layout(std430, binding = 6) readonly buffer POD_Nodes
 
 layout(std430, binding = 7) readonly buffer I_Selected
 {
-    uint i_selected;
+    DirectIndex i_selected;
 };
 
 uniform mat4 u_projection;
@@ -33,14 +42,14 @@ void main() {
     uint node_offset = gl_VertexID;
 
     Constraint constraint = constraints[constraint_id];
-    uint node_id = constraint.node_pair[node_offset];
-    uint node_ii = imap_nodes[node_id];
+    IndirectIndex node_id = constraint.node_pair[node_offset];
+    IndirectIndex node_ii = imap_nodes[node_id.index];
 
     fs_color = vec4(0.0, 1.0, 0.0, 0.4);
-    if (constraint_id == i_selected) {
+    if (constraint_id == i_selected.index) {
         fs_color = vec4(1.0, 0.0, 0.0, 1.0);
     }
 
-    vec3 position = pod_nodes[node_ii].xyz;
+    vec3 position = pod_nodes[node_ii.index].xyz;
     gl_Position = u_projection * u_view * vec4(position, 1.0);
 }
