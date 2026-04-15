@@ -56,8 +56,16 @@ impl LatticeSystem {
         self.damaged_nodes_hash.clear();
 
         for id in self.solver.broken_links() {
-            let LinkNodes(node_a, node_b) =
-                *unsafe { self.links().relation_slice().get_unchecked(id.as_index()) };
+            let index = self
+                .links()
+                .solve_indirect(*id)
+                .expect("broken link id is always valid");
+
+            let LinkNodes(node_a, node_b) = *unsafe {
+                self.links()
+                    .relation_slice()
+                    .get_unchecked(index.as_index())
+            };
             if self.damaged_nodes_hash.insert(node_a) {
                 self.damaged_nodes_data.push(node_a);
             }

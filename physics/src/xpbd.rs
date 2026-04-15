@@ -554,7 +554,7 @@ impl XpbdSolver {
             self.degenerate_nodes.clear();
 
             let relations = links.relation_view();
-            let count = relations.alpha.len();
+            let count = nodes.size();
 
             self.frame_constraint_map.fill(0u32);
             self.frame_constraint_map.resize(count, 0u32);
