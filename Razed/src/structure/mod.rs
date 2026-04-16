@@ -2,7 +2,7 @@ pub mod debris;
 pub mod deforms;
 pub mod fragment;
 
-use physics::xpbd::{XpbdLatticeBuilder, XpbdLinkOptions, XpbdNodeOptions as Node};
+use physics::xpbd::{RawXpbdLattice, XpbdLatticeBuilder, XpbdLinkOptions, XpbdNodeOptions as Node};
 
 #[allow(unused_imports)]
 pub use debris::{
@@ -15,13 +15,6 @@ pub use deforms::{DeformSystem, DeformsRowTable, DeformsRowTableView};
 #[allow(unused_imports)]
 pub use fragment::{FragmentSystem, FragmentsRowTable, FragmentsRowTableView};
 
-// ethel::table_spec! {
-//     struct Structure {
-//         bounds: ::physics::Aabb;
-
-//     }
-//}
-
 // height is per floor, not total building; todo: docs
 pub fn create_structure_lattice(
     origin: glam::Vec3,
@@ -29,7 +22,7 @@ pub fn create_structure_lattice(
     height: f32,
     depth: f32,
     floors: u32,
-) -> XpbdLatticeBuilder {
+) -> RawXpbdLattice {
     debug_assert!(floors > 0, "cannot create a structure with 0 floors");
 
     const FLOOR_NODE_COUNT: usize = 8;
@@ -230,5 +223,5 @@ pub fn create_structure_lattice(
         ];
     }
 
-    lattice
+    lattice.build()
 }

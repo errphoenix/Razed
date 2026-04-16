@@ -27,7 +27,7 @@ impl Default for MotionAccumulator {
 
 ethel::table_spec! {
     struct Debris {
-        // seconds since spawned (nanosecond detail)
+        // seconds since spawned
         age: f32;
 
         position: glam::Vec3;

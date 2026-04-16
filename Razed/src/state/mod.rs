@@ -7,14 +7,14 @@ use crate::{
         FrameDataBuffers, LayoutDebrisData, LayoutEntityData, LayoutFragmentData,
         LayoutXpbdDebugData, Renderable,
     },
-    state::physics::LatticeSystem,
+    state::physics::{LatticeSystem, NodesRowTableView},
     structure::{
         DebrisSystem, DeformSystem, DeformsRowTableView, FragmentSystem, create_structure_lattice,
         debris::MotionAccumulator,
     },
     voxel::{VoxelGrid, VoxelGridOptions},
 };
-use ::physics::xpbd::{LatticeIds, NodesRowTableView, XpbdLatticeBuilder, XpbdOptions, XpbdSolver};
+use ::physics::xpbd::{RawXpbdLattice, XpbdOptions, XpbdSolver};
 use ethel::{
     render::{ScreenSpace, command::DrawArraysIndirectCommand},
     state::{
@@ -599,7 +599,7 @@ impl State {
         let constraints = self.lattice.links().relation_view();
         let mut closest = None::<f32>;
 
-        for (i, ::physics::xpbd::LinkNodes(a, b)) in constraints.into_iter().enumerate() {
+        for (i, [a, b]) in constraints.into_iter().enumerate() {
             const RAY_SIZE: f32 = 0.05;
 
             // view start at 1 to ignore degenerate element 0
@@ -648,14 +648,14 @@ impl State {
         &mut self,
         origin: glam::Vec3,
         voxel_grid: &VoxelGrid,
-        lattice: XpbdLatticeBuilder,
-    ) -> LatticeIds {
+        lattice: RawXpbdLattice,
+    ) {
         let l0 = self.lattice.nodes().handles().len();
-        let lattice_map = self.lattice.import_lattice(lattice);
+        self.lattice.import_lattice(lattice);
         let l1 = self.lattice.nodes().handles().len();
 
         if l0 == l1 {
-            return lattice_map;
+            return;
         }
 
         let lattice = NodesRowTableView::from_range(self.lattice.nodes(), l0, l1 - l0 - 1);
@@ -721,7 +721,5 @@ impl State {
         //
         //     self.create_renderable(0, position, Default::default(), glam::Vec3::ONE * 0.5);
         // }
-
-        lattice_map
     }
 }

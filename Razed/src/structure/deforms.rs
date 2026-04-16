@@ -3,9 +3,8 @@ use ethel::state::data::{
     hash::{Cell, FxSpatialHash},
     table::TableView,
 };
-use physics::xpbd::NodesRowTableView;
 
-use crate::voxel::VoxelGrid;
+use crate::{state::physics::NodesRowTableView, voxel::VoxelGrid};
 
 pub const CONTROL_POINTS_COUNT: usize = 8;
 pub const CONTROL_POINTS_MIN_THRESHOLD: usize = 1;

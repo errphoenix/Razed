@@ -2,10 +2,8 @@ use ethel::state::data::{
     Column, DirectIndex, IndirectIndex, hash::FxSpatialHash, table::TableView,
 };
 use glam::Vec4Swizzles;
-use physics::xpbd::NodesRowTableView;
-use rustc_hash::FxHashSet;
 
-use crate::{structure::DeformsRowTableView, voxel::VoxelGrid};
+use crate::{state::physics::NodesRowTableView, structure::DeformsRowTableView, voxel::VoxelGrid};
 
 const MIN_CLUSTER_SIZE: u32 = 3;
 

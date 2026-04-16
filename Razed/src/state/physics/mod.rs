@@ -1,10 +1,57 @@
 use ethel::state::data::{Column, IndirectIndex};
 use janus::context::DeltaTime;
-use physics::xpbd::{LinkNodes, LinksRowTable, NodesRowTable, XpbdLatticeBuilder, XpbdSolver};
+use physics::xpbd::{Constraints, HasConstraints, HasNodes, Nodes, RawXpbdLattice, XpbdSolver};
 use rustc_hash::FxHashSet;
+
+ethel::table_spec! {
+    struct Nodes {
+        predicted_pos: glam::Vec3;
+        current_pos: glam::Vec3;
+        mass: f32;
+        inv_mass: f32;
+        forces: glam::Vec3;
+        velocity: glam::Vec3;
+    }
+}
+
+ethel::table_spec! {
+    struct Links {
+        relation: [IndirectIndex; 2];
+        compliance: f32;
+        rest_length: f32;
+        lambda: f32;
+    }
+}
+
+impl HasNodes for NodesRowTable {
+    fn nodes(&mut self) -> physics::xpbd::Nodes<'_> {
+        Nodes {
+            proj_pos: &mut self.predicted_pos,
+            live_pos: &mut self.current_pos,
+            inv_masses: &self.inv_mass,
+            forces: &mut self.forces,
+            velocities: &mut self.velocity,
+            handles: &self.handles,
+        }
+    }
+}
+
+impl HasConstraints for LinksRowTable {
+    fn constraints(&mut self) -> physics::xpbd::Constraints<'_> {
+        Constraints {
+            relations: &self.relation,
+            compliances: &self.compliance,
+            rest_lengths: &self.rest_length,
+            lambdas: &mut self.lambda,
+            handles: &self.handles,
+        }
+    }
+}
 
 #[derive(Debug, Default)]
 pub struct LatticeSystem {
+    node_id_buffer: Vec<IndirectIndex>,
+
     nodes: NodesRowTable,
     links: LinksRowTable,
 
@@ -61,7 +108,7 @@ impl LatticeSystem {
                 .solve_indirect(*id)
                 .expect("broken link id is always valid");
 
-            let LinkNodes(node_a, node_b) = *unsafe {
+            let [node_a, node_b] = *unsafe {
                 self.links()
                     .relation_slice()
                     .get_unchecked(index.as_index())
@@ -156,10 +203,28 @@ impl LatticeSystem {
     }
 
     #[inline]
-    pub fn import_lattice(
-        &mut self,
-        lattice_builder: XpbdLatticeBuilder,
-    ) -> physics::xpbd::LatticeIds {
-        lattice_builder.export(&mut self.nodes, &mut self.links)
+    pub fn import_lattice(&mut self, lattice: RawXpbdLattice) {
+        let node_count = lattice.nodes.len();
+        let cd = node_count - self.node_id_buffer.capacity();
+        if cd > 0 {
+            self.node_id_buffer.reserve(cd);
+        }
+
+        lattice.nodes.iter().for_each(|(&pos, (&mass, &inv_mass))| {
+            let handle =
+                self.nodes
+                    .insert((pos, pos, mass, inv_mass, glam::Vec3::ZERO, glam::Vec3::ZERO));
+            self.node_id_buffer.push(handle);
+        });
+        lattice
+            .constraints
+            .iter()
+            .for_each(|(&[a, b], (&compliance, &rest_length))| {
+                let a = self.node_id_buffer[a as usize];
+                let b = self.node_id_buffer[b as usize];
+                self.links.insert(([a, b], compliance, rest_length, 0.0f32));
+            });
+
+        self.node_id_buffer.clear();
     }
 }
