@@ -1,5 +1,60 @@
 use ethel::state::data::DirectIndex;
 
+pub fn intersect_aabb_sphere(aabb: &Aabb, sphere: Sphere, sphere_center: glam::Vec3) -> bool {
+    let e = (aabb.min - sphere_center).max(glam::Vec3::ZERO)
+        + (sphere_center - aabb.max).max(glam::Vec3::ZERO);
+    let r2 = sphere.radius * sphere.radius;
+    r2 > e.length_squared()
+}
+
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
+pub struct Aabb {
+    pub min: glam::Vec3,
+    pub max: glam::Vec3,
+}
+
+impl Aabb {
+    pub fn unit(center: glam::Vec3) -> Self {
+        Self {
+            min: center - 0.5,
+            max: center + 0.5,
+        }
+    }
+
+    pub fn new(extents: glam::Vec3, center: glam::Vec3) -> Self {
+        Self {
+            min: center - extents * 0.5,
+            max: center + extents * 0.5,
+        }
+    }
+
+    pub fn with_center(self, new_center: glam::Vec3) -> Self {
+        let extents = self.extents();
+        Self::new(extents, new_center)
+    }
+
+    pub fn intersects(&self, other: Aabb) -> bool {
+        for i in 0..3 {
+            if self.min[i] > other.max[i] || other.min[i] > self.max[i] {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    pub fn intersects_sphere(&self, sphere: Sphere, sphere_center: glam::Vec3) -> bool {
+        intersect_aabb_sphere(self, sphere, sphere_center)
+    }
+
+    pub fn extents(&self) -> glam::Vec3 {
+        (self.max - self.min).abs()
+    }
+
+    pub fn center(&self) -> glam::Vec3 {
+        (self.min + self.max) * 0.5
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, PartialOrd, Debug, Default)]
 pub struct Sphere {
     pub radius: f32,
@@ -18,6 +73,10 @@ impl Sphere {
         let r2 = other.radius;
         let rr2 = (r1 + r2) * (r1 + r2);
         distance_squared < rr2
+    }
+
+    pub fn intersects_aabb(&self, origin: glam::Vec3, aabb: Aabb) -> bool {
+        intersect_aabb_sphere(&aabb, *self, origin)
     }
 
     /// Returns the normalized intersection direction and the depth of the penetration.

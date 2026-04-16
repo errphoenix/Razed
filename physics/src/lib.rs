@@ -4,7 +4,7 @@ pub mod rigid;
 pub mod xpbd;
 
 #[allow(unused_imports)]
-pub use collision::Sphere;
+pub use collision::{Aabb, Sphere};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Line {
