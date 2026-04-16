@@ -1,6 +1,7 @@
 pub mod debris;
 pub mod deforms;
 pub mod fragment;
+pub mod lattice;
 
 use physics::xpbd::{RawXpbdLattice, XpbdLatticeBuilder, XpbdLinkOptions, XpbdNodeOptions as Node};
 

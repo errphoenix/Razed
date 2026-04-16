@@ -4,7 +4,7 @@ use ethel::state::data::{
     table::TableView,
 };
 
-use crate::{state::physics::NodesRowTableView, voxel::VoxelGrid};
+use crate::{structure::lattice::NodesRowTableView, voxel::VoxelGrid};
 
 pub const CONTROL_POINTS_COUNT: usize = 8;
 pub const CONTROL_POINTS_MIN_THRESHOLD: usize = 1;

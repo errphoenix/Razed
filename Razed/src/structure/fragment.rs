@@ -3,7 +3,10 @@ use ethel::state::data::{
 };
 use glam::Vec4Swizzles;
 
-use crate::{state::physics::NodesRowTableView, structure::DeformsRowTableView, voxel::VoxelGrid};
+use crate::{
+    structure::{DeformsRowTableView, lattice::NodesRowTableView},
+    voxel::VoxelGrid,
+};
 
 const MIN_CLUSTER_SIZE: u32 = 3;
 

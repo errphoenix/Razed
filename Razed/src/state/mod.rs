@@ -1,5 +1,3 @@
-pub(crate) mod physics;
-
 use std::{io::BufWriter, path::PathBuf, str::FromStr, sync::atomic::Ordering};
 
 use crate::{
@@ -7,10 +5,10 @@ use crate::{
         FrameDataBuffers, LayoutDebrisData, LayoutEntityData, LayoutFragmentData,
         LayoutXpbdDebugData, Renderable,
     },
-    state::physics::{LatticeSystem, NodesRowTableView},
     structure::{
         DebrisSystem, DeformSystem, DeformsRowTableView, FragmentSystem, create_structure_lattice,
         debris::MotionAccumulator,
+        lattice::{LatticeSystem, NodesRowTableView},
     },
     voxel::{VoxelGrid, VoxelGridOptions},
 };
