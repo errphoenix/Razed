@@ -1,4 +1,4 @@
-use ethel::state::data::{Column, IndirectIndex};
+use ethel::state::data::{Column, IndirectIndex, SparseSlot, Table};
 use janus::context::DeltaTime;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -217,97 +217,195 @@ impl XpbdLatticeBuilder {
         link_id as u32
     }
 
-    /// Export the current defined lattice structure into the given tables.
+    /// Consume the current lattice structure configuration to SoA storage.
     ///
-    /// # Returns
-    /// A mapping of the [`LatticeIds`] between the indices of the nodes and
-    /// links and the indirect indices of the actual nodes and links in their
-    /// respective tables.
-    pub fn export(mut self, nodes: &mut NodesRowTable, links: &mut LinksRowTable) -> LatticeIds {
-        let node_ids = self
-            .nodes
-            .drain(..)
-            .map(|node_opt| {
-                let p_pos = node_opt.pos;
-                let c_pos = node_opt.pos;
-                let mass = node_opt.mass;
-                let mut inv_mass = 1.0 / node_opt.mass;
-                if !inv_mass.is_normal() || node_opt.fixed {
-                    inv_mass = 0.0;
-                }
-                let forces = glam::Vec3::ZERO;
-                let velocity = glam::Vec3::ZERO;
+    /// The node IDs used in constraints are the indices used in [`NodeSoA`].
+    /// If the nodes are to be moved to another data structure, these indices
+    /// must be re-mapped.
+    pub fn build(mut self) -> RawXpbdLattice {
+        let mut nodes = RawNodes::with_capacity(self.nodes.len());
+        let mut constraints = RawConstraints::with_capacity(self.links.len());
 
-                nodes.insert((p_pos, c_pos, mass, inv_mass, forces, velocity))
-            })
-            .collect::<Vec<_>>();
+        self.nodes.drain(..).for_each(|node| {
+            let pos = node.pos;
+            let mass = node.mass;
+            let inv_mass = if node.fixed { 0.0 } else { 1.0 / mass };
 
-        let link_ids = self
-            .links
-            .drain(..)
-            .map(|link| {
-                let relation = LinkNodes(
-                    node_ids[link.node_a as usize],
-                    node_ids[link.node_b as usize],
-                );
+            nodes.add(pos, mass, inv_mass);
+        });
 
-                let lambda = 0f32;
-                let compliance = link.options.compliance;
-                let rest_length = link.options.rest_length.unwrap_or_else(|| {
-                    let ip_a = nodes
-                        .solve_indirect(relation.0)
-                        .expect("lattice linking indirection should not fail");
-                    let ip_b = nodes
-                        .solve_indirect(relation.1)
-                        .expect("lattice linking indirection should not fail");
+        self.links.drain(..).for_each(|constraint| {
+            let a = constraint.node_a;
+            let b = constraint.node_b;
+            let compliance = constraint.options.compliance;
+            let rest_length = constraint.options.rest_length.unwrap_or_else(|| {
+                let p_a = nodes.positions[a as usize];
+                let p_b = nodes.positions[b as usize];
+                p_a.distance(p_b)
+            });
 
-                    let node_positions = nodes.current_pos_slice();
-                    let p_a = unsafe { node_positions.get_unchecked(ip_a.as_index()) };
-                    let p_b = unsafe { node_positions.get_unchecked(ip_b.as_index()) };
-                    (p_a - p_b).length()
-                });
+            constraints.add([a, b], compliance, rest_length);
+        });
 
-                links.insert((relation, compliance, rest_length, lambda))
-            })
-            .collect::<Vec<_>>();
-
-        LatticeIds {
-            nodes: node_ids,
-            links: link_ids,
-        }
+        RawXpbdLattice { nodes, constraints }
     }
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct LatticeIds {
-    pub nodes: Vec<IndirectIndex>,
-    pub links: Vec<IndirectIndex>,
+pub struct RawNodes {
+    pub positions: Vec<glam::Vec3>,
+    pub masses: Vec<f32>,
+    pub inv_masses: Vec<f32>,
+}
+
+impl RawNodes {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            positions: Vec::with_capacity(capacity),
+            masses: Vec::with_capacity(capacity),
+            inv_masses: Vec::with_capacity(capacity),
+        }
+    }
+
+    pub fn add(&mut self, pos: glam::Vec3, phys_mass: f32, inv_mass: f32) {
+        self.positions.push(pos);
+        self.masses.push(phys_mass);
+        self.inv_masses.push(inv_mass);
+    }
+
+    pub fn len(&self) -> usize {
+        self.positions.len()
+    }
+
+    pub fn iter(
+        &self,
+    ) -> std::iter::Zip<
+        std::slice::Iter<'_, glam::Vec3>,
+        std::iter::Zip<std::slice::Iter<'_, f32>, std::slice::Iter<'_, f32>>,
+    > {
+        self.positions
+            .iter()
+            .zip(self.masses.iter().zip(&self.inv_masses))
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct RawConstraints {
+    pub node_ids: Vec<[u32; 2]>,
+    pub compliances: Vec<f32>,
+    pub rest_lengths: Vec<f32>,
+}
+
+impl RawConstraints {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            node_ids: Vec::with_capacity(capacity),
+            compliances: Vec::with_capacity(capacity),
+            rest_lengths: Vec::with_capacity(capacity),
+        }
+    }
+
+    pub fn add(&mut self, nodes: [u32; 2], compliance: f32, rest_length: f32) {
+        self.node_ids.push(nodes);
+        self.compliances.push(compliance);
+        self.rest_lengths.push(rest_length);
+    }
+
+    pub fn len(&self) -> usize {
+        self.node_ids.len()
+    }
+
+    pub fn iter(
+        &self,
+    ) -> std::iter::Zip<
+        std::slice::Iter<'_, [u32; 2]>,
+        std::iter::Zip<std::slice::Iter<'_, f32>, std::slice::Iter<'_, f32>>,
+    > {
+        self.node_ids
+            .iter()
+            .zip(self.compliances.iter().zip(&self.rest_lengths))
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct RawXpbdLattice {
+    pub nodes: RawNodes,
+    pub constraints: RawConstraints,
 }
 
 pub const DEFAULT_SOLVE_ITERATIONS: u32 = 8;
 pub const DEFAULT_SUB_STEPS: u32 = 4;
 pub const DAMPING: f32 = 0.9935;
 
-ethel::table_spec! {
-    struct Nodes {
-        predicted_pos: glam::Vec3;
-        current_pos: glam::Vec3;
-        mass: f32;
-        inv_mass: f32;
-        forces: glam::Vec3;
-        velocity: glam::Vec3;
+/// Indicates that a data table constrains node SoA data.
+pub trait HasNodes {
+    fn nodes(&mut self) -> Nodes<'_>;
+}
+
+/// Bridge-trait for a node-compatible data table that implements [`HasNodes`].
+///
+/// This exposes access to [`free`](Column::free), [`insert`](Column::insert),
+/// and [`solve`](Column::solve_indirect) [`Column`] operations.
+///
+/// Direct access to the underlying SoA data is allowed by [`HasNodes::nodes`].
+pub trait NodeColumn<Def: Default>: Column<Def> + HasNodes {}
+
+impl<Def: Default, T: Column<Def> + HasNodes> NodeColumn<Def> for T {}
+
+/// Indicates that a data table constrains constraint SoA data.
+pub trait HasConstraints {
+    fn constraints(&mut self) -> Constraints<'_>;
+}
+
+/// Bridge-trait for a constraint-compatible data table that implements
+/// [`HasConstraints`].
+///
+/// This exposes access to [`free`](Column::free), [`insert`](Column::insert),
+/// and [`solve`](Column::solve_indirect) [`Column`] operations.
+///
+/// Direct access to the underlying SoA data is allowed by [`HasConstraints::constraints`].
+pub trait ConstraintColumn<Def: Default>: Column<Def> + HasConstraints {}
+
+impl<Def: Default, T: Column<Def> + HasConstraints> ConstraintColumn<Def> for T {}
+
+/// Compatibility data structure for raw node data.
+#[derive(Debug)]
+pub struct Nodes<'a> {
+    pub proj_pos: &'a mut [glam::Vec3],
+    pub live_pos: &'a mut [glam::Vec3],
+    pub inv_masses: &'a [f32],
+    pub forces: &'a mut [glam::Vec3],
+    pub velocities: &'a mut [glam::Vec3],
+    pub handles: &'a [IndirectIndex],
+}
+
+impl Nodes<'_> {
+    pub fn len(&self) -> usize {
+        self.handles.len()
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd, Eq, Ord, Hash)]
-pub struct LinkNodes(pub IndirectIndex, pub IndirectIndex);
+/// Compatibility data structure for raw constraint data.
+#[derive(Debug)]
+pub struct Constraints<'a> {
+    pub relations: &'a [[IndirectIndex; 2]],
+    pub compliances: &'a [f32],
+    pub rest_lengths: &'a [f32],
+    pub lambdas: &'a mut [f32],
+    pub handles: &'a [IndirectIndex],
+}
 
-ethel::table_spec! {
-    struct Links {
-        relation: LinkNodes;
-        compliance: f32;
-        rest_length: f32;
-        lambda: f32;
+impl Constraints<'_> {
+    pub fn len(&self) -> usize {
+        self.handles.len()
     }
 }
 
@@ -549,27 +647,31 @@ impl XpbdSolver {
     }
 
     #[inline]
-    pub fn step(&mut self, nodes: &mut NodesRowTable, links: &mut LinksRowTable) {
+    pub fn step<ND: Default, CD: Default>(
+        &mut self,
+        node_table: &mut impl NodeColumn<ND>,
+        constraint_table: &mut impl ConstraintColumn<CD>,
+    ) {
         if self.clear_degenerate_nodes {
             self.degenerate_nodes.clear();
 
-            let relations = links.relation_view();
-            let count = nodes.size();
+            let relations = constraint_table.constraints().relations;
+            let node_count = node_table.size();
 
             self.frame_constraint_map.fill(0u32);
-            self.frame_constraint_map.resize(count, 0u32);
+            self.frame_constraint_map.resize(node_count, 0u32);
 
-            for &LinkNodes(a, b) in relations {
-                *unsafe { self.frame_constraint_map.get_unchecked_mut(a.as_index()) } += 1;
-                *unsafe { self.frame_constraint_map.get_unchecked_mut(b.as_index()) } += 1;
+            for [a, b] in relations {
+                self.frame_constraint_map[a.as_index()] += 1;
+                self.frame_constraint_map[b.as_index()] += 1;
             }
         }
 
         if self.allow_breaking {
             self.broken_links.iter().for_each(|&handle| {
                 if self.clear_degenerate_nodes {
-                    let id = unsafe { links.solve_indirect_unchecked(handle) };
-                    let &LinkNodes(a, b) = unsafe { links.relation.get_unchecked(id.as_index()) };
+                    let id = constraint_table.solve_indirect(handle).unwrap();
+                    let [a, b] = constraint_table.constraints().relations[id.as_index()];
 
                     // delete node if this deleted constraint was their last
                     // else, only keep tracking count: constraints are only
@@ -595,7 +697,7 @@ impl XpbdSolver {
                     }
                 }
 
-                links.free(handle);
+                constraint_table.free(handle);
             });
 
             // clear last frame, this is only done at this point to allow
@@ -605,7 +707,11 @@ impl XpbdSolver {
             const LAMBDA_STRAIN_THRESHOLD: f32 = 15_000.0;
             const LAMBDA_COMPRESSION_THRESHOLD: f32 = -8_000.0;
 
-            for (handle, lambda) in links.handles().iter().zip(links.lambda_slice()) {
+            let constraints = constraint_table.constraints();
+            let handles = constraints.handles;
+            let lambdas = constraints.lambdas;
+
+            for (handle, lambda) in handles.iter().zip(lambdas) {
                 let force_strain = *lambda / self.h2;
                 if force_strain >= LAMBDA_STRAIN_THRESHOLD
                     || force_strain <= LAMBDA_COMPRESSION_THRESHOLD
@@ -616,35 +722,39 @@ impl XpbdSolver {
         }
 
         for _ in 0..self.substeps {
-            self.substep(nodes, links);
+            self.substep(node_table, constraint_table);
         }
-        for v in nodes.velocity_mut_slice() {
+        for v in node_table.nodes().velocities {
             *v *= DAMPING;
         }
     }
 
     #[inline]
-    fn substep(&mut self, nodes: &mut NodesRowTable, links: &mut LinksRowTable) {
-        self.predict_positions(nodes);
+    fn substep<ND: Default, CD: Default>(
+        &mut self,
+        node_table: &mut impl NodeColumn<ND>,
+        constraint_table: &mut impl ConstraintColumn<CD>,
+    ) {
+        self.predict_positions(node_table.nodes());
         if self.ground_level.is_some() {
-            self.apply_ground_constraint(nodes);
+            self.apply_ground_constraint(node_table.nodes());
         }
 
-        links.lambda_mut_slice().fill(0.0);
+        constraint_table.constraints().lambdas.fill(0.0);
         for _ in 0..self.iterations {
-            self.solve_constraints(nodes, links);
+            self.solve_constraints(node_table, constraint_table.constraints());
         }
-        self.finalise_nodes(nodes);
+        self.finalise_nodes(node_table.nodes());
     }
 
     #[inline]
-    fn predict_positions(&self, nodes: &mut NodesRowTable) {
+    fn predict_positions(&self, nodes: Nodes<'_>) {
         let node_count = nodes.len();
-        let c_pos = &nodes.current_pos;
-        let inv_mass = &nodes.inv_mass;
-        let velocity = &nodes.velocity;
-        let p_pos = &mut nodes.predicted_pos;
-        let forces = &mut nodes.forces;
+        let p_pos = nodes.proj_pos;
+        let c_pos = nodes.live_pos;
+        let inv_mass = nodes.inv_masses;
+        let forces = nodes.forces;
+        let velocity = nodes.velocities;
 
         for i in 1..node_count {
             let x = c_pos[i];
@@ -659,15 +769,28 @@ impl XpbdSolver {
     }
 
     #[inline]
-    fn solve_constraints(&self, node_data: &mut NodesRowTable, link_data: &mut LinksRowTable) {
-        let (rel, comp, len, lambda) = link_data.split_mut();
-        let view = rel.join(comp).join(len).join(lambda);
+    fn solve_constraints<ND: Default>(
+        &self,
+        node_table: &mut impl NodeColumn<ND>,
+        constraints: Constraints<'_>,
+    ) {
+        let relations = constraints.relations;
+        let compliances = constraints.compliances;
+        let rest_lengths = constraints.rest_lengths;
+        let lambdas = constraints.lambdas;
 
-        for (ab, inv_stiffness, l, y) in view {
-            let i_a = unsafe { node_data.solve_indirect_unchecked(ab.0) };
-            let i_b = unsafe { node_data.solve_indirect_unchecked(ab.1) };
-            let inv_mass = &node_data.inv_mass;
-            let position = &mut node_data.predicted_pos;
+        for (((ab, inv_stiffness), l), y) in relations
+            .iter()
+            .zip(compliances)
+            .zip(rest_lengths)
+            .zip(lambdas)
+        {
+            let i_a = node_table.solve_indirect(ab[0]).unwrap();
+            let i_b = node_table.solve_indirect(ab[1]).unwrap();
+
+            let nodes = node_table.nodes();
+            let inv_mass = nodes.inv_masses;
+            let position = nodes.proj_pos;
 
             let w_a = inv_mass[i_a.as_index()];
             let w_b = inv_mass[i_b.as_index()];
@@ -699,13 +822,22 @@ impl XpbdSolver {
     }
 
     #[inline]
-    fn apply_ground_constraint(&self, node_data: &mut NodesRowTable) {
+    fn apply_ground_constraint(&self, nodes: Nodes<'_>) {
         const RESTITUTION: f32 = 0.2;
         const FRICTION: f32 = 0.4;
 
         let ground_level = self.ground_level.unwrap_or_default();
-        let (n_pos, c_pos, _, _, forces, velocity) = node_data.split_mut();
-        for (n_pos, c_pos, forces, vel) in n_pos.join(c_pos).join(forces).join(velocity) {
+
+        let proj_pos = nodes.proj_pos;
+        let live_pos = nodes.live_pos;
+        let forces = nodes.forces;
+        let velocities = nodes.velocities;
+
+        for ((n_pos, c_pos), (forces, vel)) in proj_pos
+            .iter_mut()
+            .zip(live_pos)
+            .zip(forces.iter_mut().zip(velocities))
+        {
             if n_pos.y < ground_level {
                 n_pos.y = ground_level;
                 c_pos.y = ground_level;
@@ -720,140 +852,14 @@ impl XpbdSolver {
     }
 
     #[inline]
-    fn finalise_nodes(&self, node_data: &mut NodesRowTable) {
-        let (p_pos, c_pos, _, _, _, vel) = node_data.split_mut();
+    fn finalise_nodes(&self, nodes: Nodes<'_>) {
+        let proj_pos = nodes.proj_pos;
+        let live_pos = nodes.live_pos;
+        let velocities = nodes.velocities;
 
-        for (p, x, v) in p_pos.join(c_pos).join(vel) {
+        for ((p, x), v) in proj_pos.iter().zip(live_pos).zip(velocities) {
             *v = (*p - *x) / self.h;
             *x = *p;
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn xpbd_lattice_builder() {
-        let mut builder = XpbdLatticeBuilder::new();
-
-        {
-            const MASS: f32 = 5.0;
-            const POS: glam::Vec3 = glam::Vec3::ONE;
-            const COMPLIANCE: f32 = 1.0;
-
-            const NODE: XpbdNodeOptions = XpbdNodeOptions::new(POS, MASS);
-            const LINK: XpbdLinkOptions = XpbdLinkOptions::new(COMPLIANCE);
-
-            builder.node(NODE); // A
-            builder.node(NODE); // B
-            builder.node(NODE); // C
-            builder.link(LINK); // B->C
-            builder.link(LINK); // A->B
-            builder.node(NODE); // D
-            builder.node(NODE); // E
-            builder.node(NODE); // F
-            builder.link(LINK); // E->F
-            builder.link(LINK); // D->E
-            builder.node(NODE); // G
-            builder.node(NODE); // H
-            builder.link(LINK); // G->H
-            builder.link(LINK); // D->G
-            builder.link(LINK); // A->D
-        }
-
-        const A: u32 = 0;
-        const B: u32 = 1;
-        const C: u32 = 2;
-        const D: u32 = 3;
-        const E: u32 = 4;
-        const F: u32 = 5;
-        const G: u32 = 6;
-        const H: u32 = 7;
-
-        const BC: u32 = 0;
-        const AB: u32 = 1;
-        const EF: u32 = 2;
-        const DE: u32 = 3;
-        const GH: u32 = 4;
-        const DG: u32 = 5;
-        const AD: u32 = 6;
-
-        let mut nodes = NodesRowTable::new();
-        let mut links = LinksRowTable::new();
-
-        let map = builder.export(&mut nodes, &mut links);
-        {
-            let node_ids = map.nodes.iter().map(|ii| ii.as_int()).collect::<Vec<_>>();
-            let compare = {
-                let mut v = vec![A, B, C, D, E, F, G, H];
-                v.iter_mut().for_each(|i| *i += 1);
-                v
-            };
-            assert_eq!(node_ids, compare);
-
-            let link_ids = map.links.iter().map(|ii| ii.as_int()).collect::<Vec<_>>();
-            let compare = {
-                let mut v = vec![BC, AB, EF, DE, GH, DG, AD];
-                v.iter_mut().for_each(|i| *i += 1);
-                v
-            };
-            assert_eq!(link_ids, compare);
-        }
-    }
-
-    #[test]
-    fn xpbd_lattice_builder_cross_link() {
-        let mut builder = XpbdLatticeBuilder::new();
-
-        {
-            const MASS: f32 = 5.0;
-            const POS: glam::Vec3 = glam::Vec3::ONE;
-            const COMPLIANCE: f32 = 1.0;
-
-            const NODE: XpbdNodeOptions = XpbdNodeOptions::new(POS, MASS);
-            const LINK: XpbdLinkOptions = XpbdLinkOptions::new(COMPLIANCE);
-
-            let root = builder.node(NODE); // A
-            builder.node(NODE); // B
-            builder.node(NODE); // C
-            builder.node(NODE); // D
-            builder.link_to(root, LINK); // A->D
-            builder.link(LINK); // C->D
-            builder.link(LINK); // B->C
-        }
-
-        const A: u32 = 0;
-        const B: u32 = 1;
-        const C: u32 = 2;
-        const D: u32 = 3;
-
-        const AD: u32 = 0;
-        const CD: u32 = 1;
-        const BC: u32 = 2;
-
-        let mut nodes = NodesRowTable::new();
-        let mut links = LinksRowTable::new();
-
-        let map = builder.export(&mut nodes, &mut links);
-        {
-            let node_ids = map.nodes.iter().map(|ii| ii.as_int()).collect::<Vec<_>>();
-            let compare = {
-                let mut v = vec![A, B, C, D];
-                v.iter_mut().for_each(|i| *i += 1);
-                v
-            };
-            assert_eq!(node_ids, compare);
-
-            let link_ids = map.links.iter().map(|ii| ii.as_int()).collect::<Vec<_>>();
-            dbg!(&links);
-            let compare = {
-                let mut v = vec![AD, CD, BC];
-                v.iter_mut().for_each(|i| *i += 1);
-                v
-            };
-            assert_eq!(link_ids, compare);
         }
     }
 }

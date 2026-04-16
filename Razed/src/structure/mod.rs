@@ -15,6 +15,13 @@ pub use deforms::{DeformSystem, DeformsRowTable, DeformsRowTableView};
 #[allow(unused_imports)]
 pub use fragment::{FragmentSystem, FragmentsRowTable, FragmentsRowTableView};
 
+// ethel::table_spec! {
+//     struct Structure {
+//         bounds: ::physics::Aabb;
+
+//     }
+//}
+
 // height is per floor, not total building; todo: docs
 pub fn create_structure_lattice(
     origin: glam::Vec3,
