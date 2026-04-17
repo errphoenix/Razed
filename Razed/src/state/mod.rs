@@ -298,6 +298,22 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             });
         }
 
+        if input.keys().key_pressed(janus::input::KeyCode::KeyH) {
+            self.spawn_debug_structure(view_point.get());
+        }
+
+        const CAMERA_KEY: janus::input::KeyCode = janus::input::KeyCode::Tab;
+        if input.keys().key_pressed(CAMERA_KEY) {
+            input.cursor_options().publish_with(|opt| {
+                opt.grabbed = true;
+            });
+        }
+        if input.keys().key_released(CAMERA_KEY) {
+            input.cursor_options().publish_with(|opt| {
+                opt.grabbed = false;
+            });
+        }
+
         const WIND_FORCE: f32 = 0.5;
         self.lattice
             .apply_forces_batched(glam::vec3(WIND_FORCE, -9.81, WIND_FORCE));
@@ -332,22 +348,6 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
         self.profiler.pop_trace();
 
         self.profiler.pop_trace(); // end simulation trace group
-
-        if input.keys().key_pressed(janus::input::KeyCode::KeyH) {
-            self.spawn_debug_structure(view_point.get());
-        }
-
-        const CAMERA_KEY: janus::input::KeyCode = janus::input::KeyCode::Tab;
-        if input.keys().key_pressed(CAMERA_KEY) {
-            input.cursor_options().publish_with(|opt| {
-                opt.grabbed = true;
-            });
-        }
-        if input.keys().key_released(CAMERA_KEY) {
-            input.cursor_options().publish_with(|opt| {
-                opt.grabbed = false;
-            });
-        }
     }
 }
 
@@ -359,9 +359,6 @@ impl State {
                 let handles = self.fragments.data().handles();
                 for index in disabled_frags {
                     let h = handles[index.as_index()];
-                    if h.as_index() == 0 {
-                        println!("{index:?} => {h:?}")
-                    }
                     self.dead_fragments.push(h);
                 }
             }
