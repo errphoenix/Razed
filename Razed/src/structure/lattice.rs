@@ -1,7 +1,11 @@
+use std::f32;
+
 use ethel::state::data::{Column, IndirectIndex};
 use janus::context::DeltaTime;
 use physics::xpbd::{Constraints, HasConstraints, HasNodes, Nodes, RawXpbdLattice, XpbdSolver};
 use rustc_hash::FxHashSet;
+
+use crate::structure::FragmentsRowTableView;
 
 ethel::table_spec! {
     struct Nodes {
@@ -98,10 +102,12 @@ impl LatticeSystem {
         &self.damaged_nodes_data
     }
 
-    pub fn register_dead_nodes(&mut self) {
+    pub fn clear_damage_buffers(&mut self) {
         self.damaged_nodes_data.clear();
         self.damaged_nodes_hash.clear();
+    }
 
+    pub fn register_dead_nodes(&mut self) {
         for id in self.solver.broken_links() {
             let index = self
                 .links()
@@ -122,15 +128,56 @@ impl LatticeSystem {
         }
     }
 
-    #[inline]
+    pub fn pull_integrity_mass(&mut self, fragments: &FragmentsRowTableView) {
+        self.nodes.mass.fill(0.0);
+
+        let parents = fragments.parents;
+        let weights = fragments.parents_weights;
+        let integrity = fragments.integrity;
+        let mass_coeff = fragments.health_coeff;
+
+        for ((ids, weights), (&hp, &coeff)) in parents
+            .iter()
+            .zip(weights)
+            .zip(integrity.iter().zip(mass_coeff))
+        {
+            let hp_mass_coeff = hp * coeff;
+            for (id, &w) in ids.iter().zip(weights) {
+                if id.as_int() == 0 {
+                    continue;
+                }
+
+                if let Some(index) = self.nodes.solve_indirect(*id) {
+                    let weighted_mass = w * hp_mass_coeff;
+                    self.nodes.mass[index.as_index()] += weighted_mass;
+                }
+            }
+        }
+
+        let handles = &self.nodes.handles;
+        let phys_masses = &self.nodes.mass;
+        let inv_masses = &mut self.nodes.inv_mass;
+        phys_masses
+            .iter()
+            .zip(inv_masses.iter_mut())
+            .zip(handles)
+            .for_each(|((m, m_inv), &id)| {
+                if *m < f32::EPSILON {
+                    if self.damaged_nodes_hash.insert(id) {
+                        self.damaged_nodes_data.push(id);
+                    }
+                    return;
+                }
+                *m_inv = 1.0 / *m
+            });
+    }
+
     pub fn update(&mut self, delta: DeltaTime) {
-        // todo: perf telemetry
         self.solver.set_step_time(delta);
         self.solver.step(&mut self.nodes, &mut self.links);
     }
 
     /// Break a `constraint` by its handle.
-    #[inline]
     pub fn break_constraint(&mut self, constraint: IndirectIndex) {
         if self.links.solve_indirect(constraint).is_some() {
             self.solver.break_link(constraint);

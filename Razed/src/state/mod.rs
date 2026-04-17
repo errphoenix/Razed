@@ -6,7 +6,8 @@ use crate::{
         LayoutXpbdDebugData, Renderable,
     },
     structure::{
-        DebrisSystem, DeformSystem, DeformsRowTableView, FragmentSystem, create_structure_lattice,
+        DebrisSystem, DeformSystem, DeformsRowTableView, FragmentSystem, FragmentsRowTableView,
+        create_structure_lattice,
         debris::MotionAccumulator,
         lattice::{LatticeSystem, NodesRowTableView},
     },
@@ -314,10 +315,21 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             });
         }
 
-        const WIND_FORCE: f32 = 0.5;
-        self.lattice
-            .apply_forces_batched(glam::vec3(WIND_FORCE, -9.81, WIND_FORCE));
+        self.lattice.clear_damage_buffers();
 
+        self.profiler.push_trace("struct_prepass");
+        self.profiler.capture_duration("pull_integrity", || {
+            let fragments = FragmentsRowTableView::from(self.fragments.data());
+            self.lattice.pull_integrity_mass(&fragments);
+        });
+
+        self.profiler.capture_duration("apply_forces", || {
+            const WIND_FORCE: f32 = 0.5;
+            self.lattice
+                .apply_forces_batched(glam::vec3(WIND_FORCE, -9.81, WIND_FORCE));
+        });
+
+        self.profiler.pop_trace();
         self.profiler.push_trace("simulation");
 
         self.profiler.capture_duration("fragment_sync_cage", || {
