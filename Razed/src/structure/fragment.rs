@@ -321,7 +321,7 @@ impl FragmentSystem {
         deforms: &DeformsRowTableView,
     ) {
         {
-            let deforms_len = deforms.view_offset() + deforms.len();
+            let deforms_len = deforms.size();
             self.deform_map.resize_with(deforms_len, || Vec::new());
         }
 
