@@ -1,4 +1,4 @@
-use ethel::state::data::{Column, IndirectIndex, SparseSlot, Table};
+use ethel::state::data::{Column, IndirectIndex};
 use janus::context::DeltaTime;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -399,6 +399,8 @@ pub struct Constraints<'a> {
     pub relations: &'a [[IndirectIndex; 2]],
     pub compliances: &'a [f32],
     pub rest_lengths: &'a [f32],
+    pub effective_masses: &'a [f32],
+    pub integrities: &'a [f32],
     pub lambdas: &'a mut [f32],
     pub handles: &'a [IndirectIndex],
 }
@@ -704,17 +706,28 @@ impl XpbdSolver {
             // external systems to act on accumulated broken links
             self.broken_links.clear();
 
-            const LAMBDA_STRAIN_THRESHOLD: f32 = 15_000.0;
-            const LAMBDA_COMPRESSION_THRESHOLD: f32 = -8_000.0;
-
             let constraints = constraint_table.constraints();
             let handles = constraints.handles;
             let lambdas = constraints.lambdas;
+            let compliances = constraints.compliances;
+            let eff_masses = constraints.effective_masses;
+            let integrities = constraints.integrities;
 
-            for (handle, lambda) in handles.iter().zip(lambdas) {
-                let force_strain = *lambda / self.h2;
-                if force_strain >= LAMBDA_STRAIN_THRESHOLD
-                    || force_strain <= LAMBDA_COMPRESSION_THRESHOLD
+            for (((handle, lambda), (&eff_mass, &integrity)), &a) in handles
+                .iter()
+                .zip(lambdas)
+                .zip(eff_masses.iter().zip(integrities))
+                .zip(compliances)
+                .skip(1)
+            {
+                const BREAK_THRESHOLD: f32 = 250.0;
+
+                let force_strain = (*lambda / self.h2) * eff_mass;
+                let threshold = integrity * BREAK_THRESHOLD;
+                let compression_threshold = integrity * (integrity * integrity - 1.0) + 1.0;
+
+                if force_strain > threshold
+                    || force_strain > compression_threshold * BREAK_THRESHOLD
                 {
                     self.broken_links.push(*handle);
                 }
@@ -845,8 +858,6 @@ impl XpbdSolver {
                 vel.y *= -RESTITUTION;
                 vel.x *= FRICTION;
                 vel.z *= FRICTION;
-
-                forces.y -= 92_000.0;
             }
         }
     }

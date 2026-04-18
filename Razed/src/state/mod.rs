@@ -322,9 +322,12 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
             let fragments = FragmentsRowTableView::from(self.fragments.data());
             self.lattice.pull_integrity_mass(&fragments);
         });
+        self.profiler.capture_duration("sum_integrities", || {
+            self.lattice.sync_constraint_attributes();
+        });
 
         self.profiler.capture_duration("apply_forces", || {
-            const WIND_FORCE: f32 = 0.5;
+            const WIND_FORCE: f32 = 0.0;
             self.lattice
                 .apply_forces_batched(glam::vec3(WIND_FORCE, -9.81, WIND_FORCE));
         });

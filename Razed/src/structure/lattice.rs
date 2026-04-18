@@ -24,6 +24,10 @@ ethel::table_spec! {
         compliance: f32;
         rest_length: f32;
         lambda: f32;
+
+        stable_state: f32;
+        effective_mass: f32;
+        integrity: f32;
     }
 }
 
@@ -46,6 +50,8 @@ impl HasConstraints for LinksRowTable {
             relations: &self.relation,
             compliances: &self.compliance,
             rest_lengths: &self.rest_length,
+            effective_masses: &self.effective_mass,
+            integrities: &self.integrity,
             lambdas: &mut self.lambda,
             handles: &self.handles,
         }
@@ -140,6 +146,7 @@ impl LatticeSystem {
             .iter()
             .zip(weights)
             .zip(integrity.iter().zip(mass_coeff))
+            .skip(1)
         {
             let hp_mass_coeff = hp * coeff;
             for (id, &w) in ids.iter().zip(weights) {
@@ -157,10 +164,12 @@ impl LatticeSystem {
         let handles = &self.nodes.handles;
         let phys_masses = &self.nodes.mass;
         let inv_masses = &mut self.nodes.inv_mass;
+
         phys_masses
             .iter()
             .zip(inv_masses.iter_mut())
             .zip(handles)
+            .skip(1)
             .for_each(|((m, m_inv), &id)| {
                 if *m < f32::EPSILON {
                     if self.damaged_nodes_hash.insert(id) {
@@ -170,6 +179,39 @@ impl LatticeSystem {
                 }
                 *m_inv = 1.0 / *m
             });
+    }
+
+    pub fn sync_constraint_attributes(&mut self) {
+        let node_inv_masses = &self.nodes.inv_mass;
+        let node_masses = &self.nodes.mass;
+
+        let nodes = &self.links.relation;
+        let eff_masses = &mut self.links.effective_mass;
+        let integrities = &mut self.links.integrity;
+        let stables = &mut self.links.stable_state;
+
+        for ([a, b], ((eff_mass, integrity), stable)) in nodes
+            .iter()
+            .zip(eff_masses.iter_mut().zip(integrities).zip(stables))
+            .skip(1)
+        {
+            let i_a = self.nodes.solve_indirect(*a).unwrap();
+            let i_b = self.nodes.solve_indirect(*b).unwrap();
+            let m_a = node_inv_masses[i_a.as_index()];
+            let m_b = node_inv_masses[i_b.as_index()];
+            let pm_a = node_masses[i_a.as_index()];
+            let pm_b = node_masses[i_b.as_index()];
+
+            *eff_mass = m_a + m_b;
+
+            let res = (pm_a + pm_b) * 0.5;
+            if *stable == 0.0 {
+                *stable = res;
+                *integrity = 1.0;
+            } else {
+                *integrity = res / *stable;
+            }
+        }
     }
 
     pub fn update(&mut self, delta: DeltaTime) {
@@ -269,7 +311,8 @@ impl LatticeSystem {
             .for_each(|(&[a, b], (&compliance, &rest_length))| {
                 let a = self.node_id_buffer[a as usize];
                 let b = self.node_id_buffer[b as usize];
-                self.links.insert(([a, b], compliance, rest_length, 0.0f32));
+                self.links
+                    .insert(([a, b], compliance, rest_length, 0f32, 0f32, 0f32, 0f32));
             });
 
         self.node_id_buffer.clear();
