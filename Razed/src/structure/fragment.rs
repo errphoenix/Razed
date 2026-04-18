@@ -451,9 +451,9 @@ impl FragmentSystem {
                 [IndirectIndex::default(); ANCHORS_COUNT],
                 [0f32; ANCHORS_COUNT],
                 position,
-                0.8, // todo: health contribution
-                1.0, // todo: debris rigid body
-                1.0, // todo: damage and integrity
+                50.0, // todo: health contribution
+                1.0,  // todo: debris rigid body
+                1.0,  // todo: damage and integrity
                 fragment_world,
             ));
             frag.stage = UninitFragmentStage::Unfinished { indirect: handle };

@@ -720,11 +720,12 @@ impl XpbdSolver {
                 .zip(compliances)
                 .skip(1)
             {
-                const BREAK_THRESHOLD: f32 = 250.0;
+                const BREAK_THRESHOLD: f32 = 220.0;
 
                 let force_strain = (*lambda / self.h2) * eff_mass;
                 let threshold = integrity * BREAK_THRESHOLD;
-                let compression_threshold = integrity * (integrity * integrity - 1.0) + 1.0;
+                let compression_threshold = integrity.exp();
+
 
                 if force_strain > threshold
                     || force_strain > compression_threshold * BREAK_THRESHOLD
