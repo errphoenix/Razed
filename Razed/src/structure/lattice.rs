@@ -171,6 +171,11 @@ impl LatticeSystem {
             .zip(handles)
             .skip(1)
             .for_each(|((m, m_inv), &id)| {
+                // this is an anchor node that must not have mass
+                if *m_inv == 0.0 {
+                    return;
+                }
+
                 if *m < f32::EPSILON {
                     if self.damaged_nodes_hash.insert(id) {
                         self.damaged_nodes_data.push(id);
