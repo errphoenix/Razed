@@ -4,10 +4,10 @@ use janus::{context::Setup, window::DisplayParameters};
 use crate::data::FrameDataBuffers;
 
 mod data;
+mod procedural;
 mod render;
 mod state;
 mod structure;
-mod voxel;
 
 const DISPLAY_PARAMS: DisplayParameters = DisplayParameters::fullscreen("Razed");
 

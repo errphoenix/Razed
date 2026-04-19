@@ -5,13 +5,13 @@ use crate::{
         FrameDataBuffers, LayoutDebrisData, LayoutEntityData, LayoutFragmentData,
         LayoutXpbdDebugData, Renderable,
     },
+    procedural::{VoxelGrid, VoxelGridOptions},
     structure::{
         DebrisSystem, DeformSystem, DeformsRowTableView, FragmentSystem, FragmentsRowTableView,
         create_structure_lattice,
         debris::MotionAccumulator,
         lattice::{LatticeSystem, NodesRowTableView},
     },
-    voxel::{VoxelGrid, VoxelGridOptions},
 };
 use ::physics::xpbd::{RawXpbdLattice, XpbdOptions, XpbdSolver};
 use ethel::{

@@ -4,8 +4,8 @@ use ethel::state::data::{
 use glam::Vec4Swizzles;
 
 use crate::{
+    procedural::VoxelGrid,
     structure::{DeformsRowTableView, lattice::NodesRowTableView},
-    voxel::VoxelGrid,
 };
 
 const MIN_CLUSTER_SIZE: u32 = 3;
