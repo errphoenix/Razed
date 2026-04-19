@@ -126,7 +126,6 @@ impl DeformSystem {
             controllers
                 .iter_mut()
                 .for_each(|ControlPoint { weight, .. }| *weight /= w_t);
-
             let count = controllers
                 .iter()
                 .filter(|ctl| ctl.id.as_int() != 0)
@@ -135,17 +134,16 @@ impl DeformSystem {
             count <= CONTROL_POINTS_MIN_THRESHOLD
         });
 
-        // temporarily solve indices
+        // temporarily solve indices (direct to indirect)
         self.damaged_buffer.iter_mut().for_each(|i| {
             let indirect = self.data.handles()[i.as_index()];
             *i = DirectIndex::from_index(indirect.as_index(), indirect.generation());
         });
 
+        // use indirect to free
         self.damaged_buffer.drain(..).for_each(|indirect| {
             let ii = IndirectIndex::from_index(indirect.as_index(), indirect.generation());
-
-            let di = self.data.solve_indirect(ii).unwrap();
-            self.data.pose[di.as_index()] = glam::Vec3::ZERO;
+            self.data.free(ii);
             self.deleted_points.push(ii);
         });
     }
@@ -180,7 +178,7 @@ impl DeformSystem {
         node_hash: &FxSpatialHash<IndirectIndex>,
         lattice: &NodesRowTableView,
     ) -> std::ops::Range<usize> {
-        let lattice_size = lattice.len() + lattice.view_offset();
+        let lattice_size = lattice.size();
         self.node_map.resize_with(lattice_size, || Vec::new());
 
         let vox = fragments.voxels();

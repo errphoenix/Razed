@@ -346,7 +346,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 self.lattice.register_dead_nodes()
             });
 
-        self.process_cage_damage();
+        //self.process_cage_damage();
 
         // synchronizes lattice and cage damage to fragments.
         // after this point, the order of fragment elements must not change;
