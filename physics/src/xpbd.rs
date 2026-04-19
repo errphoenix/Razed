@@ -724,11 +724,11 @@ impl XpbdSolver {
 
                 let force_strain = (*lambda / self.h2) * eff_mass;
                 let threshold = integrity * BREAK_THRESHOLD;
-                let compression_threshold = integrity.exp();
+                let compression_threshold = integrity.exp() - 1.0;
 
 
                 if force_strain > threshold
-                    || force_strain > compression_threshold * BREAK_THRESHOLD
+                    || force_strain < -compression_threshold * BREAK_THRESHOLD
                 {
                     self.broken_links.push(*handle);
                 }
