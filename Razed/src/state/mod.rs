@@ -426,6 +426,9 @@ impl State {
                         inherit_av += contact.cross(*velocity) * w;
                     });
                 }
+                inherit_a *= 0.01;
+                inherit_v *= 0.035;
+                inherit_av *= 0.01;
 
                 buffer.push(DebrisData {
                     position,
