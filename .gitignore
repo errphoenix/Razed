@@ -1,2 +1,5 @@
 /target
 Cargo.lock
+*.bin
+*.sh
+/game/perf_graphs
