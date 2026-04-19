@@ -6,13 +6,7 @@ pub struct Convex<F: Face> {
     faces: Vec<Facen<F>>,
 }
 
-impl<F: Face> Convex<F> {
-    pub const fn new(vertices: Vec<glam::Vec3>, faces: Vec<Facen<F>>) -> Self {
-        Self { vertices, faces }
-    }
-}
-
-impl Convex<QuadFace> {
+impl Convex<Vec<u32>> {
     pub fn unit_cube() -> Self {
         let vertices = vec![
             glam::vec3(0.0, 0.0, 0.0),
@@ -36,7 +30,11 @@ impl Convex<QuadFace> {
     }
 }
 
-impl Convex<Vec<u32>> {
+impl<F: Face> Convex<F> {
+    pub const fn new(vertices: Vec<glam::Vec3>, faces: Vec<Facen<F>>) -> Self {
+        Self { vertices, faces }
+    }
+
     pub fn clip_plane(&self, plane: Plane) -> Convex<Vec<u32>> {
         let mut vertices = Vec::new();
         let mut clipped = Vec::new();
@@ -99,7 +97,47 @@ impl Convex<Vec<u32>> {
 
         Convex { vertices, faces }
     }
+}
 
+impl Convex<QuadFace> {
+    pub fn unit_cube() -> Self {
+        let vertices = vec![
+            glam::vec3(0.0, 0.0, 0.0),
+            glam::vec3(1.0, 0.0, 0.0),
+            glam::vec3(1.0, 1.0, 0.0),
+            glam::vec3(0.0, 1.0, 0.0),
+            glam::vec3(0.0, 0.0, 1.0),
+            glam::vec3(1.0, 0.0, 1.0),
+            glam::vec3(1.0, 1.0, 1.0),
+            glam::vec3(0.0, 1.0, 1.0),
+        ];
+        let faces = vec![
+            Facen::new([0, 1, 2, 3], glam::vec3(0.0, 0.0, -1.0)),
+            Facen::new([4, 5, 6, 7], glam::vec3(0.0, 0.0, 1.0)),
+            Facen::new([0, 1, 5, 4], glam::vec3(0.0, -1.0, 0.0)),
+            Facen::new([2, 3, 7, 6], glam::vec3(0.0, 1.0, 0.0)),
+            Facen::new([0, 3, 7, 4], glam::vec3(-1.0, 0.0, 0.0)),
+            Facen::new([1, 2, 6, 5], glam::vec3(1.0, 0.0, 0.0)),
+        ];
+        Self { vertices, faces }
+    }
+
+    pub fn triangulate(&self) -> Convex<TriFace> {
+        let mut faces = Vec::with_capacity(self.faces.len() * 2);
+        self.faces.iter().for_each(|face| {
+            let (a, b) = face.indexed.triangulate();
+            faces.push(Facen::new(a, face.normal));
+            faces.push(Facen::new(b, face.normal));
+        });
+
+        Convex {
+            vertices: self.vertices.clone(),
+            faces,
+        }
+    }
+}
+
+impl Convex<Vec<u32>> {
     pub fn triangulate(&self) -> Convex<TriFace> {
         let mut faces = Vec::new();
 
