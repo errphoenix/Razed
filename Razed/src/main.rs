@@ -1,7 +1,14 @@
-use ethel::{StartupHandler, mesh::Vertex};
+use ethel::{
+    StartupHandler,
+    mesh::{MeshStaging, Metadata, Vertex},
+    state::data::hash::Cell,
+};
 use janus::{context::Setup, window::DisplayParameters};
 
-use crate::data::FrameDataBuffers;
+use crate::{
+    data::FrameDataBuffers,
+    procedural::{CubeVoronoi, voxel_grid},
+};
 
 mod data;
 mod procedural;
@@ -42,6 +49,55 @@ fn main() {
     );
 
     janus::run(ctx);
+}
+
+#[derive(Debug)]
+struct FragmentGroup {
+    pub cubic_area: glam::Vec3,
+    pub voronoi: CubeVoronoi,
+    pub mapping: Vec<(Cell, Metadata)>,
+}
+
+fn generate_fragment_meshes(cubic_area: glam::Vec3, mesh_stage: MeshStaging) -> FragmentGroup {
+    const FRAG_UNIT: f32 = 1.0;
+    const MAX_SHIFT: f32 = 0.325;
+    const SEEK_RANGE: f32 = 1.25;
+
+    let mut grid = voxel_grid(cubic_area.x, cubic_area.y, cubic_area.z, FRAG_UNIT);
+
+    grid.repopulate();
+    let count = grid.count();
+
+    // CubicVoronoiGenerator is guaranteed to process the seeds and meshes by
+    // the same order they are in the given seeds collection.
+    // we can use this to map the meshes by the generator to a local cell
+    // coordinate.
+    let mut seeds = Vec::with_capacity(count);
+    let mut cells = Vec::with_capacity(count);
+    for &voxel in grid.voxels().elements() {
+        seeds.push(grid.point_from_id(voxel));
+        cells.push(grid.cell_from_id(voxel));
+    }
+
+    let prev_head = mesh_stage.metadata().head() as usize;
+    let voronoi = procedural::cubic_voronoi(&seeds, cubic_area, MAX_SHIFT, SEEK_RANGE, mesh_stage);
+    let metadata = voronoi.stager.metadata();
+
+    let mapping = cells
+        .drain(..)
+        .enumerate()
+        .map(|(i, cell)| {
+            let j = i + prev_head;
+            let meta = metadata[j];
+            (cell, meta)
+        })
+        .collect::<Vec<_>>();
+
+    FragmentGroup {
+        cubic_area,
+        voronoi,
+        mapping,
+    }
 }
 
 const MESH_UNIT_CUBE: [Vertex; 36] = [

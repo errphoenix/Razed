@@ -2,8 +2,6 @@ use ethel::mesh::MeshStaging;
 use polys::{Plane, convex::Convex};
 use rand::{Rng, RngExt};
 
-use crate::procedural::VoxelGrid;
-
 #[derive(Debug)]
 pub struct CubeVoronoi {
     pub stager: MeshStaging,
@@ -28,23 +26,17 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
         }
     }
 
-    pub fn generate(&mut self, seed_grid: &VoxelGrid) {
+    pub fn generate(&mut self, seed_input: &[glam::Vec3], area: glam::Vec3, seek_range: f32) {
         self.seeds.clear();
-
-        seed_grid.to_world(glam::Vec3::ZERO, &mut self.seeds);
+        self.seeds.extend_from_slice(seed_input);
         self.seeds.iter_mut().for_each(|p| {
             p.x += self.rng.random_range(-self.max_offset..self.max_offset);
             p.y += self.rng.random_range(-self.max_offset..self.max_offset);
             p.z += self.rng.random_range(-self.max_offset..self.max_offset);
         });
 
-        let max_range = seed_grid.options().cell_size * 0.5 + 1.0;
-        let x_len = seed_grid.options().width;
-        let y_len = seed_grid.options().height;
-        let z_len = seed_grid.options().depth;
-
         for i in 0..self.seeds.len() {
-            let mut mesh = Convex::<Vec<u32>>::parallelepiped(glam::vec3(x_len, y_len, z_len));
+            let mut mesh = Convex::<Vec<u32>>::parallelepiped(area);
             let seed = self.seeds[i];
 
             for j in 0..self.seeds.len() {
@@ -54,7 +46,7 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
 
                 let other = self.seeds[j];
 
-                if (other - seed).length() > max_range {
+                if (other - seed).length() > seek_range {
                     continue;
                 }
 

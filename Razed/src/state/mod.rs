@@ -526,9 +526,9 @@ impl State {
 
     fn spawn_debug_structure(&mut self, view_point: &ViewPoint) {
         const WIDTH: f32 = 8.0;
-        const HEIGHT: f32 = 4.0;
+        const HEIGHT: f32 = 3.0;
         const DEPTH: f32 = 8.0;
-        const FLOORS: u32 = 3;
+        const FLOORS: u32 = 8;
         const TOTAL_HEIGHT: f32 = HEIGHT * FLOORS as f32;
 
         let center = glam::vec3(view_point.position.x, GROUND_LEVEL, view_point.position.z);
