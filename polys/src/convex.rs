@@ -6,17 +6,21 @@ pub struct Convex<F: Face> {
     faces: Vec<Facen<F>>,
 }
 
-impl Convex<Vec<u32>> {
-    pub fn unit_cube(extent: f32) -> Self {
+impl Convex<QuadFace> {
+    pub fn cube(extents: f32) -> Self {
+        Self::parallelepiped(glam::Vec3::splat(extents))
+    }
+
+    pub fn parallelepiped(extents: glam::Vec3) -> Self {
         let vertices = vec![
-            glam::vec3(-extent, -extent, -extent),
-            glam::vec3(extent, -extent, -extent),
-            glam::vec3(extent, extent, -extent),
-            glam::vec3(-extent, extent, -extent),
-            glam::vec3(-extent, -extent, extent),
-            glam::vec3(extent, -extent, extent),
-            glam::vec3(extent, extent, extent),
-            glam::vec3(-extent, extent, extent),
+            glam::vec3(-extents.x, -extents.y, -extents.z),
+            glam::vec3(extents.x, -extents.y, -extents.z),
+            glam::vec3(extents.x, extents.y, -extents.z),
+            glam::vec3(-extents.x, extents.y, -extents.z),
+            glam::vec3(-extents.x, -extents.y, extents.z),
+            glam::vec3(extents.x, -extents.y, extents.z),
+            glam::vec3(extents.x, extents.y, extents.z),
+            glam::vec3(-extents.x, extents.y, extents.z),
         ];
         let faces = vec![
             Facen::new([0, 1, 2, 3], glam::vec3(0.0, 0.0, -1.0)),
@@ -27,6 +31,76 @@ impl Convex<Vec<u32>> {
             Facen::new([1, 2, 6, 5], glam::vec3(1.0, 0.0, 0.0)),
         ];
         Self { vertices, faces }
+    }
+
+    pub fn triangulate(&self) -> Convex<TriFace> {
+        let mut faces = Vec::with_capacity(self.faces.len() * 2);
+        self.faces.iter().for_each(|face| {
+            let (a, b) = face.indexed.triangulate();
+            faces.push(Facen::new(a, face.normal));
+            faces.push(Facen::new(b, face.normal));
+        });
+
+        Convex {
+            vertices: self.vertices.clone(),
+            faces,
+        }
+    }
+}
+
+impl Convex<Vec<u32>> {
+    pub fn cube(extents: f32) -> Self {
+        Self::parallelepiped(glam::Vec3::splat(extents))
+    }
+
+    pub fn parallelepiped(extents: glam::Vec3) -> Self {
+        let vertices = vec![
+            glam::vec3(-extents.x, -extents.y, -extents.z),
+            glam::vec3(extents.x, -extents.y, -extents.z),
+            glam::vec3(extents.x, extents.y, -extents.z),
+            glam::vec3(-extents.x, extents.y, -extents.z),
+            glam::vec3(-extents.x, -extents.y, extents.z),
+            glam::vec3(extents.x, -extents.y, extents.z),
+            glam::vec3(extents.x, extents.y, extents.z),
+            glam::vec3(-extents.x, extents.y, extents.z),
+        ];
+        let faces = vec![
+            Facen::new([0, 1, 2, 3], glam::vec3(0.0, 0.0, -1.0)),
+            Facen::new([4, 5, 6, 7], glam::vec3(0.0, 0.0, 1.0)),
+            Facen::new([0, 1, 5, 4], glam::vec3(0.0, -1.0, 0.0)),
+            Facen::new([2, 3, 7, 6], glam::vec3(0.0, 1.0, 0.0)),
+            Facen::new([0, 3, 7, 4], glam::vec3(-1.0, 0.0, 0.0)),
+            Facen::new([1, 2, 6, 5], glam::vec3(1.0, 0.0, 0.0)),
+        ];
+        Self { vertices, faces }
+    }
+
+    pub fn triangulate(&self) -> Convex<TriFace> {
+        let mut faces = Vec::new();
+
+        for Facen {
+            indexed: indices,
+            normal,
+        } in &self.faces
+        {
+            if indices.len() < 3 {
+                continue;
+            }
+
+            let base = indices[0];
+            let mut i = 0;
+            for j in 1..(indices.len() - 1) {
+                let i1 = indices[i + j];
+                let i2 = indices[i + j + 1];
+                faces.push(Facen::new([base, i1, i2], *normal));
+                i += 1;
+            }
+        }
+
+        Convex {
+            vertices: self.vertices.clone(),
+            faces,
+        }
     }
 }
 
@@ -118,73 +192,5 @@ impl<F: Face> Convex<F> {
         }
 
         Convex { vertices, faces }
-    }
-}
-
-impl Convex<QuadFace> {
-    pub fn unit_cube(extent: f32) -> Self {
-        let vertices = vec![
-            glam::vec3(-extent, -extent, -extent),
-            glam::vec3(extent, -extent, -extent),
-            glam::vec3(extent, extent, -extent),
-            glam::vec3(-extent, extent, -extent),
-            glam::vec3(-extent, -extent, extent),
-            glam::vec3(extent, -extent, extent),
-            glam::vec3(extent, extent, extent),
-            glam::vec3(-extent, extent, extent),
-        ];
-        let faces = vec![
-            Facen::new([0, 1, 2, 3], glam::vec3(0.0, 0.0, -1.0)),
-            Facen::new([4, 5, 6, 7], glam::vec3(0.0, 0.0, 1.0)),
-            Facen::new([0, 1, 5, 4], glam::vec3(0.0, -1.0, 0.0)),
-            Facen::new([2, 3, 7, 6], glam::vec3(0.0, 1.0, 0.0)),
-            Facen::new([0, 3, 7, 4], glam::vec3(-1.0, 0.0, 0.0)),
-            Facen::new([1, 2, 6, 5], glam::vec3(1.0, 0.0, 0.0)),
-        ];
-        Self { vertices, faces }
-    }
-
-    pub fn triangulate(&self) -> Convex<TriFace> {
-        let mut faces = Vec::with_capacity(self.faces.len() * 2);
-        self.faces.iter().for_each(|face| {
-            let (a, b) = face.indexed.triangulate();
-            faces.push(Facen::new(a, face.normal));
-            faces.push(Facen::new(b, face.normal));
-        });
-
-        Convex {
-            vertices: self.vertices.clone(),
-            faces,
-        }
-    }
-}
-
-impl Convex<Vec<u32>> {
-    pub fn triangulate(&self) -> Convex<TriFace> {
-        let mut faces = Vec::new();
-
-        for Facen {
-            indexed: indices,
-            normal,
-        } in &self.faces
-        {
-            if indices.len() < 3 {
-                continue;
-            }
-
-            let base = indices[0];
-            let mut i = 0;
-            for j in 1..(indices.len() - 1) {
-                let i1 = indices[i + j];
-                let i2 = indices[i + j + 1];
-                faces.push(Facen::new([base, i1, i2], *normal));
-                i += 1;
-            }
-        }
-
-        Convex {
-            vertices: self.vertices.clone(),
-            faces,
-        }
     }
 }

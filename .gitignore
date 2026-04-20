@@ -2,4 +2,4 @@
 Cargo.lock
 *.bin
 *.sh
-/game/perf_graphs
+/game/perf_graphs/*

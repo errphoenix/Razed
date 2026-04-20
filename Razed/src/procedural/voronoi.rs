@@ -10,34 +10,41 @@ pub struct CubeVoronoi {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct CubeVoronoiGenerator {
+pub struct CubeVoronoiGenerator<R: Rng> {
+    rng: R,
+    max_offset: f32,
+
     seeds: Vec<glam::Vec3>,
     meshes: Vec<Convex<polys::TriFace>>,
 }
 
-impl CubeVoronoiGenerator {
-    pub fn new(grid: VoxelGrid, rng: &mut impl Rng, max_offset: f32) -> Self {
-        let mut seeds = Vec::with_capacity(grid.count());
-        grid.to_world(glam::Vec3::ZERO, &mut seeds);
-
-        seeds.iter_mut().for_each(|p| {
-            p.x += rng.random_range(-max_offset..max_offset);
-            p.y += rng.random_range(-max_offset..max_offset);
-            p.z += rng.random_range(-max_offset..max_offset);
-        });
-
+impl<R: Rng> CubeVoronoiGenerator<R> {
+    pub fn new(rng: R, max_offset: f32) -> Self {
         Self {
-            seeds,
-            meshes: Vec::with_capacity(grid.count()),
+            rng: rng,
+            max_offset,
+            seeds: Vec::new(),
+            meshes: Vec::new(),
         }
     }
 
-    pub fn generate(&mut self) {
-        const MAX_RANGE: f32 = 3.0;
+    pub fn generate(&mut self, seed_grid: &VoxelGrid) {
+        self.seeds.clear();
+
+        seed_grid.to_world(glam::Vec3::ZERO, &mut self.seeds);
+        self.seeds.iter_mut().for_each(|p| {
+            p.x += self.rng.random_range(-self.max_offset..self.max_offset);
+            p.y += self.rng.random_range(-self.max_offset..self.max_offset);
+            p.z += self.rng.random_range(-self.max_offset..self.max_offset);
+        });
+
+        let max_range = seed_grid.options().cell_size * 0.5 + 1.0;
+        let x_len = seed_grid.options().width;
+        let y_len = seed_grid.options().height;
+        let z_len = seed_grid.options().depth;
 
         for i in 0..self.seeds.len() {
-            // todo: parallelepiped instead of cube
-            let mut mesh = Convex::<Vec<u32>>::unit_cube(3.0);
+            let mut mesh = Convex::<Vec<u32>>::parallelepiped(glam::vec3(x_len, y_len, z_len));
             let seed = self.seeds[i];
 
             for j in 0..self.seeds.len() {
@@ -47,7 +54,7 @@ impl CubeVoronoiGenerator {
 
                 let other = self.seeds[j];
 
-                if (other - seed).length() > MAX_RANGE {
+                if (other - seed).length() > max_range {
                     continue;
                 }
 
