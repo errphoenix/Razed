@@ -20,7 +20,7 @@ use ethel::{
         camera::{self, ViewPoint},
         data::{
             Column, IndirectIndex,
-            hash::{FxSpatialHash, SpatialResolution},
+            hash::{Cell, FxSpatialHash, SpatialResolution},
         },
     },
 };
@@ -528,15 +528,30 @@ impl State {
         const WIDTH: f32 = 8.0;
         const HEIGHT: f32 = 4.0;
         const DEPTH: f32 = 8.0;
-        const FLOORS: u32 = 8;
+        const FLOORS: u32 = 3;
         const TOTAL_HEIGHT: f32 = HEIGHT * FLOORS as f32;
 
         let center = glam::vec3(view_point.position.x, GROUND_LEVEL, view_point.position.z);
         let lattice = create_structure_lattice(center, WIDTH, HEIGHT, DEPTH, FLOORS);
 
         const INNER_SPACE: i32 = 2;
+
         let mut voxel_grid = VoxelGrid::new(
-            |cell| cell.x.abs() > INNER_SPACE || cell.z.abs() > INNER_SPACE,
+            |cell| {
+                let half_cell = Cell {
+                    x: (WIDTH * 0.5) as i32,
+                    y: (FLOORS as f32 * HEIGHT * 0.5) as i32,
+                    z: (DEPTH * 0.5) as i32,
+                };
+                let cell = cell + half_cell;
+
+                cell.y % 4 == 0
+                    || cell.y == (FLOORS as f32 * HEIGHT) as i32 - 1
+                    || cell.x < INNER_SPACE
+                    || cell.x > (WIDTH as i32) - INNER_SPACE - 1
+                    || cell.z < INNER_SPACE
+                    || cell.z > (DEPTH as i32) - INNER_SPACE - 1
+            },
             VoxelGridOptions::default()
                 .with_width(WIDTH)
                 .with_height(TOTAL_HEIGHT)

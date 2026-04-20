@@ -117,7 +117,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 .load(Ordering::Acquire)
                 .saturating_sub(1);
             unsafe {
-                janus::gl::PointSize(5.0);
+                janus::gl::PointSize(2.0);
                 janus::gl::DrawArrays(janus::gl::POINTS, 0, count as i32);
             }
         }

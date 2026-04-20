@@ -20,7 +20,7 @@ ethel::table_spec! {
 }
 
 pub const CONTROL_POINT_MAX_RANGE: f32 = 16.0;
-pub const RIGIDITY: f32 = 1.0;
+pub const RIGIDITY: f32 = 0.5;
 
 #[derive(Debug, Default)]
 pub struct DeformSystem {

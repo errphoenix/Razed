@@ -120,16 +120,16 @@ void main() {
 
     vec3 w_rest = bind_pose + model;
 
-    float d0 = distance(w_rest, b0) + 0.0001;
-    float d1 = distance(w_rest, b1) + 0.0001;
-    float d2 = distance(w_rest, b2) + 0.0001;
-    float d3 = distance(w_rest, b3) + 0.0001;
-    float d4 = distance(w_rest, b4) + 0.0001;
-    float d5 = distance(w_rest, b5) + 0.0001;
-    float d6 = distance(w_rest, b6) + 0.0001;
-    float d7 = distance(w_rest, b7) + 0.0001;
+    float d0 = distance(w_rest, b0) + 0.000001;
+    float d1 = distance(w_rest, b1) + 0.000001;
+    float d2 = distance(w_rest, b2) + 0.000001;
+    float d3 = distance(w_rest, b3) + 0.000001;
+    float d4 = distance(w_rest, b4) + 0.000001;
+    float d5 = distance(w_rest, b5) + 0.000001;
+    float d6 = distance(w_rest, b6) + 0.000001;
+    float d7 = distance(w_rest, b7) + 0.000001;
 
-    const float RIGIDITY = 2.0;
+    const float RIGIDITY = 4.0;
     float vw0 = 1.0 / pow(d0, RIGIDITY);
     float vw1 = 1.0 / pow(d1, RIGIDITY);
     float vw2 = 1.0 / pow(d2, RIGIDITY);
@@ -150,14 +150,14 @@ void main() {
     vw7 /= vwt;
 
     vec3 deform = vec3(0.0);
-    deform += vw0 * (p0 - b0);
-    deform += vw1 * (p1 - b1);
-    deform += vw2 * (p2 - b2);
-    deform += vw3 * (p3 - b3);
-    deform += vw4 * (p4 - b4);
-    deform += vw5 * (p5 - b5);
-    deform += vw6 * (p6 - b6);
-    deform += vw7 * (p7 - b7);
+    if (i0 != 0) deform += vw0 * (p0 - b0);
+    if (i1 != 0) deform += vw1 * (p1 - b1);
+    if (i2 != 0) deform += vw2 * (p2 - b2);
+    if (i3 != 0) deform += vw3 * (p3 - b3);
+    if (i4 != 0) deform += vw4 * (p4 - b4);
+    if (i5 != 0) deform += vw5 * (p5 - b5);
+    if (i6 != 0) deform += vw6 * (p6 - b6);
+    if (i7 != 0) deform += vw7 * (p7 - b7);
 
     vec4 world = vec4(deform + w_rest, 1.0);
     fs_world = world.xyz;

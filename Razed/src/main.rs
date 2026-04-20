@@ -19,9 +19,10 @@ fn main() {
 
     let (input_system, input_dispatch) = janus::input::stream();
     let mut start_handler = StartupHandler::new(input_system, || FrameDataBuffers::new());
+
     {
         let mut mesh_stage = ethel::mesh::MeshStaging::new();
-        let _triangle_id = mesh_stage.stage(&MESH_UNIT_CUBE);
+        let _debug_cube = mesh_stage.stage(&MESH_UNIT_CUBE);
 
         start_handler.with_mesh_data(mesh_stage);
         start_handler.with_mesh_layout(data::LayoutMeshStorage::create());
