@@ -35,6 +35,26 @@ impl<F: Face> Convex<F> {
         Self { vertices, faces }
     }
 
+    pub fn vertices(&self) -> &[glam::Vec3] {
+        &self.vertices
+    }
+
+    pub fn faces(&self) -> &[Facen<F>] {
+        &self.faces
+    }
+
+    pub fn vertices_mut(&mut self) -> &mut Vec<glam::Vec3> {
+        &mut self.vertices
+    }
+
+    pub fn faces_mut(&mut self) -> &mut Vec<Facen<F>> {
+        &mut self.faces
+    }
+
+    pub fn split_mut(&mut self) -> (&mut Vec<glam::Vec3>, &mut Vec<Facen<F>>) {
+        (&mut self.vertices, &mut self.faces)
+    }
+
     pub fn clip_plane(&self, plane: Plane) -> Convex<Vec<u32>> {
         let mut vertices = Vec::new();
         let mut clipped = Vec::new();
@@ -74,6 +94,8 @@ impl<F: Face> Convex<F> {
                 let face_indices = t_indices.drain(..).collect::<Vec<u32>>();
                 faces.push(Facen::<Vec<u32>>::new(face_indices, *normal));
             }
+
+            t_indices.clear();
         }
 
         if clipped.len() >= 3 {
