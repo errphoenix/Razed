@@ -1,3 +1,4 @@
+pub mod voronoi;
 pub mod voxel;
 
 pub use voxel::{VoxelGrid, VoxelGridOptions};
