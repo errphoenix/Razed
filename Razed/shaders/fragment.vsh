@@ -41,6 +41,11 @@ layout(std430, binding = 2) readonly buffer POD_BindPose
     vec4 pod_bind_pose[];
 };
 
+layout(std430, binding = 3) readonly buffer POD_MeshID
+{
+    uint pod_mesh_id[];
+};
+
 layout(std430, binding = 6) readonly buffer IMap_Deforms
 {
     IndirectIndex imap_deforms[];
@@ -63,20 +68,18 @@ out vec3 fs_world;
 out vec3 fs_normal;
 out vec4 fs_color;
 
-// debug cube
-const uint MESH_ID = 0;
-
 void main() {
-    Metadata metadata = metadata[MESH_ID];
+    // account for degenerate 0
+    uint fragment_id = gl_InstanceID + 1;
+
+    uint mesh_id = pod_mesh_id[fragment_id];
+    Metadata metadata = metadata[mesh_id];
     uint offset = metadata.offset;
     uint index = offset + gl_VertexID;
-
     Vertex vertex = vertex_storage[index];
     vec3 model = vertex.position.xyz;
     vec3 normal = normalize(vertex.normal.xyz);
 
-    // account for degenerate 0
-    uint fragment_id = gl_InstanceID + 1;
     IndirectIndex[8] anchors = pod_anchors[fragment_id];
     vec4[2] weights = pod_weights[fragment_id];
     vec3 bind_pose = pod_bind_pose[fragment_id].xyz;

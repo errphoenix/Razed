@@ -88,7 +88,7 @@ layout_buffer! {
 }
 
 pub const FRAGMENTS_ALLOC: usize = 16384;
-pub const FRAGMENTS_DATA_PARTS: usize = 7;
+pub const FRAGMENTS_DATA_PARTS: usize = 8;
 
 layout_buffer! {
     const FragmentData: FRAGMENTS_DATA_PARTS, {
@@ -107,27 +107,32 @@ layout_buffer! {
             bind 2;
             shader 2;
         };
+        enum PodMeshId: FRAGMENTS_ALLOC => {
+            type ethel::mesh::Id;
+            bind 3;
+            shader 3;
+        };
 
         enum IMapDeforms: DEFORM_POINTS_ALLOC => {
             type IndirectIndex;
-            bind 3;
+            bind 4;
             shader 6;
         };
         enum PodDeformsPositions: DEFORM_POINTS_ALLOC => {
             type [f32; 4];
-            bind 4;
+            bind 5;
             shader 7;
         };
         enum PodDeformsBindPose: DEFORM_POINTS_ALLOC => {
             type [f32; 4];
-            bind 5;
+            bind 6;
             shader 8;
         };
     }
 }
 
 pub const DEBRIS_ALLOC: usize = 16384;
-pub const DEBRIS_DATA_PARTS: usize = 2;
+pub const DEBRIS_DATA_PARTS: usize = 3;
 
 layout_buffer! {
     const DebrisData: DEBRIS_DATA_PARTS, {
@@ -140,6 +145,11 @@ layout_buffer! {
             type [f32; 4];
             bind 1;
             shader 1;
+        };
+        enum PodMeshId: DEBRIS_ALLOC => {
+            type ethel::mesh::Id;
+            bind 2;
+            shader 2;
         };
     }
 }

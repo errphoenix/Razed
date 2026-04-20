@@ -27,6 +27,10 @@ layout(std430, binding = 1) readonly buffer POD_Rotations
 {
     vec4 pod_rotations[];
 };
+layout(std430, binding = 3) readonly buffer POD_MeshID
+{
+    uint pod_mesh_id[];
+};
 
 uniform mat4 u_projection;
 uniform mat4 u_view;
@@ -48,20 +52,18 @@ vec3 rotateQuat(vec3 p, vec4 q) {
     return r.xyz;
 }
 
-// debug cube
-const uint MESH_ID = 0;
-
 void main() {
-    Metadata metadata = metadata[MESH_ID];
+    // account for degenerate 0
+    uint debris_id = gl_InstanceID + 1;
+
+    uint mesh_id = pod_mesh_id[debris_id];
+    Metadata metadata = metadata[mesh_id];
     uint offset = metadata.offset;
     uint index = offset + gl_VertexID;
-
     Vertex vertex = vertex_storage[index];
     vec3 model = vertex.position.xyz;
     vec3 normal = normalize(vertex.normal.xyz);
 
-    // account for degenerate 0
-    uint debris_id = gl_InstanceID + 1;
     vec3 position = pod_positions[debris_id].xyz;
     vec4 rotation = pod_rotations[debris_id];
 

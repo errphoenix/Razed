@@ -45,6 +45,8 @@ ethel::table_spec! {
         volume: physics::Sphere;
 
         motion: MotionAccumulator;
+
+        mesh_id: ethel::mesh::Id;
     }
 }
 

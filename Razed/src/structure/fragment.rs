@@ -34,7 +34,7 @@ ethel::table_spec! {
 
         world_position: glam::Vec3;
 
-        //todo: mesh id, structure id?
+        mesh_id: ethel::mesh::Id;
     }
 }
 
@@ -455,6 +455,7 @@ impl FragmentSystem {
                 1.0,  // todo: debris rigid body
                 1.0,  // todo: damage and integrity
                 fragment_world,
+                ethel::mesh::Id::default(),
             ));
             frag.stage = UninitFragmentStage::Unfinished { indirect: handle };
 

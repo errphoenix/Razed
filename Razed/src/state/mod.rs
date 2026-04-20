@@ -463,6 +463,7 @@ impl State {
                         glam::Mat3::IDENTITY,
                         ::physics::Sphere::new(0.5),
                         MotionAccumulator::default(),
+                        ethel::mesh::Id::default(),
                     ));
                 },
             );
