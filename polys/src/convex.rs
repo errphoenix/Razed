@@ -66,10 +66,10 @@ impl<F: Face> Convex<F> {
             normal,
         } in &self.faces
         {
-            const FACE_SIZE: usize = 4;
-            for i in 0..FACE_SIZE {
+            let face_len = indices.len();
+            for i in 0..face_len {
                 let a = self.vertices[indices[i] as usize];
-                let b = self.vertices[indices[i] as usize + 1 % FACE_SIZE];
+                let b = self.vertices[(indices[i] as usize + 1) % face_len];
                 let da = normal.dot(a) - plane.d;
                 let db = normal.dot(b) - plane.d;
 

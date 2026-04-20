@@ -80,15 +80,33 @@ impl std::ops::Index<usize> for QuadFace {
     }
 }
 
-pub trait Face: std::ops::Index<usize, Output = u32> {}
+pub trait Face: std::ops::Index<usize, Output = u32> {
+    fn len(&self) -> usize;
+}
 
-impl Face for TriFace {}
+impl Face for TriFace {
+    fn len(&self) -> usize {
+        2
+    }
+}
 
-impl Face for QuadFace {}
+impl Face for QuadFace {
+    fn len(&self) -> usize {
+        4
+    }
+}
 
-impl<const N: usize> Face for [u32; N] {}
+impl<const N: usize> Face for [u32; N] {
+    fn len(&self) -> usize {
+        N
+    }
+}
 
-impl Face for Vec<u32> {}
+impl Face for Vec<u32> {
+    fn len(&self) -> usize {
+        self.len()
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct Facen<F: Face> {
@@ -106,7 +124,11 @@ impl<F: Face> std::ops::Index<usize> for Facen<F> {
     }
 }
 
-impl<F: Face> Face for Facen<F> {}
+impl<F: Face> Face for Facen<F> {
+    fn len(&self) -> usize {
+        self.indexed.len()
+    }
+}
 
 impl<F: Face> Facen<F> {
     pub fn new(face: impl Into<F>, normal: glam::Vec3) -> Self {
