@@ -25,6 +25,7 @@ use ethel::{
     },
 };
 use janus::context::DeltaTime;
+use physics::rigid::RbVelocity;
 use tracing::{Level, event};
 
 ethel::table_spec! {
@@ -454,8 +455,7 @@ impl State {
                         0.0,
                         position,
                         glam::Quat::IDENTITY,
-                        velocity,
-                        ang_velocity,
+                        RbVelocity::new(velocity, ang_velocity),
                         forces,
                         torque,
                         mass,

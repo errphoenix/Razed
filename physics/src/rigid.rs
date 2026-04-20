@@ -6,6 +6,32 @@ use janus::context::DeltaTime;
 
 use crate::collision::{self, LightCollision, Sphere};
 
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct RbVelocity {
+    pub linear: glam::Vec3,
+    pub angular: glam::Vec3,
+}
+
+impl RbVelocity {
+    pub fn new(linear: glam::Vec3, angular: glam::Vec3) -> Self {
+        Self { linear, angular }
+    }
+
+    pub fn linear(linear: glam::Vec3) -> Self {
+        Self {
+            linear,
+            angular: glam::Vec3::default(),
+        }
+    }
+
+    pub fn angular(angular: glam::Vec3) -> Self {
+        Self {
+            linear: glam::Vec3::default(),
+            angular,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct RigidBodyOptions {
     gravity: f32,
@@ -277,8 +303,7 @@ impl RigidBodySolver {
     pub fn solve_collisions(
         &mut self,
         positions: &mut [glam::Vec3],
-        velocities: &mut [glam::Vec3],
-        ang_velocities: &mut [glam::Vec3],
+        velocities: &mut [RbVelocity],
         masses: &[f32],
     ) {
         assert_eq!(positions.len(), velocities.len());
@@ -291,19 +316,19 @@ impl RigidBodySolver {
             positions[id0] += correction * 0.5;
             positions[id1] -= correction * 0.5;
 
-            let rel_v = velocities[id0] - velocities[id1];
+            let rel_v = velocities[id0].linear - velocities[id1].linear;
             let d_v = rel_v.dot(collision.normal);
 
             if d_v < 0.1 && collision.depth > 0.0 {
                 let j = -(1.0 - self.options.restitution) * d_v;
                 let impulse = collision.normal * j;
 
-                velocities[id0] += impulse * 0.5 * masses[id0];
-                velocities[id1] -= impulse * 0.5 * masses[id1];
+                velocities[id0].linear += impulse * 0.5 * masses[id0];
+                velocities[id1].linear -= impulse * 0.5 * masses[id1];
 
                 let t = collision.normal.any_orthonormal_vector();
-                ang_velocities[id0] += t * rel_v;
-                ang_velocities[id1] -= t * rel_v;
+                velocities[id0].angular += t * rel_v;
+                velocities[id1].angular -= t * rel_v;
             }
         });
     }
@@ -329,8 +354,7 @@ impl RigidBodySolver {
 
     pub fn integrate(
         &self,
-        velocities: &mut [glam::Vec3],
-        ang_velocities: &mut [glam::Vec3],
+        velocities: &mut [RbVelocity],
         forces: &mut [glam::Vec3],
         torques: &mut [glam::Vec3],
         masses: &[f32],
@@ -341,18 +365,12 @@ impl RigidBodySolver {
 
         velocities
             .iter_mut()
-            .zip(forces)
-            .zip(masses)
-            .for_each(|((v, f), w)| {
+            .zip(forces.iter_mut().zip(torques))
+            .zip(masses.iter().zip(inertia))
+            .for_each(|((v, (f, t)), (w, i))| {
                 let f = std::mem::take(f);
-                *v += h * f * w;
-            });
-        ang_velocities
-            .iter_mut()
-            .zip(torques)
-            .zip(inertia)
-            .for_each(|((v, t), i)| {
-                *v += h * i.mul_vec3(*t);
+                v.linear += h * f * w;
+                v.angular += h * i.mul_vec3(*t);
                 *t *= self.options.damping;
             });
     }
@@ -361,62 +379,54 @@ impl RigidBodySolver {
         &self,
         positions: &mut [glam::Vec3],
         rotations: &mut [glam::Quat],
-        velocities: &[glam::Vec3],
-        ang_velocities: &[glam::Vec3],
+        velocities: &mut [RbVelocity],
         delta: DeltaTime,
     ) {
         let h = delta.as_f32() * self.options.step_multiplier * INTERNAL_STEP_MULT;
-        positions.iter_mut().zip(velocities).for_each(|(p, v)| {
-            *p += v * h;
-        });
-        rotations.iter_mut().zip(ang_velocities).for_each(|(r, v)| {
-            let q = {
-                let l = v.length() + f32::EPSILON;
-                let lh = l * h;
-                let a = v / l;
-                glam::Quat::from_axis_angle(a, lh)
-            };
-            *r = q * *r;
-            *r = r.normalize();
-        });
+
+        velocities
+            .iter()
+            .zip(positions.iter_mut().zip(rotations))
+            .for_each(|(v, (p, r))| {
+                *p += v.linear * h;
+
+                let q = {
+                    let l = v.angular.length() + f32::EPSILON;
+                    let lh = l * h;
+                    let a = v.angular / l;
+                    glam::Quat::from_axis_angle(a, lh)
+                };
+                *r = q * *r;
+                *r = r.normalize();
+            });
     }
 
-    pub fn damp_velocity(
-        &self,
-        velocities: &mut [glam::Vec3],
-        ang_velocities: &mut [glam::Vec3],
-        delta: DeltaTime,
-    ) {
+    pub fn damp_velocity(&self, velocities: &mut [RbVelocity], delta: DeltaTime) {
         let h = delta.as_f32() * self.options.step_multiplier * INTERNAL_STEP_MULT;
         let dh = self.options.damping * h;
         let dh2 = dh * dh;
         let dh2e = (-dh2).exp();
-        velocities.iter_mut().for_each(|v| *v *= dh2e);
-        ang_velocities
+
+        velocities
             .iter_mut()
-            .for_each(|v| *v *= dh2e * self.options.damping);
+            .for_each(|RbVelocity { linear, angular }| {
+                *linear *= dh2e;
+                *angular *= dh2e * self.options.damping;
+            });
     }
 
-    pub fn constrain_ground(
-        &self,
-        positions: &mut [glam::Vec3],
-        velocities: &mut [glam::Vec3],
-        ang_velocities: &mut [glam::Vec3],
-    ) {
+    pub fn constrain_ground(&self, positions: &mut [glam::Vec3], velocities: &mut [RbVelocity]) {
         if let Some(ground_level) = self.options.ground_level {
-            positions
-                .iter_mut()
-                .zip(velocities)
-                .zip(ang_velocities)
-                .for_each(|((p, v), a_v)| {
-                    if p.y < ground_level {
-                        p.y = ground_level;
-                        v.y *= -self.options.restitution;
-                        v.x *= self.options.friction;
-                        v.z *= self.options.friction;
-                        *a_v *= self.options.friction;
-                    }
-                });
+            positions.iter_mut().zip(velocities).for_each(|(p, v)| {
+                if p.y < ground_level {
+                    p.y = ground_level;
+
+                    v.linear.y *= -self.options.restitution;
+                    v.linear.x *= self.options.friction;
+                    v.linear.z *= self.options.friction;
+                    v.angular *= self.options.friction;
+                }
+            });
         }
     }
 }

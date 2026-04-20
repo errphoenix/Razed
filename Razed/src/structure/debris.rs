@@ -5,7 +5,7 @@ use ethel::state::data::{
     hash::{FxLsSpatialHash, SpatialResolution},
 };
 use janus::context::DeltaTime;
-use physics::rigid::RigidBodySolver;
+use physics::rigid::{RbVelocity, RigidBodySolver};
 
 const MOTION_ACCUM_BUCKET_SIZE: Duration = Duration::from_millis(300);
 const MOTION_ACCUM_BUCKET_COUNT: usize = 6;
@@ -33,8 +33,7 @@ ethel::table_spec! {
         position: glam::Vec3;
         rotation: glam::Quat;
 
-        velocity: glam::Vec3;
-        angular_velocity: glam::Vec3;
+        velocity: RbVelocity;
 
         forces: glam::Vec3;
         torques: glam::Vec3;
@@ -174,7 +173,6 @@ impl DebrisSystem {
         let positions = &mut self.debris.position;
         let rotations = &mut self.debris.rotation;
         let velocities = &mut self.debris.velocity;
-        let ang_velocities = &mut self.debris.angular_velocity;
         let forces = &mut self.debris.forces;
         let torques = &mut self.debris.torques;
         let masses = &self.debris.mass;
@@ -219,28 +217,19 @@ impl DebrisSystem {
         }
 
         self.debris_phys
-            .solve_collisions(positions, velocities, ang_velocities, masses);
+            .solve_collisions(positions, velocities, masses);
 
         self.debris_phys.apply_gravity(forces);
         self.debris_phys
             .sync_inertia(rotations, inv_inertia_loc, inv_inertia_abs);
 
-        self.debris_phys.integrate(
-            velocities,
-            ang_velocities,
-            forces,
-            torques,
-            masses,
-            inv_inertia_abs,
-            delta,
-        );
         self.debris_phys
-            .update_bodies(positions, rotations, velocities, ang_velocities, delta);
+            .integrate(velocities, forces, torques, masses, inv_inertia_abs, delta);
+        self.debris_phys
+            .update_bodies(positions, rotations, velocities, delta);
 
-        self.debris_phys
-            .damp_velocity(velocities, ang_velocities, delta);
-        self.debris_phys
-            .constrain_ground(positions, velocities, ang_velocities);
+        self.debris_phys.damp_velocity(velocities, delta);
+        self.debris_phys.constrain_ground(positions, velocities);
     }
 
     pub fn accumulate_motion(&mut self) {
