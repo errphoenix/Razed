@@ -7,16 +7,16 @@ pub struct Convex<F: Face> {
 }
 
 impl Convex<Vec<u32>> {
-    pub fn unit_cube() -> Self {
+    pub fn unit_cube(extent: f32) -> Self {
         let vertices = vec![
-            glam::vec3(0.0, 0.0, 0.0),
-            glam::vec3(1.0, 0.0, 0.0),
-            glam::vec3(1.0, 1.0, 0.0),
-            glam::vec3(0.0, 1.0, 0.0),
-            glam::vec3(0.0, 0.0, 1.0),
-            glam::vec3(1.0, 0.0, 1.0),
-            glam::vec3(1.0, 1.0, 1.0),
-            glam::vec3(0.0, 1.0, 1.0),
+            glam::vec3(-extent, -extent, -extent),
+            glam::vec3(extent, -extent, -extent),
+            glam::vec3(extent, extent, -extent),
+            glam::vec3(-extent, extent, -extent),
+            glam::vec3(-extent, -extent, extent),
+            glam::vec3(extent, -extent, extent),
+            glam::vec3(extent, extent, extent),
+            glam::vec3(-extent, extent, extent),
         ];
         let faces = vec![
             Facen::new([0, 1, 2, 3], glam::vec3(0.0, 0.0, -1.0)),
@@ -122,16 +122,16 @@ impl<F: Face> Convex<F> {
 }
 
 impl Convex<QuadFace> {
-    pub fn unit_cube() -> Self {
+    pub fn unit_cube(extent: f32) -> Self {
         let vertices = vec![
-            glam::vec3(0.0, 0.0, 0.0),
-            glam::vec3(1.0, 0.0, 0.0),
-            glam::vec3(1.0, 1.0, 0.0),
-            glam::vec3(0.0, 1.0, 0.0),
-            glam::vec3(0.0, 0.0, 1.0),
-            glam::vec3(1.0, 0.0, 1.0),
-            glam::vec3(1.0, 1.0, 1.0),
-            glam::vec3(0.0, 1.0, 1.0),
+            glam::vec3(-extent, -extent, -extent),
+            glam::vec3(extent, -extent, -extent),
+            glam::vec3(extent, extent, -extent),
+            glam::vec3(-extent, extent, -extent),
+            glam::vec3(-extent, -extent, extent),
+            glam::vec3(extent, -extent, extent),
+            glam::vec3(extent, extent, extent),
+            glam::vec3(-extent, extent, extent),
         ];
         let faces = vec![
             Facen::new([0, 1, 2, 3], glam::vec3(0.0, 0.0, -1.0)),
