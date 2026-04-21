@@ -394,6 +394,7 @@ impl State {
                 forces: glam::Vec3,
                 torque: glam::Vec3,
                 mass: f32,
+                mesh_id: ethel::mesh::Id,
             }
 
             let mut buffer = Vec::<DebrisData>::with_capacity(disabled_frags.len());
@@ -404,6 +405,7 @@ impl State {
                 }
 
                 let data = self.fragments.data();
+                let mesh_id = data.mesh_id[frag_index.as_index()];
                 let position = data.world_position[frag_index.as_index()];
                 let mass_coeff = data.mass_coeff[frag_index.as_index()];
                 let integrity = data.integrity[frag_index.as_index()];
@@ -438,6 +440,7 @@ impl State {
                     forces: inherit_a,
                     torque: glam::Vec3::ZERO,
                     mass,
+                    mesh_id,
                 });
             }
 
@@ -450,6 +453,7 @@ impl State {
                      forces,
                      torque,
                      mass,
+                     mesh_id,
                  }| {
                     self.debris.data_mut().insert((
                         0.0,
@@ -463,7 +467,7 @@ impl State {
                         glam::Mat3::IDENTITY,
                         ::physics::Sphere::new(0.5),
                         MotionAccumulator::default(),
-                        ethel::mesh::Id::default(),
+                        mesh_id,
                     ));
                 },
             );
