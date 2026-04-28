@@ -1,3 +1,5 @@
+mod shaders;
+
 use std::sync::atomic::Ordering;
 
 use ethel::{render::command::GpuCommandDispatch, shader::ShaderHandle};
