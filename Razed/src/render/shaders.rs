@@ -1,17 +1,30 @@
-use ethel::shader::{GlslUniform, ShaderKind};
+use ethel::shader::{Constant, GlslUniform, ShaderKind};
 
-ethel::shader_glsl_struct! {
-    struct IndirectIndex {
-        handle: u32 => uint;
-        generation: u32 => uint;
+mod commons {
+    ethel::shader_glsl_struct! {
+        struct IndirectIndex {
+            handle: u32 => uint;
+            generation: u32 => uint;
+        }
+    }
+
+    ethel::shader_glsl_struct! {
+        struct DirectIndex {
+            handle: u32 => uint;
+            generation: u32 => uint;
+        }
     }
 }
 
-ethel::shader_glsl_struct! {
-    struct DirectIndex {
-        handle: u32 => uint;
-        generation: u32 => uint;
-    }
+mod base_pixel {
+    use ethel::shader::GlslAttribute;
+
+    pub const ATTRIBS: GlslAttribute = ethel::shader_glsl_attribs! {
+        input fs_world: vec3;
+        input fs_normal: vec3;
+        input fs_color: vec4;
+        output outColor: vec4;
+    };
 }
 
 ethel::shader_glsl! {
@@ -28,12 +41,45 @@ ethel::shader_glsl! {
             };
         };
 
+        unit ShaderKind::Pixel => [
+            attribs {
+                base_pixel::ATTRIBS
+            };
+
+            uniform {
+                u_camera_forward: vec3 => glam::Vec3;
+            };
+
+            const {
+                Constant::new("LIGHT_AMBIENT", 0.25)
+            };
+
+            src() "
+            vec4 albedo = fs_color;
+
+            if (albedo.a < 0.1) {
+                discard;
+            }
+
+            vec3 normal = fs_normal;
+
+            // basic directional light (camera source)
+            vec3 light_dir = -u_camera_forward;
+            float diffuse = dot(light_dir, normal);
+            diffuse *= diffuse;
+
+            float light_factor = LIGHT_AMBIENT + diffuse;
+
+            outColor = vec4(fs_color.rgb * light_factor, fs_color.a);
+            "
+        ];
+
         unit ShaderKind::Vertex => [
             attribs {
                 ethel::shader_glsl_attribs! {
                     output fs_world: vec3;
                     output fs_normal: vec3;
-                    output fs_color: vec3;
+                    output fs_color: vec4;
                 }
             };
 

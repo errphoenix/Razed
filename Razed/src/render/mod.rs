@@ -4,16 +4,17 @@ use std::sync::atomic::Ordering;
 
 use ethel::{render::command::GpuCommandDispatch, shader::ShaderHandle};
 
-use crate::data::FrameDataBuffers;
+use crate::{data::FrameDataBuffers, render::shaders::ShaderFragment};
 
 #[derive(Debug, Default)]
 pub struct Renderer {
-    base_shader: ShaderHandle,
-    xpbd_dbg_shader: ShaderHandle,
-    line_dbg_shader: ShaderHandle,
-    frags_shader: ShaderHandle,
-    debris_shader: ShaderHandle,
-    deform_dbg_shader: ShaderHandle,
+    frags_shader: shaders::ShaderFragment,
+    // base_shader: ShaderHandle,
+    // xpbd_dbg_shader: ShaderHandle,
+    // line_dbg_shader: ShaderHandle,
+    // frags_shader: ShaderHandle,
+    // debris_shader: ShaderHandle,
+    // deform_dbg_shader: ShaderHandle,
 }
 
 impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
@@ -29,38 +30,42 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         let proj = screen.projection();
         let cam_forward = view.forward();
 
-        self.xpbd_dbg_shader.bind();
-        self.xpbd_dbg_shader.uniform_mat4_glam("u_view", view_mat);
-        self.xpbd_dbg_shader
-            .uniform_mat4_glam("u_projection", *proj);
+        self.frags_shader.uniform_u_camera_forward_vec3(cam_forward);
+        self.frags_shader.uniform_u_projection_mat4(*proj);
+        self.frags_shader.uniform_u_view_mat4(view_mat);
 
-        self.line_dbg_shader.bind();
-        self.line_dbg_shader.uniform_mat4_glam("u_view", view_mat);
-        self.line_dbg_shader
-            .uniform_mat4_glam("u_projection", *proj);
+        // self.xpbd_dbg_shader.bind();
+        // self.xpbd_dbg_shader.uniform_mat4_glam("u_view", view_mat);
+        // self.xpbd_dbg_shader
+        //     .uniform_mat4_glam("u_projection", *proj);
 
-        self.base_shader.bind();
-        self.base_shader
-            .uniform_vec3_glam("u_camera_forward", cam_forward);
-        self.base_shader.uniform_mat4_glam("u_view", view_mat);
-        self.base_shader.uniform_mat4_glam("u_projection", *proj);
+        // self.line_dbg_shader.bind();
+        // self.line_dbg_shader.uniform_mat4_glam("u_view", view_mat);
+        // self.line_dbg_shader
+        //     .uniform_mat4_glam("u_projection", *proj);
 
-        self.deform_dbg_shader.bind();
-        self.deform_dbg_shader.uniform_mat4_glam("u_view", view_mat);
-        self.deform_dbg_shader
-            .uniform_mat4_glam("u_projection", *proj);
+        // self.base_shader.bind();
+        // self.base_shader
+        //     .uniform_vec3_glam("u_camera_forward", cam_forward);
+        // self.base_shader.uniform_mat4_glam("u_view", view_mat);
+        // self.base_shader.uniform_mat4_glam("u_projection", *proj);
 
-        self.debris_shader.bind();
-        self.debris_shader
-            .uniform_vec3_glam("u_camera_forward", cam_forward);
-        self.debris_shader.uniform_mat4_glam("u_view", view_mat);
-        self.debris_shader.uniform_mat4_glam("u_projection", *proj);
+        // self.deform_dbg_shader.bind();
+        // self.deform_dbg_shader.uniform_mat4_glam("u_view", view_mat);
+        // self.deform_dbg_shader
+        //     .uniform_mat4_glam("u_projection", *proj);
 
-        self.frags_shader.bind();
-        self.frags_shader
-            .uniform_vec3_glam("u_camera_forward", cam_forward);
-        self.frags_shader.uniform_mat4_glam("u_view", view_mat);
-        self.frags_shader.uniform_mat4_glam("u_projection", *proj);
+        // self.debris_shader.bind();
+        // self.debris_shader
+        //     .uniform_vec3_glam("u_camera_forward", cam_forward);
+        // self.debris_shader.uniform_mat4_glam("u_view", view_mat);
+        // self.debris_shader.uniform_mat4_glam("u_projection", *proj);
+
+        // self.frags_shader.bind();
+        // self.frags_shader
+        //     .uniform_vec3_glam("u_camera_forward", cam_forward);
+        // self.frags_shader.uniform_mat4_glam("u_view", view_mat);
+        // self.frags_shader.uniform_mat4_glam("u_projection", *proj);
     }
 
     fn render_frame(
@@ -78,84 +83,83 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         let cmds = &frame_data.command;
         GpuCommandDispatch::from_view(cmds.view_section(buf_idx)).dispatch();
 
-        {
-            self.debris_shader.bind();
-
-            let debris = &frame_data.debris;
-            debris.bind_shader_storage(buf_idx);
-
-            let debris_count = frame_data.debris_count.load(Ordering::Acquire) as i32;
-            unsafe {
-                janus::gl::DrawArraysInstanced(janus::gl::TRIANGLES, 0, 36, debris_count);
-            }
-        }
-
-        {
-            self.xpbd_dbg_shader.bind();
-
-            let xpbd_dbg = &frame_data.xpbd_debug;
-            xpbd_dbg.bind_shader_storage(buf_idx);
-
-            let xpbd_count = frame_data.xpbd_debug_link_count.load(Ordering::Acquire) as i32;
-            unsafe {
-                janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 2, xpbd_count);
-            }
-        }
-        {
-            self.line_dbg_shader.bind();
-            unsafe {
-                janus::gl::DrawArrays(janus::gl::LINES, 0, 6);
-            }
-        }
-        {
-            const DEFORM_POINTS_SSBO: usize = 0;
-            self.deform_dbg_shader.bind();
-            frame_data
-                .deform_debug
-                .bind_shader_storage(buf_idx, DEFORM_POINTS_SSBO);
-
-            let count = frame_data
-                .deform_debug_count
-                .load(Ordering::Acquire)
-                .saturating_sub(1);
-            unsafe {
-                janus::gl::PointSize(2.0);
-                janus::gl::DrawArrays(janus::gl::POINTS, 0, count as i32);
-            }
-        }
+        // {
+        //     self.debris_shader.bind();
+        //     let debris = &frame_data.debris;
+        //     debris.bind_shader_storage(buf_idx);
+        //     let debris_count = frame_data.debris_count.load(Ordering::Acquire) as i32;
+        //     unsafe {
+        //         janus::gl::DrawArraysInstanced(janus::gl::TRIANGLES, 0, 36, debris_count);
+        //     }
+        // }
+        // {
+        //     self.xpbd_dbg_shader.bind();
+        //     let xpbd_dbg = &frame_data.xpbd_debug;
+        //     xpbd_dbg.bind_shader_storage(buf_idx);
+        //     let xpbd_count = frame_data.xpbd_debug_link_count.load(Ordering::Acquire) as i32;
+        //     unsafe {
+        //         janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 2, xpbd_count);
+        //     }
+        // }
+        // {
+        //     self.line_dbg_shader.bind();
+        //     unsafe {
+        //         janus::gl::DrawArrays(janus::gl::LINES, 0, 6);
+        //     }
+        // }
+        // {
+        //     const DEFORM_POINTS_SSBO: usize = 0;
+        //     self.deform_dbg_shader.bind();
+        //     frame_data
+        //         .deform_debug
+        //         .bind_shader_storage(buf_idx, DEFORM_POINTS_SSBO);
+        //     let count = frame_data
+        //         .deform_debug_count
+        //         .load(Ordering::Acquire)
+        //         .saturating_sub(1);
+        //     unsafe {
+        //         janus::gl::PointSize(2.0);
+        //         janus::gl::DrawArrays(janus::gl::POINTS, 0, count as i32);
+        //     }
+        // }
     }
 
     fn init_resources(&mut self, _resolution: ethel::render::Resolution) {
-        const VSH_BASE_SOURCE: &[u8] = include_bytes!("../shaders/base.vsh");
-        const FSH_BASE_SOURCE: &[u8] = include_bytes!("../shaders/base.fsh");
-        let mut vsh = std::io::BufReader::new(VSH_BASE_SOURCE);
-        let mut fsh = std::io::BufReader::new(FSH_BASE_SOURCE);
-        self.base_shader = ShaderHandle::new(&mut vsh, &mut fsh);
+        ShaderFragment::build_sources()
+            .iter()
+            .for_each(|s| println!("{s}"));
+        self.frags_shader = ShaderFragment::new_compiled();
 
-        const VSH_CONSTRAINT_SOURCE: &[u8] = include_bytes!("../shaders/constraint.vsh");
-        const FSH_SOLID_SOURCE: &[u8] = include_bytes!("../shaders/solid.fsh");
-        let mut vsh = std::io::BufReader::new(VSH_CONSTRAINT_SOURCE);
-        let mut fsh = std::io::BufReader::new(FSH_SOLID_SOURCE);
-        self.xpbd_dbg_shader = ShaderHandle::new(&mut vsh, &mut fsh);
+        // const VSH_BASE_SOURCE: &[u8] = include_bytes!("../shaders/base.vsh");
+        // const FSH_BASE_SOURCE: &[u8] = include_bytes!("../shaders/base.fsh");
+        // let mut vsh = std::io::BufReader::new(VSH_BASE_SOURCE);
+        // let mut fsh = std::io::BufReader::new(FSH_BASE_SOURCE);
+        // self.base_shader = ShaderHandle::new(&mut vsh, &mut fsh);
 
-        const VSH_LINE_SOURCE: &[u8] = include_bytes!("../shaders/line.vsh");
-        let mut vsh = std::io::BufReader::new(VSH_LINE_SOURCE);
-        let mut fsh = std::io::BufReader::new(FSH_SOLID_SOURCE);
-        self.line_dbg_shader = ShaderHandle::new(&mut vsh, &mut fsh);
+        // const VSH_CONSTRAINT_SOURCE: &[u8] = include_bytes!("../shaders/constraint.vsh");
+        // const FSH_SOLID_SOURCE: &[u8] = include_bytes!("../shaders/solid.fsh");
+        // let mut vsh = std::io::BufReader::new(VSH_CONSTRAINT_SOURCE);
+        // let mut fsh = std::io::BufReader::new(FSH_SOLID_SOURCE);
+        // self.xpbd_dbg_shader = ShaderHandle::new(&mut vsh, &mut fsh);
 
-        const VSH_FRAG_SOURCE: &[u8] = include_bytes!("../shaders/fragment.vsh");
-        let mut vsh = std::io::BufReader::new(VSH_FRAG_SOURCE);
-        let mut fsh = std::io::BufReader::new(FSH_BASE_SOURCE);
-        self.frags_shader = ShaderHandle::new(&mut vsh, &mut fsh);
+        // const VSH_LINE_SOURCE: &[u8] = include_bytes!("../shaders/line.vsh");
+        // let mut vsh = std::io::BufReader::new(VSH_LINE_SOURCE);
+        // let mut fsh = std::io::BufReader::new(FSH_SOLID_SOURCE);
+        // self.line_dbg_shader = ShaderHandle::new(&mut vsh, &mut fsh);
 
-        const VSH_DEFORM_SOURCE: &[u8] = include_bytes!("../shaders/cage.vsh");
-        let mut vsh = std::io::BufReader::new(VSH_DEFORM_SOURCE);
-        let mut fsh = std::io::BufReader::new(FSH_SOLID_SOURCE);
-        self.deform_dbg_shader = ShaderHandle::new(&mut vsh, &mut fsh);
+        // const VSH_FRAG_SOURCE: &[u8] = include_bytes!("../shaders/fragment.vsh");
+        // let mut vsh = std::io::BufReader::new(VSH_FRAG_SOURCE);
+        // let mut fsh = std::io::BufReader::new(FSH_BASE_SOURCE);
+        // self.frags_shader = ShaderHandle::new(&mut vsh, &mut fsh);
 
-        const VSH_DEBRIS_SOURCE: &[u8] = include_bytes!("../shaders/debris.vsh");
-        let mut vsh = std::io::BufReader::new(VSH_DEBRIS_SOURCE);
-        let mut fsh = std::io::BufReader::new(FSH_BASE_SOURCE);
-        self.debris_shader = ShaderHandle::new(&mut vsh, &mut fsh);
+        // const VSH_DEFORM_SOURCE: &[u8] = include_bytes!("../shaders/cage.vsh");
+        // let mut vsh = std::io::BufReader::new(VSH_DEFORM_SOURCE);
+        // let mut fsh = std::io::BufReader::new(FSH_SOLID_SOURCE);
+        // self.deform_dbg_shader = ShaderHandle::new(&mut vsh, &mut fsh);
+
+        // const VSH_DEBRIS_SOURCE: &[u8] = include_bytes!("../shaders/debris.vsh");
+        // let mut vsh = std::io::BufReader::new(VSH_DEBRIS_SOURCE);
+        // let mut fsh = std::io::BufReader::new(FSH_BASE_SOURCE);
+        // self.debris_shader = ShaderHandle::new(&mut vsh, &mut fsh);
     }
 }
