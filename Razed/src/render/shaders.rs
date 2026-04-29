@@ -1,19 +1,28 @@
 use ethel::shader::{Constant, GlslUniform, ShaderKind};
 
 mod commons {
+    use ethel::shader::GlslStruct;
+
     ethel::shader_glsl_struct! {
         struct IndirectIndex {
-            handle: u32 => uint;
+            index: u32 => uint;
             generation: u32 => uint;
         }
     }
 
     ethel::shader_glsl_struct! {
         struct DirectIndex {
-            handle: u32 => uint;
+            index: u32 => uint;
             generation: u32 => uint;
         }
     }
+
+    pub(super) const STRUCT_MESH_METADATA: GlslStruct =
+        ethel::mesh::MetadataGlslStruct::as_definition();
+    pub(super) const STRUCT_MESH_VERTEX: GlslStruct =
+        ethel::mesh::VertexGlslStruct::as_definition();
+    pub(super) const UTIL_INDEX_INDIRECT: GlslStruct = IndirectIndexGlslStruct::as_definition();
+    pub(super) const UTIL_INDEX_DIRECT: GlslStruct = DirectIndexGlslStruct::as_definition();
 }
 
 mod base_pixel {
@@ -31,8 +40,8 @@ ethel::shader_glsl! {
     struct Fragment > [460] {
         common {
             type {
-                ethel::mesh::MetadataGlslStruct::as_definition()
-                ethel::mesh::VertexGlslStruct::as_definition()
+                commons::STRUCT_MESH_METADATA
+                commons::STRUCT_MESH_VERTEX
             };
 
             ssbo {
@@ -86,6 +95,11 @@ ethel::shader_glsl! {
             uniform {
                 u_projection: mat4 => glam::Mat4;
                 u_view: mat4 => glam::Mat4;
+            };
+
+            type {
+                commons::UTIL_INDEX_INDIRECT
+                commons::UTIL_INDEX_DIRECT
             };
 
             ssbo {

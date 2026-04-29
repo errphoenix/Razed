@@ -1,8 +1,6 @@
 mod shaders;
 
-use std::sync::atomic::Ordering;
-
-use ethel::{render::command::GpuCommandDispatch, shader::ShaderHandle};
+use ethel::render::command::GpuCommandDispatch;
 
 use crate::{data::FrameDataBuffers, render::shaders::ShaderFragment};
 
@@ -30,6 +28,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         let proj = screen.projection();
         let cam_forward = view.forward();
 
+        self.frags_shader.bind();
         self.frags_shader.uniform_u_camera_forward_vec3(cam_forward);
         self.frags_shader.uniform_u_projection_mat4(*proj);
         self.frags_shader.uniform_u_view_mat4(view_mat);
@@ -125,9 +124,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
     }
 
     fn init_resources(&mut self, _resolution: ethel::render::Resolution) {
-        ShaderFragment::build_sources()
-            .iter()
-            .for_each(|s| println!("{s}"));
         self.frags_shader = ShaderFragment::new_compiled();
 
         // const VSH_BASE_SOURCE: &[u8] = include_bytes!("../shaders/base.vsh");

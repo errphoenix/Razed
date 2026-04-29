@@ -19,7 +19,10 @@ pub struct Renderable {
     pub data_handle: IndirectIndex,
 }
 
-layout_mesh_buffer!(count: 512; vertices: 2048);
+pub const MESH_BUFFER_LEN: usize = 512;
+pub const MESH_BUFFER_SIZE: usize = 65536;
+
+layout_mesh_buffer!(count: MESH_BUFFER_LEN; vertices: MESH_BUFFER_SIZE);
 
 layout_buffer! {
     const EntityData: RENDER_STORAGE_PARTS, {
