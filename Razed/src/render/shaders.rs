@@ -1,6 +1,6 @@
 #![allow(unused_must_use)]
 
-use ethel::shader::{Constant, GlslUniform, ShaderKind};
+use ethel::shader::{GlslUniform, ShaderKind};
 
 mod commons {
     use ethel::shader::{GlslLib, GlslStruct};
@@ -76,7 +76,7 @@ mod commons {
             vec4 q_conj = vec4(-q.x, -q.y, -q.z, q.w);
             vec4 p4 = vec4(p, 1.0);
 
-            vec4 r mulQuat(q, p4);
+            vec4 r = mulQuat(q, p4);
             r = mulQuat(r, q_conj);
             return r.xyz;
         "
@@ -421,6 +421,9 @@ ethel::shader_glsl! {
             };
 
             ssbo {
+                ethel::mesh::GLSL_SSBO_INTEGRATION[0]
+                ethel::mesh::GLSL_SSBO_INTEGRATION[1]
+
                 ethel::shader_glsl_ssbo! {
                     buf POD_Positions on 0 => {
                         [dyn_array vec4: pod_positions]
