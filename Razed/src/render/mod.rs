@@ -2,17 +2,21 @@ mod shaders;
 
 use ethel::render::command::GpuCommandDispatch;
 
-use crate::{data::FrameDataBuffers, render::shaders::ShaderFragment};
+use crate::{
+    data::FrameDataBuffers,
+    render::shaders::{ShaderDebris, ShaderFragment, ShaderLattice},
+};
 
 #[derive(Debug, Default)]
 pub struct Renderer {
+    lattice_shader: shaders::ShaderLattice,
     frags_shader: shaders::ShaderFragment,
-    // base_shader: ShaderHandle,
-    // xpbd_dbg_shader: ShaderHandle,
-    // line_dbg_shader: ShaderHandle,
-    // frags_shader: ShaderHandle,
-    // debris_shader: ShaderHandle,
-    // deform_dbg_shader: ShaderHandle,
+    debris_shader: shaders::ShaderDebris, // base_shader: ShaderHandle,
+                                          // xpbd_dbg_shader: ShaderHandle,
+                                          // line_dbg_shader: ShaderHandle,
+                                          // frags_shader: ShaderHandle,
+                                          // debris_shader: ShaderHandle,
+                                          // deform_dbg_shader: ShaderHandle,
 }
 
 impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
@@ -28,10 +32,19 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         let proj = screen.projection();
         let cam_forward = view.forward();
 
+        self.lattice_shader.bind();
+        self.lattice_shader.uniform_projection_mat4(*proj);
+        self.lattice_shader.uniform_view_mat4(view_mat);
+
+        self.debris_shader.bind();
+        self.debris_shader.uniform_camera_forward_vec3(cam_forward);
+        self.debris_shader.uniform_projection_mat4(*proj);
+        self.debris_shader.uniform_view_mat4(view_mat);
+
         self.frags_shader.bind();
-        self.frags_shader.uniform_u_camera_forward_vec3(cam_forward);
-        self.frags_shader.uniform_u_projection_mat4(*proj);
-        self.frags_shader.uniform_u_view_mat4(view_mat);
+        self.frags_shader.uniform_camera_forward_vec3(cam_forward);
+        self.frags_shader.uniform_projection_mat4(*proj);
+        self.frags_shader.uniform_view_mat4(view_mat);
 
         // self.xpbd_dbg_shader.bind();
         // self.xpbd_dbg_shader.uniform_mat4_glam("u_view", view_mat);
@@ -82,24 +95,32 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         let cmds = &frame_data.command;
         GpuCommandDispatch::from_view(cmds.view_section(buf_idx)).dispatch();
 
-        // {
-        //     self.debris_shader.bind();
-        //     let debris = &frame_data.debris;
-        //     debris.bind_shader_storage(buf_idx);
-        //     let debris_count = frame_data.debris_count.load(Ordering::Acquire) as i32;
-        //     unsafe {
-        //         janus::gl::DrawArraysInstanced(janus::gl::TRIANGLES, 0, 36, debris_count);
-        //     }
-        // }
-        // {
-        //     self.xpbd_dbg_shader.bind();
-        //     let xpbd_dbg = &frame_data.xpbd_debug;
-        //     xpbd_dbg.bind_shader_storage(buf_idx);
-        //     let xpbd_count = frame_data.xpbd_debug_link_count.load(Ordering::Acquire) as i32;
-        //     unsafe {
-        //         janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 2, xpbd_count);
-        //     }
-        // }
+        {
+            self.debris_shader.bind();
+            let debris = &frame_data.debris;
+            debris.bind_shader_storage(buf_idx);
+
+            let debris_count = frame_data
+                .debris_count
+                .load(std::sync::atomic::Ordering::Acquire) as i32;
+
+            unsafe {
+                janus::gl::DrawArraysInstanced(janus::gl::TRIANGLES, 0, 36, debris_count);
+            }
+        }
+        {
+            self.lattice_shader.bind();
+            let xpbd_dbg = &frame_data.xpbd_debug;
+            xpbd_dbg.bind_shader_storage(buf_idx);
+
+            let xpbd_count = frame_data
+                .xpbd_debug_link_count
+                .load(std::sync::atomic::Ordering::Acquire) as i32;
+
+            unsafe {
+                janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 2, xpbd_count);
+            }
+        }
         // {
         //     self.line_dbg_shader.bind();
         //     unsafe {
@@ -124,7 +145,9 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
     }
 
     fn init_resources(&mut self, _resolution: ethel::render::Resolution) {
+        self.lattice_shader = ShaderLattice::new_compiled();
         self.frags_shader = ShaderFragment::new_compiled();
+        self.debris_shader = ShaderDebris::new_compiled();
 
         // const VSH_BASE_SOURCE: &[u8] = include_bytes!("../shaders/base.vsh");
         // const FSH_BASE_SOURCE: &[u8] = include_bytes!("../shaders/base.fsh");
