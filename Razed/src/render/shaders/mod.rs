@@ -2,86 +2,8 @@
 
 use ethel::shader::{GlslUniform, ShaderKind};
 
-mod commons {
-    use ethel::shader::{GlslLib, GlslStruct};
-
-    ethel::shader_glsl_struct! {
-        struct IndirectIndex {
-            index: u32 => uint;
-            generation: u32 => uint;
-        }
-    }
-
-    ethel::shader_glsl_struct! {
-        struct DirectIndex {
-            index: u32 => uint;
-            generation: u32 => uint;
-        }
-    }
-
-    pub(super) const TYPE_MESH_METADATA: GlslStruct =
-        ethel::mesh::MetadataGlslStruct::as_definition();
-    pub(super) const TYPE_MESH_VERTEX: GlslStruct = ethel::mesh::VertexGlslStruct::as_definition();
-
-    pub(super) const TYPE_INDEX_INDIRECT: GlslStruct = IndirectIndexGlslStruct::as_definition();
-    pub(super) const TYPE_INDEX_DIRECT: GlslStruct = DirectIndexGlslStruct::as_definition();
-
-    pub(super) const LIB_QUAT_CONVERT_MAT: GlslLib = ethel::shader_glsl_lib! {
-        mat3 quatToMat [ q: vec4 ] => "
-            mat3 m = mat3(0.0);
-
-            float sqx = q.x * q.x;
-            float sqy = q.y * q.y;
-            float sqz = q.z * q.z;
-            float sqw = q.w * q.w;
-
-            float invs = 1.0 / (sqx + sqy + sqz + sqw);
-            m[0][0] = (sqx - sqy - sqz + sqw) * invs;
-            m[1][1] = (-sqx + sqy - sqz + sqw) * invs;
-            m[2][2] = (-sqx - sqy + sqz + sqw) * invs;
-
-            float tmp1 = q.x * q.y;
-            float tmp2 = q.z * q.w;
-            m[1][0] = 2.0 * (tmp1 + tmp2) * invs;
-            m[0][1] = 2.0 * (tmp1 - tmp2) * invs;
-
-            tmp1 = q.x * q.z;
-            tmp2 = q.y * q.w;
-            m[2][0] = 2.0 * (tmp1 - tmp2) * invs;
-            m[0][2] = 2.0 * (tmp1 + tmp2) * invs;
-
-            tmp1 = q.y * q.z;
-            tmp2 = q.x * q.w;
-            m[2][1] = 2.0 * (tmp1 + tmp2) * invs;
-            m[1][2] = 2.0 * (tmp1 - tmp2) * invs;
-
-            return m;
-        "
-    };
-
-    pub(super) const LIB_QUAT_MUL_QUAT: GlslLib = ethel::shader_glsl_lib! {
-        vec4 mulQuat [ q0: vec4, q1: vec4 ] => "
-            vec4 r;
-            r.x = (q0.w * q1.x) + (q0.x + q1.w) + (q0.y * q1.z) - (q0.z * q1.y);
-            r.y = (q0.w * q1.y) - (q0.x * q1.z) + (q0.y * q1.w) + (q0.z * q1.x);
-            r.z = (q0.w * q1.z) + (q0.x * q1.y) - (q0.y * q1.x) + (q0.z * q1.w);
-            r.w = (q0.w * q1.w) - (q0.x * q1.x) - (q0.y * q1.y) - (q0.z * q1.z);
-            return r;
-        "
-    };
-
-    /// Depends on [`LIB_QUAT_MUL_QUAT`];
-    pub(super) const LIB_QUAT_ROT_VEC: GlslLib = ethel::shader_glsl_lib! {
-        vec3 rotateQuat [ p: vec3, q: vec4 ] => "
-            vec4 q_conj = vec4(-q.x, -q.y, -q.z, q.w);
-            vec4 p4 = vec4(p, 1.0);
-
-            vec4 r = mulQuat(q, p4);
-            r = mulQuat(r, q_conj);
-            return r.xyz;
-        "
-    };
-}
+pub(super) mod commons;
+pub(super) mod debug;
 
 mod base_pixel {
     use ethel::shader::{Constant, GlslAttribute};
@@ -94,18 +16,6 @@ mod base_pixel {
     };
 
     pub const CONST_AMBIENT_LIGHT: Constant<f32> = Constant::new("LIGHT_AMBIENT", 0.25);
-}
-
-mod lattice {
-    use ethel::{shader::GlslStruct, state::data::IndirectIndex};
-
-    ethel::shader_glsl_struct! {
-        struct Constraint {
-            nodes[2]: [IndirectIndex; 2] => IndirectIndex;
-        }
-    }
-
-    pub const TYPE_CONSTRAINT: GlslStruct = ConstraintGlslStruct::as_definition();
 }
 
 ethel::shader_glsl! {
@@ -313,85 +223,6 @@ ethel::shader_glsl! {
             fs_color = vec4(vec3(0.8), 1.0);
 
             gl_Position = projection * view * world;
-            "
-        ];
-    }
-}
-
-ethel::shader_glsl! {
-    struct Lattice > [460] {
-        common {};
-
-        unit ShaderKind::Vertex => [
-            attribs {
-                ethel::shader_glsl_attribs! {
-                    output fs_color: vec4;
-                }
-            };
-
-            uniform {
-                projection: mat4 => glam::Mat4;
-                view: mat4 => glam::Mat4;
-            };
-
-            type {
-                commons::TYPE_INDEX_INDIRECT
-                commons::TYPE_INDEX_DIRECT
-
-                lattice::TYPE_CONSTRAINT
-            };
-
-            ssbo {
-                ethel::shader_glsl_ssbo! {
-                    buf POD_Constraints on 4 => {
-                        [dyn_array Constraint: constraints]
-                    }
-                }
-                ethel::shader_glsl_ssbo! {
-                    buf IMap_Nodes on 5 => {
-                        [dyn_array IndirectIndex: imap_nodes]
-                    }
-                }
-                ethel::shader_glsl_ssbo! {
-                    buf POD_Nodes on 6 => {
-                        [dyn_array vec4: pod_nodes]
-                    }
-                }
-                ethel::shader_glsl_ssbo! {
-                    buf I_Selected on 7 => {
-                        DirectIndex: i_selected;
-                    }
-                }
-            };
-
-            src() "
-                uint constraint_id = gl_InstanceID;
-                uint node_offset = gl_VertexID;
-
-                Constraint constraint = constraints[constraint_id];
-                IndirectIndex node_id = constraint.nodes[node_offset];
-                IndirectIndex node_ii = imap_nodes[node_id.index];
-
-                fs_color = vec4(0.0, 1.0, 0.0, 0.28);
-                if (constraint_id == i_selected.index) {
-                    fs_color = vec4(1.0, 0.0, 0.0, 1.0);
-                }
-
-                vec3 position = pod_nodes[node_ii.index].xyz;
-                gl_Position = projection * view * vec4(position, 1.0);
-            "
-        ];
-
-        unit ShaderKind::Pixel => [
-            attribs {
-                ethel::shader_glsl_attribs! {
-                    input fs_color: vec4;
-                    output out_Color: vec4;
-                }
-            };
-
-            src() "
-                out_Color = fs_color;
             "
         ];
     }

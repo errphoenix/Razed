@@ -2,21 +2,13 @@ mod shaders;
 
 use ethel::render::command::GpuCommandDispatch;
 
-use crate::{
-    data::FrameDataBuffers,
-    render::shaders::{ShaderDebris, ShaderFragment, ShaderLattice},
-};
+use crate::data::FrameDataBuffers;
 
 #[derive(Debug, Default)]
 pub struct Renderer {
-    lattice_shader: shaders::ShaderLattice,
+    lattice_shader: shaders::debug::ShaderDebugLattice,
     frags_shader: shaders::ShaderFragment,
-    debris_shader: shaders::ShaderDebris, // base_shader: ShaderHandle,
-                                          // xpbd_dbg_shader: ShaderHandle,
-                                          // line_dbg_shader: ShaderHandle,
-                                          // frags_shader: ShaderHandle,
-                                          // debris_shader: ShaderHandle,
-                                          // deform_dbg_shader: ShaderHandle,
+    debris_shader: shaders::ShaderDebris,
 }
 
 impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
@@ -145,9 +137,9 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
     }
 
     fn init_resources(&mut self, _resolution: ethel::render::Resolution) {
-        self.lattice_shader = ShaderLattice::new_compiled();
-        self.frags_shader = ShaderFragment::new_compiled();
-        self.debris_shader = ShaderDebris::new_compiled();
+        self.lattice_shader = shaders::debug::ShaderDebugLattice::new_compiled();
+        self.frags_shader = shaders::ShaderFragment::new_compiled();
+        self.debris_shader = shaders::ShaderDebris::new_compiled();
 
         // const VSH_BASE_SOURCE: &[u8] = include_bytes!("../shaders/base.vsh");
         // const FSH_BASE_SOURCE: &[u8] = include_bytes!("../shaders/base.fsh");
