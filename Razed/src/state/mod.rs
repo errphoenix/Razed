@@ -130,6 +130,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     let pod_anchors = self.fragments.data().anchors_slice();
                     let pod_anchor_weights = self.fragments.data().anchors_weights_slice();
                     let pod_bind_pose = self.fragments.data().bind_position_slice();
+                    let pod_mesh_id = self.fragments.data().mesh_id_slice();
 
                     // SAFETY: the use of LayoutFragmentData ensures we blit to a
                     // valid section of the partitioned buffer.
@@ -140,6 +141,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                         fragments.blit_part(buf_idx, LayoutFragmentData::PodAnchors as usize, pod_anchors, 0);
                         fragments.blit_part(buf_idx, LayoutFragmentData::PodAnchorsWeights as usize, pod_anchor_weights, 0);
                         fragments.blit_part(buf_idx, LayoutFragmentData::PodBindPose as usize, pod_bind_pose, 0);
+                        fragments.blit_part(buf_idx, LayoutFragmentData::PodMeshId as usize, pod_mesh_id, 0);
                     }
                 }
 
@@ -246,12 +248,12 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                 }
 
                 // cage deforms debug upload
-                {
-                    let deform_dbg = &storage.deform_debug;
-                    let deform_points = self.deforms.data().deformed_slice();
-                    deform_dbg.blit_section_padded(buf_idx, deform_points, 0, VEC3_VEC4_PADDING);
-                    storage.deform_debug_count.store(self.deforms.data().len() as u32, Ordering::Release);
-                }
+                // {
+                //     let deform_dbg = &storage.deform_debug;
+                //     let deform_points = self.deforms.data().deformed_slice();
+                //     deform_dbg.blit_section_padded(buf_idx, deform_points, 0, VEC3_VEC4_PADDING);
+                //     storage.deform_debug_count.store(self.deforms.data().len() as u32, Ordering::Release);
+                // }
 
                 {
                     let commands = &storage.command;

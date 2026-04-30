@@ -735,6 +735,14 @@ impl XpbdSolver {
             }
         }
 
+        // println!(
+        //     "strain.. max: {} / min: {} // threshold.. max: {} / min: {}",
+        //     unsafe { MAX_STRAIN },
+        //     unsafe { MIN_STRAIN },
+        //     unsafe { MAX_INT },
+        //     unsafe { MIN_INT }
+        // );
+
         for _ in 0..self.substeps {
             self.substep(node_table, constraint_table);
         }

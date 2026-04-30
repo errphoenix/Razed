@@ -10,7 +10,7 @@ use crate::structure::fragment::ANCHORS_COUNT as FRAGMENT_ANCHORS_COUNT;
 
 pub const RENDER_STORAGE_PARTS: usize = 8;
 pub const ENTITY_ALLOCATION: usize = 8192;
-pub const COMMAND_QUEUE_ALLOC: usize = 2048;
+pub const COMMAND_QUEUE_ALLOC: usize = 24000;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[repr(C)]
@@ -19,7 +19,7 @@ pub struct Renderable {
     pub data_handle: IndirectIndex,
 }
 
-pub const MESH_BUFFER_LEN: usize = 512;
+pub const MESH_BUFFER_LEN: usize = 2048;
 pub const MESH_BUFFER_SIZE: usize = 65536;
 
 layout_mesh_buffer!(count: MESH_BUFFER_LEN; vertices: MESH_BUFFER_SIZE);

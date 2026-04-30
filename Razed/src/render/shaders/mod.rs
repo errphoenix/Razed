@@ -3,6 +3,7 @@
 use ethel::shader::{GlslUniform, ShaderKind};
 
 pub(super) mod commons;
+pub(super) mod compute;
 pub(super) mod debug;
 
 mod base_pixel {
