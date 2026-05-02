@@ -26,6 +26,14 @@ macro_rules! ssbo_binding {
     };
 }
 
+pub const SSBO_INDEX_POD_ANCHORS: u32 = ssbo_binding!(POD_Anchors);
+pub const SSBO_INDEX_POD_WEIGHTS: u32 = ssbo_binding!(POD_Weights);
+pub const SSBO_INDEX_POD_BINDPOSE: u32 = ssbo_binding!(POD_BindPose);
+pub const SSBO_INDEX_POD_MESHID: u32 = ssbo_binding!(POD_MeshID);
+pub const SSBO_INDEX_IMAP_DEFORMS: u32 = ssbo_binding!(IMap_Deforms);
+pub const SSBO_INDEX_POD_DEFORMS_POSITIONS: u32 = ssbo_binding!(POD_Deforms_Positions);
+pub const SSBO_INDEX_POD_DEFORMS_BINDPOSE: u32 = ssbo_binding!(POD_Deforms_BindPose);
+
 ethel::shader_glsl! {
     struct Fragment > [460] {
         common {

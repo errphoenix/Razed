@@ -38,10 +38,23 @@ ethel::shader_glsl_struct! {
     }
 }
 
-pub(super) const TYPE_COMMAND_ARRAYS: GlslStruct =
-    DrawArraysIndirectCommandGlslStruct::as_definition();
-pub(super) const TYPE_COMMAND_ELEMENTS: GlslStruct =
+pub const TYPE_COMMAND_ARRAYS: GlslStruct = DrawArraysIndirectCommandGlslStruct::as_definition();
+pub const TYPE_COMMAND_ELEMENTS: GlslStruct =
     DrawElementsIndirectCommandGlslStruct::as_definition();
+
+pub const WORKGROUP_SIZE_XY: u32 = 32;
+
+macro_rules! ssbo_binding {
+    (Command_Buffer) => {
+        0
+    };
+    (POD_MeshID) => {
+        1
+    };
+}
+
+pub const SSBO_INDEX_COMMAND_BUFFER: u32 = ssbo_binding!(Command_Buffer);
+pub const SSBO_INDEX_FRAGMENTS_MESH_IDS: u32 = ssbo_binding!(POD_MeshID);
 
 ethel::shader_glsl_compute! {
     struct ProcessCommand > [460] {
@@ -59,20 +72,20 @@ ethel::shader_glsl_compute! {
             ethel::mesh::GLSL_SSBO_INTEGRATION[1]
 
             ethel::shader_glsl_ssbo! {
-                buf Command_Buffer on 0 => {
-                    [dyn_array TYPE_COMMAND_ARRAYS: command_buffer]
+                buf Command_Buffer => {
+                    [dyn_array DrawArraysIndirectCommand: command_buffer]
                 }
             }
             ethel::shader_glsl_ssbo! {
-                buf POD_MeshID on 1 => {
+                buf POD_MeshID => {
                     [dyn_array uint: pod_mesh_id]
                 }
             }
         };
 
         src() "
-            uvec2 g_wg_row = gl_NumWorkGroups.x * gl_WorkGroupSize.x;
-            uvec2 g_wg_id = gl_GlobalInvocationID;
+            uint g_wg_row = gl_NumWorkGroups.x * gl_WorkGroupSize.x;
+            uvec2 g_wg_id = gl_GlobalInvocationID.xy;
 
             uint g_wg = g_wg_id.y * g_wg_row + g_wg_id.x;
 
@@ -83,8 +96,10 @@ ethel::shader_glsl_compute! {
 
             uint vertex_len = metadata[mesh_id].length;
 
-            command_buffer[mesh_id].count = vertex_len;
-            atomicAdd(command_buffer[mesh_id].instance_count, 1);
+            command_buffer[g_wg].count = vertex_len;
+            command_buffer[g_wg].instance_count = 1;
+
+            //atomicAdd(command_buffer[mesh_id].instance_count, 1);
         "
     }
 }
