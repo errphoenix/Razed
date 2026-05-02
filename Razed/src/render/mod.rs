@@ -1,14 +1,16 @@
 mod shaders;
 
-use ethel::render::command::GpuCommandDispatch;
+use ethel::{DrawCommand, render::command::GpuCommandDispatch};
 
-use crate::data::FrameDataBuffers;
+use crate::{data::FrameDataBuffers, render::shaders::compute::ComputeShaderProcessCommand};
 
 #[derive(Debug, Default)]
 pub struct Renderer {
     lattice_shader: shaders::debug::ShaderDebugLattice,
     frags_shader: shaders::ShaderFragment,
     debris_shader: shaders::ShaderDebris,
+
+    command_process_compute: shaders::compute::ComputeShaderProcessCommand,
 }
 
 impl ethel::RenderHandler<FrameDataBuffers> for Renderer {

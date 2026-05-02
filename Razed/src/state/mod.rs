@@ -95,8 +95,6 @@ impl Default for State {
 }
 
 impl ethel::StateHandler<FrameDataBuffers> for State {
-    const COMMAND_QUEUE_LENGTH: usize = 512;
-
     fn upload_gpu(
         &mut self,
         frame_boundary: &ethel::state::cross::Cross<

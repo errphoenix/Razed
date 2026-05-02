@@ -13,6 +13,21 @@ mod lattice {
     pub const TYPE_CONSTRAINT: GlslStruct = ConstraintGlslStruct::as_definition();
 }
 
+macro_rules! ssbo_binding {
+    (POD_Constraints) => {
+        4
+    };
+    (IMap_Nodes) => {
+        5
+    };
+    (POD_Nodes) => {
+        6
+    };
+    (I_Selected) => {
+        7
+    };
+}
+
 ethel::shader_glsl! {
     struct DebugLattice > [460] {
         common {};
@@ -38,22 +53,22 @@ ethel::shader_glsl! {
 
             ssbo {
                 ethel::shader_glsl_ssbo! {
-                    buf POD_Constraints on 4 => {
+                    buf POD_Constraints => {
                         [dyn_array Constraint: constraints]
                     }
                 }
                 ethel::shader_glsl_ssbo! {
-                    buf IMap_Nodes on 5 => {
+                    buf IMap_Nodes => {
                         [dyn_array IndirectIndex: imap_nodes]
                     }
                 }
                 ethel::shader_glsl_ssbo! {
-                    buf POD_Nodes on 6 => {
+                    buf POD_Nodes => {
                         [dyn_array vec4: pod_nodes]
                     }
                 }
                 ethel::shader_glsl_ssbo! {
-                    buf I_Selected on 7 => {
+                    buf I_Selected => {
                         DirectIndex: i_selected;
                     }
                 }

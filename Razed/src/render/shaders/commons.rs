@@ -1,4 +1,13 @@
-use ethel::shader::{GlslLib, GlslStruct};
+use ethel::shader::{Constant, GlslAttribute, GlslLib, GlslStruct};
+
+pub const ATTRIBS_PIXEL_MINIMAL: GlslAttribute = ethel::shader_glsl_attribs! {
+    input fs_world: vec3;
+    input fs_normal: vec3;
+    input fs_color: vec4;
+    output outColor: vec4;
+};
+
+pub const CONST_AMBIENT_LIGHT: Constant<f32> = Constant::new("LIGHT_AMBIENT", 0.25);
 
 ethel::shader_glsl_struct! {
     struct IndirectIndex {

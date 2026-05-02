@@ -1,3 +1,7 @@
+#[allow(unused_imports)]
 use super::commons;
 
-pub(super) mod process_command;
+pub mod process_command;
+
+#[allow(unused_imports)]
+pub use process_command::ComputeShaderProcessCommand;
