@@ -1,8 +1,13 @@
 mod shaders;
 
+use std::sync::atomic::Ordering;
+
 use ethel::{DrawCommand, render::command::GpuCommandDispatch};
 
-use crate::{data::FrameDataBuffers, render::shaders::compute::ComputeShaderProcessCommand};
+use crate::{
+    data::{FrameDataBuffers, LayoutFragmentData},
+    render::shaders::compute::ComputeShaderProcessCommand,
+};
 
 #[derive(Debug, Default)]
 pub struct Renderer {
@@ -86,17 +91,46 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         let frags = &frame_data.fragments;
         frags.bind_shader_storage(buf_idx);
-        let cmds = &frame_data.command;
-        GpuCommandDispatch::from_view(cmds.view_section(buf_idx)).dispatch();
+
+        let cmd_buf = &frame_data.command;
+        let cmd_view = cmd_buf.view_section(buf_idx);
+
+        {
+            const COMPUTE_WG_SIZE_XY: u32 = shaders::compute::process_command::WORKGROUP_SIZE_XY;
+
+            let cmd_len = cmd_view.length() / size_of::<DrawCommand>() as u32;
+            let wg_d_count = (cmd_len as f32 / COMPUTE_WG_SIZE_XY as f32).round() as u32;
+
+            self.command_process_compute
+                .set_workgroups_size(wg_d_count, 0, 0);
+
+            {
+                let i_mesh_id = shaders::compute::process_command::SSBO_INDEX_FRAGMENTS_MESH_IDS;
+                frame_data.fragments.bind_shader_storage_single(
+                    buf_idx,
+                    LayoutFragmentData::PodMeshId as usize,
+                    Some(i_mesh_id),
+                );
+
+                let i_cmd_buf = shaders::compute::process_command::SSBO_INDEX_COMMAND_BUFFER;
+                frame_data
+                    .command
+                    .bind_shader_storage(buf_idx, i_cmd_buf as usize, 0);
+            }
+
+            self.command_process_compute.dispatch();
+
+            janus::gl::barrier_shader_storage();
+        }
+
+        GpuCommandDispatch::from_view(cmd_view).dispatch();
 
         {
             self.debris_shader.bind();
             let debris = &frame_data.debris;
             debris.bind_shader_storage(buf_idx);
 
-            let debris_count = frame_data
-                .debris_count
-                .load(std::sync::atomic::Ordering::Acquire) as i32;
+            let debris_count = frame_data.debris_count.load(Ordering::Acquire) as i32;
 
             unsafe {
                 janus::gl::DrawArraysInstanced(janus::gl::TRIANGLES, 0, 36, debris_count);
@@ -107,9 +141,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             let xpbd_dbg = &frame_data.xpbd_debug;
             xpbd_dbg.bind_shader_storage(buf_idx);
 
-            let xpbd_count = frame_data
-                .xpbd_debug_link_count
-                .load(std::sync::atomic::Ordering::Acquire) as i32;
+            let xpbd_count = frame_data.xpbd_debug_link_count.load(Ordering::Acquire) as i32;
 
             unsafe {
                 janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 2, xpbd_count);
@@ -142,6 +174,9 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         self.lattice_shader = shaders::debug::ShaderDebugLattice::new_compiled();
         self.frags_shader = shaders::ShaderFragment::new_compiled();
         self.debris_shader = shaders::ShaderDebris::new_compiled();
+
+        self.command_process_compute =
+            shaders::compute::ComputeShaderProcessCommand::new_compiled();
 
         // const VSH_BASE_SOURCE: &[u8] = include_bytes!("../shaders/base.vsh");
         // const FSH_BASE_SOURCE: &[u8] = include_bytes!("../shaders/base.fsh");

@@ -10,7 +10,7 @@ use crate::structure::fragment::ANCHORS_COUNT as FRAGMENT_ANCHORS_COUNT;
 
 pub const RENDER_STORAGE_PARTS: usize = 8;
 pub const ENTITY_ALLOCATION: usize = 8192;
-pub const COMMAND_QUEUE_ALLOC: usize = 24000;
+pub const COMMAND_QUEUE_ALLOC: usize = 32_000;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[repr(C)]
@@ -162,6 +162,7 @@ pub const DEFORM_POINTS_ALLOC: usize = 32000;
 #[derive(Debug, Default)]
 pub struct FrameDataBuffers {
     pub command: TriBuffer<DrawCommand>,
+
     pub scene: PartitionedTriBuffer<RENDER_STORAGE_PARTS>,
     pub fragments: PartitionedTriBuffer<FRAGMENTS_DATA_PARTS>,
     pub debris: PartitionedTriBuffer<DEBRIS_DATA_PARTS>,

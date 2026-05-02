@@ -105,13 +105,19 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
     ) {
         self.profiler.capture_duration("upload_gpu", || {
             let fragment_count = self.fragments.data().len() as u32;
-            command_queue.push(DrawArraysIndirectCommand {
-                count: 36,
-                // degenerate 0 offset handled in shader
-                instance_count: fragment_count - 1,
-                first_vertex: 0,
-                base_instance: 0,
-            });
+            for _ in 1..fragment_count {
+                command_queue.push(DrawArraysIndirectCommand::default());
+            }
+
+            let cmd_size = command_queue.len();
+
+            // command_queue.push(DrawArraysIndirectCommand {
+            //     count: 105,
+            //     // degenerate 0 offset handled in shader
+            //     instance_count: fragment_count - 1,
+            //     first_vertex: 0,
+            //     base_instance: 0,
+            // });
 
             frame_boundary.cross(|section, storage| {
                 let buf_idx = section.as_index();
@@ -255,6 +261,9 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
 
                 {
                     let commands = &storage.command;
+
+                    commands.set_section_length(buf_idx, cmd_size as u32);
+
                     let mut data = commands.view_section_mut(buf_idx);
                     if let Err(overflow) = command_queue.upload(&mut data) {
                         event!(
