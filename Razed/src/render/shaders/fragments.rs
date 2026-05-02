@@ -140,7 +140,7 @@ ethel::shader_glsl! {
 
             src() "
             // account for degenerate 0
-            uint fragment_id = gl_InstanceID + 1;
+            uint fragment_id = gl_DrawID + 1;
 
             uint mesh_id = pod_mesh_id[fragment_id];
             //uint mesh_id = 5;

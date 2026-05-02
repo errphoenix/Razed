@@ -2,12 +2,9 @@ mod shaders;
 
 use std::sync::atomic::Ordering;
 
-use ethel::{DrawCommand, render::command::GpuCommandDispatch};
+use ethel::render::command::GpuCommandDispatch;
 
-use crate::{
-    data::{FrameDataBuffers, LayoutFragmentData},
-    render::shaders::compute::ComputeShaderProcessCommand,
-};
+use crate::data::{FrameDataBuffers, LayoutFragmentData};
 
 #[derive(Debug, Default)]
 pub struct Renderer {
@@ -44,39 +41,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         self.frags_shader.uniform_camera_forward_vec3(cam_forward);
         self.frags_shader.uniform_projection_mat4(*proj);
         self.frags_shader.uniform_view_mat4(view_mat);
-
-        // self.xpbd_dbg_shader.bind();
-        // self.xpbd_dbg_shader.uniform_mat4_glam("u_view", view_mat);
-        // self.xpbd_dbg_shader
-        //     .uniform_mat4_glam("u_projection", *proj);
-
-        // self.line_dbg_shader.bind();
-        // self.line_dbg_shader.uniform_mat4_glam("u_view", view_mat);
-        // self.line_dbg_shader
-        //     .uniform_mat4_glam("u_projection", *proj);
-
-        // self.base_shader.bind();
-        // self.base_shader
-        //     .uniform_vec3_glam("u_camera_forward", cam_forward);
-        // self.base_shader.uniform_mat4_glam("u_view", view_mat);
-        // self.base_shader.uniform_mat4_glam("u_projection", *proj);
-
-        // self.deform_dbg_shader.bind();
-        // self.deform_dbg_shader.uniform_mat4_glam("u_view", view_mat);
-        // self.deform_dbg_shader
-        //     .uniform_mat4_glam("u_projection", *proj);
-
-        // self.debris_shader.bind();
-        // self.debris_shader
-        //     .uniform_vec3_glam("u_camera_forward", cam_forward);
-        // self.debris_shader.uniform_mat4_glam("u_view", view_mat);
-        // self.debris_shader.uniform_mat4_glam("u_projection", *proj);
-
-        // self.frags_shader.bind();
-        // self.frags_shader
-        //     .uniform_vec3_glam("u_camera_forward", cam_forward);
-        // self.frags_shader.uniform_mat4_glam("u_view", view_mat);
-        // self.frags_shader.uniform_mat4_glam("u_projection", *proj);
     }
 
     fn render_frame(
@@ -96,13 +60,14 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         let cmd_view = cmd_buf.view_section(buf_idx);
 
         {
-            const COMPUTE_WG_SIZE_XY: u32 = shaders::compute::process_command::WORKGROUP_SIZE_XY;
+            const COMPUTE_WG_INVOCATIONS: u32 =
+                shaders::compute::process_command::WORKGROUP_INVOCATIONS;
 
-            let cmd_len = cmd_view.length() / size_of::<DrawCommand>() as u32;
-            let wg_d_count = (cmd_len as f32 / COMPUTE_WG_SIZE_XY as f32).round() as u32;
+            let cmd_len = cmd_view.length();
+            let wg_d_count = cmd_len.div_ceil(COMPUTE_WG_INVOCATIONS);
 
             self.command_process_compute
-                .set_workgroups_size(wg_d_count, 0, 0);
+                .set_workgroups_size(wg_d_count, 1, 1);
 
             {
                 let i_mesh_id = shaders::compute::process_command::SSBO_INDEX_FRAGMENTS_MESH_IDS;
@@ -118,11 +83,14 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     .bind_shader_storage(buf_idx, i_cmd_buf as usize, 0);
             }
 
+            self.command_process_compute.bind();
             self.command_process_compute.dispatch();
 
             janus::gl::barrier_shader_storage();
+            janus::gl::barrier_commands();
         }
 
+        self.frags_shader.bind();
         GpuCommandDispatch::from_view(cmd_view).dispatch();
 
         {

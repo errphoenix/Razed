@@ -42,7 +42,8 @@ pub const TYPE_COMMAND_ARRAYS: GlslStruct = DrawArraysIndirectCommandGlslStruct:
 pub const TYPE_COMMAND_ELEMENTS: GlslStruct =
     DrawElementsIndirectCommandGlslStruct::as_definition();
 
-pub const WORKGROUP_SIZE_XY: u32 = 32;
+pub const WORKGROUP_SIZE_XY: u32 = 16;
+pub const WORKGROUP_INVOCATIONS: u32 = WORKGROUP_SIZE_XY * WORKGROUP_SIZE_XY;
 
 macro_rules! ssbo_binding {
     (Command_Buffer) => {
@@ -58,7 +59,7 @@ pub const SSBO_INDEX_FRAGMENTS_MESH_IDS: u32 = ssbo_binding!(POD_MeshID);
 
 ethel::shader_glsl_compute! {
     struct ProcessCommand > [460] {
-        workgroup [32, 32, 1];
+        workgroup [16, 16, 1];
 
         type {
             TYPE_COMMAND_ARRAYS
@@ -97,7 +98,6 @@ ethel::shader_glsl_compute! {
             uint vertex_len = metadata[mesh_id].length;
 
             command_buffer[g_wg].count = vertex_len;
-            command_buffer[g_wg].instance_count = 1;
 
             //atomicAdd(command_buffer[mesh_id].instance_count, 1);
         "
