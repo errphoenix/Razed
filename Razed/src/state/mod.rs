@@ -15,6 +15,7 @@ use crate::{
 };
 use ::physics::xpbd::{RawXpbdLattice, XpbdOptions, XpbdSolver};
 use ethel::{
+    mesh::Metadata,
     render::{ScreenSpace, command::DrawArraysIndirectCommand},
     state::{
         camera::{self, ViewPoint},
@@ -61,6 +62,8 @@ pub struct State {
     selection: Option<IndirectIndex>,
     dead_fragments: Vec<IndirectIndex>,
 
+    pub fragment_mesh_mapping: FxSpatialHash<ethel::mesh::Id>,
+
     camera: camera::Orbital,
 }
 
@@ -85,6 +88,7 @@ impl Default for State {
             frag_map: Default::default(),
             selection: Default::default(),
             dead_fragments: Default::default(),
+            fragment_mesh_mapping: Default::default(),
             camera: camera::Orbital::new(
                 Default::default(),
                 Default::default(),
@@ -729,7 +733,8 @@ impl State {
         self.lattice_bind_pose.extend(new_positions);
 
         let l0 = self.fragments.data().handles().len();
-        self.fragments.generate_fragments(origin, voxel_grid);
+        self.fragments
+            .generate_fragments(origin, voxel_grid, &self.fragment_mesh_mapping);
         self.fragments.bind_lattice(&lattice_hash, &lattice);
         self.fragments.bind_deforms(&deforms_hash, &deforms);
         let l1 = self.fragments.data().handles().len();

@@ -1,7 +1,7 @@
 use ethel::{
     StartupHandler,
     mesh::{MeshStaging, Metadata, Vertex},
-    state::data::hash::Cell,
+    state::data::hash::{FxSpatialHash, SpatialResolution},
 };
 use janus::{context::Setup, window::DisplayParameters};
 
@@ -27,13 +27,20 @@ fn main() {
     let (input_system, input_dispatch) = janus::input::stream();
     let mut start_handler = StartupHandler::new(input_system, || FrameDataBuffers::new());
 
-    {
+    let fragment_mesh_mapping = {
         let mut mesh_stage = ethel::mesh::MeshStaging::new();
         let _debug_cube = mesh_stage.stage(&MESH_UNIT_CUBE);
 
+        let group = generate_fragment_meshes(glam::Vec3::splat(3.0), mesh_stage);
+        let mesh_stage = group.voronoi.stager;
+
+        println!("{:?}", mesh_stage.metadata());
+
         start_handler.with_mesh_data(mesh_stage);
         start_handler.with_mesh_layout(data::LayoutMeshStorage::create());
-    }
+
+        group.mapping
+    };
 
     start_handler.with_gl_state(|| unsafe {
         janus::gl::ClipControl(janus::gl::LOWER_LEFT, janus::gl::ZERO_TO_ONE);
@@ -43,7 +50,12 @@ fn main() {
     });
 
     let ctx = janus::context::Context::new(
-        |state: &mut State, renderer: &mut Renderer| start_handler.init(state, renderer),
+        |state: &mut State, renderer: &mut Renderer| {
+            state.handler_init_callback(|handle| {
+                handle.fragment_mesh_mapping = fragment_mesh_mapping;
+            });
+            start_handler.init(state, renderer)
+        },
         input_dispatch,
         DISPLAY_PARAMS,
     );
@@ -55,7 +67,7 @@ fn main() {
 struct FragmentGroup {
     pub cubic_area: glam::Vec3,
     pub voronoi: CubeVoronoi,
-    pub mapping: Vec<(Cell, Metadata)>,
+    pub mapping: FxSpatialHash<ethel::mesh::Id>,
 }
 
 fn generate_fragment_meshes(cubic_area: glam::Vec3, mesh_stage: MeshStaging) -> FragmentGroup {
@@ -79,19 +91,15 @@ fn generate_fragment_meshes(cubic_area: glam::Vec3, mesh_stage: MeshStaging) -> 
         cells.push(grid.cell_from_id(voxel));
     }
 
-    let prev_head = mesh_stage.metadata().head() as usize;
+    let prev_head = mesh_stage.metadata().len();
     let voronoi = procedural::cubic_voronoi(&seeds, cubic_area, MAX_SHIFT, SEEK_RANGE, mesh_stage);
-    let metadata = voronoi.stager.metadata();
 
-    let mapping = cells
-        .drain(..)
-        .enumerate()
-        .map(|(i, cell)| {
-            let j = i + prev_head;
-            let meta = metadata[j];
-            (cell, meta)
-        })
-        .collect::<Vec<_>>();
+    let mut mapping = FxSpatialHash::with_capacity(SpatialResolution::new(FRAG_UNIT), cells.len());
+    cells.drain(..).enumerate().for_each(|(i, cell)| {
+        let mesh_id = unsafe { ethel::mesh::Id::from_value((i + prev_head) as u32) };
+        println!("{cell:?}");
+        mapping.put(cell, mesh_id);
+    });
 
     FragmentGroup {
         cubic_area,

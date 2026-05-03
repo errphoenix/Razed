@@ -1,5 +1,10 @@
-use ethel::state::data::{
-    Column, DirectIndex, IndirectIndex, hash::FxSpatialHash, table::TableView,
+use ethel::{
+    mesh::Metadata,
+    state::data::{
+        Column, DirectIndex, IndirectIndex,
+        hash::{Cell, FxSpatialHash},
+        table::TableView,
+    },
 };
 use glam::Vec4Swizzles;
 
@@ -51,13 +56,15 @@ pub enum UninitFragmentStage {
 pub struct UninitFragment {
     pub stage: UninitFragmentStage,
     pub position: glam::Vec3,
-    //todo: mesh id, structure id?
+    pub mesh_id: ethel::mesh::Id,
+    //todo:  structure id?
 }
 
 impl UninitFragment {
-    fn new(position: glam::Vec3) -> Self {
+    fn new(position: glam::Vec3, mesh_id: ethel::mesh::Id) -> Self {
         Self {
             position,
+            mesh_id,
             ..Default::default()
         }
     }
@@ -394,6 +401,7 @@ impl FragmentSystem {
 
         self.uninitialised.iter_mut().for_each(|frag| {
             let fragment_world = frag.position;
+            let fragment_mesh = frag.mesh_id;
             let fragment_cell = lattice_hash.cell_at(fragment_world);
 
             if let Err(rem) = lattice_hash.nearest_cells(
@@ -455,7 +463,7 @@ impl FragmentSystem {
                 1.0,  // todo: debris rigid body
                 1.0,  // todo: damage and integrity
                 fragment_world,
-                ethel::mesh::Id::default(),
+                fragment_mesh,
             ));
             frag.stage = UninitFragmentStage::Unfinished { indirect: handle };
 
@@ -470,12 +478,22 @@ impl FragmentSystem {
     ///
     /// The `voxels` [`VoxelGrid`] is expected to have been built previously
     /// with [`VoxelGrid::build`].
-    pub fn generate_fragments(&mut self, origin: glam::Vec3, grid: &VoxelGrid) {
-        let mut world_points = vec![glam::Vec3::ZERO; grid.count()];
+    pub fn generate_fragments(
+        &mut self,
+        origin: glam::Vec3,
+        grid: &VoxelGrid,
+        mesh_mapping: &FxSpatialHash<ethel::mesh::Id>,
+    ) {
+        for &cell in grid.voxels().cells() {
+            let id = grid.voxel_index(cell);
+            let point = grid.point_from_id(id) + origin;
 
-        grid.to_world(origin, &mut world_points);
-        for voxel in world_points {
-            self.uninitialised.push(UninitFragment::new(voxel));
+            const D: i32 = 2;
+            let c_m = Cell::new(cell.x % D, cell.y % D, cell.z % D);
+
+            if let Some(&mesh_id) = mesh_mapping.get(c_m) {
+                self.uninitialised.push(UninitFragment::new(point, mesh_id));
+            }
         }
     }
 }
