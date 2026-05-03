@@ -567,7 +567,7 @@ impl State {
                 .with_height(TOTAL_HEIGHT)
                 .with_depth(DEPTH),
         );
-        voxel_grid.repopulate();
+        voxel_grid.repopulate_defaults();
 
         let center = center + glam::vec3(0.0, TOTAL_HEIGHT * 0.5, 0.0);
         self.register_structure(center, &voxel_grid, lattice);
@@ -704,7 +704,7 @@ impl State {
             voxel_grid.generator,
             *&voxel_grid.options().with_cell_size(1.0),
         );
-        deforms_vox.repopulate();
+        deforms_vox.repopulate_defaults();
         let generated_len =
             self.deforms
                 .generate_points(origin, &deforms_vox, &lattice_hash, &lattice);

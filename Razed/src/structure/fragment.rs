@@ -485,8 +485,7 @@ impl FragmentSystem {
         mesh_mapping: &FxSpatialHash<ethel::mesh::Id>,
     ) {
         for &cell in grid.voxels().cells() {
-            let id = grid.voxel_index(cell);
-            let point = grid.point_from_id(id) + origin;
+            let point = grid.point_at_or_approx(cell) + origin;
 
             const D: i32 = 2;
             let c_m = Cell::new(cell.x % D, cell.y % D, cell.z % D);

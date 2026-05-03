@@ -72,13 +72,14 @@ struct FragmentGroup {
 
 fn generate_fragment_meshes(cubic_area: glam::Vec3, mesh_stage: MeshStaging) -> FragmentGroup {
     const FRAG_UNIT: f32 = 1.0;
-    const MAX_SHIFT: f32 = 0.325;
-    const SEEK_RANGE: f32 = 1.25;
+    const MAX_SHIFT: f32 = 0.5;
+    const SEEK_RANGE: f32 = 3.0;
 
     let mut grid = voxel_grid(cubic_area.x, cubic_area.y, cubic_area.z, FRAG_UNIT);
 
-    grid.repopulate();
+    grid.repopulate_defaults();
     let count = grid.count();
+    println!("seeds: {count}");
 
     // CubicVoronoiGenerator is guaranteed to process the seeds and meshes by
     // the same order they are in the given seeds collection.
@@ -87,8 +88,8 @@ fn generate_fragment_meshes(cubic_area: glam::Vec3, mesh_stage: MeshStaging) -> 
     let mut seeds = Vec::with_capacity(count);
     let mut cells = Vec::with_capacity(count);
     for &voxel in grid.voxels().elements() {
-        seeds.push(grid.point_from_id(voxel));
-        cells.push(grid.cell_from_id(voxel));
+        seeds.push(voxel);
+        cells.push(grid.quantize_point(voxel));
     }
 
     let prev_head = mesh_stage.metadata().len();

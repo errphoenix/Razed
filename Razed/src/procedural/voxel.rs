@@ -63,27 +63,12 @@ impl VoxelGridOptions {
 
 pub type VoxelGridFn = fn(Cell) -> bool;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct VoxelIndex(pub(crate) i32);
-
-impl VoxelIndex {
-    pub fn as_i32(&self) -> i32 {
-        self.0
-    }
-}
-
-impl From<VoxelIndex> for i32 {
-    fn from(value: VoxelIndex) -> Self {
-        value.0
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct VoxelGrid {
     pub generator: VoxelGridFn,
     options: VoxelGridOptions,
 
-    voxels: FxSpatialHash<VoxelIndex>,
+    voxels: FxSpatialHash<glam::Vec3>,
 }
 
 impl Default for VoxelGrid {
@@ -108,130 +93,53 @@ impl VoxelGrid {
         }
     }
 
-    pub fn voxel_index(&self, cell: Cell) -> VoxelIndex {
-        let (dim_x, dim_y, dim_z) = self.dimensions();
-
-        #[cfg(debug_assertions)]
-        {
-            let x_bounds = dim_x / 2;
-            let y_bounds = dim_y / 2;
-            let z_bounds = dim_z / 2;
-
-            debug_assert!(
-                cell.x >= -x_bounds && cell.x <= x_bounds,
-                "Cell is out of bounds on X axis for bounds [{}; {}]: got {}",
-                -x_bounds,
-                x_bounds,
-                cell.x
-            );
-            debug_assert!(
-                cell.y >= -y_bounds && cell.y <= y_bounds,
-                "Cell is out of bounds on Y axis for bounds [{}; {}]: got {}",
-                -y_bounds,
-                y_bounds,
-                cell.y
-            );
-            debug_assert!(
-                cell.z >= -z_bounds && cell.z <= z_bounds,
-                "Cell is out of bounds on Z axis for bounds [{}; {}]: got {}",
-                -z_bounds,
-                z_bounds,
-                cell.z
-            );
-        }
-
-        let cell = Cell {
-            x: cell.x + dim_x / 2,
-            y: cell.y + dim_y / 2,
-            z: cell.z + dim_z / 2,
-        };
-
-        VoxelIndex(cell.x * dim_y * dim_z + cell.y * dim_z + cell.z)
+    pub fn quantize_point(&self, point: glam::Vec3) -> Cell {
+        self.voxels.cell_at(point)
     }
 
-    /// Transform an [`index`] to a point in space.
-    ///
-    /// The returned point corresponds to the center of the
-    /// [`Voxel/Cell`](Cell) represented by `index`.
-    ///
-    /// The returned point is in the [`VoxelGrid's](VoxelGrid) local space,
-    /// with Vec3(0,0,0) located at its centre.
-    pub fn point_from_id(&self, index: VoxelIndex) -> glam::Vec3 {
-        let cell = self.cell_from_id(index);
-        glam::vec3(
-            cell.x as f32 / self.options.cell_size + 0.5,
-            cell.y as f32 / self.options.cell_size + 0.5,
-            cell.z as f32 / self.options.cell_size + 0.5,
-        )
+    /// Get the point mapped to `cell`, if present.
+    pub fn point_at(&self, cell: Cell) -> Option<glam::Vec3> {
+        self.voxels.get(cell).copied()
     }
 
-    /// Decode a [`Cell`] within an [`index`].
-    ///
-    /// This is in the [`VoxelGrid's`](VoxelGrid) local space and units, with
-    /// Cell(0,0,0) located at its centre.
-    ///
-    /// This is not to be used in combination with other [`VoxelGrid`]s or
-    /// world-space operations, unless you can guarantee:
-    /// * They are in the same space with the same origin
-    /// * If it is another [`VoxelGrid`], they must use the same spatial
-    ///   resolution.
-    ///
-    /// Also see [`VoxelGrid::point_from_id`].
-    pub fn cell_from_id(&self, index: VoxelIndex) -> Cell {
-        let index = index.as_i32();
-        let (dim_x, dim_y, dim_z) = self.dimensions();
-
-        let yz = dim_y * dim_z;
-
-        let cx = index / yz;
-        let rem = index % yz;
-        let cy = rem / dim_z;
-        let cz = rem % dim_z;
-
-        Cell {
-            x: cx - dim_x / 2,
-            y: cy - dim_y / 2,
-            z: cz - dim_z / 2,
-        }
+    /// Get the point mapped to `cell` or an approximation if not present.
+    pub fn point_at_or_approx(&self, cell: Cell) -> glam::Vec3 {
+        self.point_at(cell)
+            .unwrap_or_else(|| self.voxels.approx_point_at(cell))
     }
 
-    pub fn repopulate(&mut self) {
+    pub fn repopulate_defaults(&mut self) {
+        let resolution = self.voxels.resolution;
+        self.repopulate_with(|cell| resolution.approx_point(cell));
+    }
+
+    pub fn repopulate_with<F: Fn(Cell) -> glam::Vec3>(&mut self, point_from_cell: F) {
         self.voxels.clear();
 
         let (vw, vh, vd) = self.dimensions();
 
-        let hvw = vw / 2;
-        let hvh = vh / 2;
-        let hvd = vd / 2;
+        let hvw = (vw - (vw % 2)) / 2;
+        let hvh = (vh - (vh % 2)) / 2;
+        let hvd = (vd - (vd % 2)) / 2;
 
-        for x in -hvw..hvw {
-            for y in -hvh..hvh {
-                for z in -hvd..hvd {
+        for x in -hvw..=hvw {
+            for y in -hvh..=hvh {
+                for z in -hvd..=hvd {
                     let cell = Cell { x, y, z };
                     if (self.generator)(cell) {
-                        self.voxels.put(cell, self.voxel_index(cell));
+                        let point = point_from_cell(cell);
+                        self.voxels.put(cell, point);
                     }
                 }
             }
         }
     }
 
-    pub fn to_world(&self, origin: glam::Vec3, world: &mut [glam::Vec3]) {
-        self.voxels
-            .elements()
-            .zip(world)
-            .for_each(|(&id, world)| *world = self.point_from_id(id) + origin);
-    }
-
-    pub fn get(&self, cell: Cell) -> Option<VoxelIndex> {
-        self.voxels.get(cell).copied()
-    }
-
     pub fn options(&self) -> &VoxelGridOptions {
         &self.options
     }
 
-    pub fn voxels(&self) -> &FxSpatialHash<VoxelIndex> {
+    pub fn voxels(&self) -> &FxSpatialHash<glam::Vec3> {
         &self.voxels
     }
 
@@ -253,55 +161,5 @@ impl VoxelGrid {
             (h / i as f32).round() as i32,
             (d / i as f32).round() as i32,
         )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn voxel_index_encoding() {
-        const SIZE: f32 = 10.0;
-        const CELL: f32 = 1.0;
-
-        let grid = VoxelGrid::new(
-            |_| true,
-            VoxelGridOptions::default()
-                .with_width(SIZE)
-                .with_height(SIZE)
-                .with_depth(SIZE)
-                .with_cell_size(CELL),
-        );
-
-        const VOLUME: f32 = SIZE * SIZE * SIZE;
-        const BOUNDS: usize = (VOLUME / CELL) as usize;
-
-        let mut v = Vec::with_capacity(VOLUME.round() as usize);
-        for i in 0..BOUNDS {
-            let index = VoxelIndex(i as i32);
-            let cell = grid.cell_from_id(index);
-            let point = grid.point_from_id(index);
-            v.push(((cell, index), point));
-        }
-
-        const SIDE_BOUNDS: i32 = (SIZE / CELL) as i32 / 2;
-        let mut i = 0;
-        for x in -SIDE_BOUNDS..SIDE_BOUNDS {
-            for y in -SIDE_BOUNDS..SIDE_BOUNDS {
-                for z in -SIDE_BOUNDS..SIDE_BOUNDS {
-                    let cell = Cell::new(x, y, z);
-                    let index = grid.voxel_index(cell);
-
-                    let (cmp, cmp_point) = v[i];
-                    assert_eq!(cmp, (cell, index));
-
-                    let point = glam::vec3(x as f32 * CELL, y as f32 * CELL, z as f32 * CELL) + 0.5;
-                    assert_eq!(cmp_point, point);
-
-                    i += 1;
-                }
-            }
-        }
     }
 }
