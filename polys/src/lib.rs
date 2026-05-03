@@ -80,13 +80,19 @@ impl std::ops::Index<usize> for QuadFace {
     }
 }
 
-pub trait Face: std::ops::Index<usize, Output = u32> {
+pub trait Face: std::ops::Index<usize, Output = u32> + Clone {
     fn len(&self) -> usize;
+
+    fn into_alloc(self) -> Vec<u32>;
 }
 
 impl Face for TriFace {
     fn len(&self) -> usize {
-        2
+        3
+    }
+
+    fn into_alloc(self) -> Vec<u32> {
+        vec![self.a, self.b, self.c]
     }
 }
 
@@ -94,17 +100,33 @@ impl Face for QuadFace {
     fn len(&self) -> usize {
         4
     }
+
+    fn into_alloc(self) -> Vec<u32> {
+        vec![self.a, self.b, self.c, self.d]
+    }
 }
 
 impl<const N: usize> Face for [u32; N] {
     fn len(&self) -> usize {
         N
     }
+
+    fn into_alloc(self) -> Vec<u32> {
+        let mut vec = Vec::with_capacity(N);
+        for e in self {
+            vec.push(e);
+        }
+        vec
+    }
 }
 
 impl Face for Vec<u32> {
     fn len(&self) -> usize {
         self.len()
+    }
+
+    fn into_alloc(self) -> Vec<u32> {
+        self
     }
 }
 
@@ -128,6 +150,10 @@ impl<F: Face> Face for Facen<F> {
     fn len(&self) -> usize {
         self.indexed.len()
     }
+
+    fn into_alloc(self) -> Vec<u32> {
+        self.indexed.into_alloc()
+    }
 }
 
 impl<F: Face> Facen<F> {
@@ -135,6 +161,13 @@ impl<F: Face> Facen<F> {
         Self {
             indexed: face.into(),
             normal,
+        }
+    }
+
+    pub fn into_alloc_n(self) -> Facen<Vec<u32>> {
+        Facen {
+            indexed: self.indexed.into_alloc(),
+            normal: self.normal,
         }
     }
 }

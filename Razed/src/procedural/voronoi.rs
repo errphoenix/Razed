@@ -36,7 +36,7 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
         });
 
         for i in 0..self.seeds.len() {
-            let mut mesh = Convex::<Vec<u32>>::parallelepiped(area);
+            let mut mesh = Convex::<Vec<u32>>::parallelepiped(glam::Vec3::splat(1.0));
             let seed = self.seeds[i];
 
             for j in 0..self.seeds.len() {
@@ -46,14 +46,18 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
 
                 let other = self.seeds[j];
 
-                if (other - seed).length() > seek_range {
+                if (other - seed).length().abs() > seek_range {
                     continue;
                 }
 
                 let m = seed.midpoint(other);
-                let normal = (other - seed).normalize();
+                let normal = (seed - other).normalize();
                 let d = normal.dot(m);
-                mesh = mesh.clip_plane(Plane::new(normal, d));
+
+                let plane = Plane::new(normal, d);
+                if let Some(clipped) = mesh.clip_plane(plane) {
+                    mesh = clipped;
+                }
 
                 if mesh.vertices().is_empty() {
                     break;
