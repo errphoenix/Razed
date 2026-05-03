@@ -251,4 +251,14 @@ impl<F: Face> Convex<F> {
             })
         }
     }
+
+    pub fn centroid(&self) -> glam::Vec3 {
+        let v_tot = self.vertices.iter().fold(glam::Vec3::ZERO, |t, v| t + *v);
+        v_tot / self.vertices.len() as f32
+    }
+
+    pub fn make_local(&mut self) {
+        let centroid = self.centroid();
+        self.vertices.iter_mut().for_each(|v| *v -= centroid);
+    }
 }

@@ -64,6 +64,7 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
                 }
             }
 
+            mesh.make_local();
             self.meshes.push(mesh.triangulate());
         }
     }
