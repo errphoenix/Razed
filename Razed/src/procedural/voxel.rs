@@ -122,9 +122,9 @@ impl VoxelGrid {
         let hvh = (vh - (vh % 2)) / 2;
         let hvd = (vd - (vd % 2)) / 2;
 
-        for x in -hvw..=hvw {
-            for y in -hvh..=hvh {
-                for z in -hvd..=hvd {
+        for x in -hvw..hvw {
+            for y in -hvh..hvh {
+                for z in -hvd..hvd {
                     let cell = Cell { x, y, z };
                     if (self.generator)(cell) {
                         let point = point_from_cell(cell);
