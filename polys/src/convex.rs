@@ -1,4 +1,4 @@
-use crate::{Face, Facen, Plane, QuadFace, TriFace};
+use crate::{Face, Facen, QuadFace, TriFace};
 
 #[derive(Clone, Debug, Default)]
 pub struct Convex<F: Face> {
@@ -157,101 +157,6 @@ impl<F: Face> Convex<F> {
         (&mut self.vertices, &mut self.faces)
     }
 
-    pub fn clip_plane(&self, plane: Plane) -> Option<Convex<Vec<u32>>> {
-        let mut new_vertices = Vec::new();
-        let mut new_faces = Vec::new();
-        let mut cap_indices = Vec::new();
-
-        let signs: Vec<f32> = self
-            .vertices
-            .iter()
-            .map(|&v| plane.normal.dot(v) - plane.d)
-            .collect();
-
-        if signs.iter().all(|&s| s < -1e-6) {
-            return None;
-        }
-
-        let mut find_or_insert = |v: glam::Vec3| -> u32 {
-            for (i, &existing) in new_vertices.iter().enumerate() {
-                let dev: glam::Vec3 = existing - v;
-                if dev.length_squared() < 1e-8 {
-                    return i as u32;
-                }
-            }
-            new_vertices.push(v);
-            (new_vertices.len() - 1) as u32
-        };
-
-        for face in &self.faces {
-            let mut out_indices = Vec::new();
-            let n = face.indexed.len();
-
-            for i in 0..n {
-                let ia = face.indexed[i] as usize;
-                let ib = face.indexed[(i + 1) % n] as usize;
-
-                let va = self.vertices[ia];
-                let vb = self.vertices[ib];
-                let da = signs[ia];
-                let db = signs[ib];
-
-                if da >= -1e-6 {
-                    out_indices.push(find_or_insert(va));
-                }
-
-                if (da > 1e-6 && db < -1e-6) || (da < -1e-6 && db > 1e-6) {
-                    let t = da / (da - db);
-                    let p = va + t * (vb - va);
-                    let idx = find_or_insert(p);
-                    out_indices.push(idx);
-                    if !cap_indices.contains(&idx) {
-                        cap_indices.push(idx);
-                    }
-                }
-            }
-
-            if out_indices.len() >= 3 {
-                new_faces.push(Facen::new(out_indices, face.normal));
-            }
-        }
-
-        if cap_indices.len() >= 3 {
-            let centroid = cap_indices
-                .iter()
-                .map(|&i| new_vertices[i as usize])
-                .sum::<glam::Vec3>()
-                / cap_indices.len() as f32;
-
-            let up = if plane.normal.abs().dot(glam::Vec3::Y) < 0.9 {
-                glam::Vec3::Y
-            } else {
-                glam::Vec3::X
-            };
-            let tangent = plane.normal.cross(up).normalize();
-            let bitangent = plane.normal.cross(tangent).normalize();
-
-            cap_indices.sort_by(|&a, &b| {
-                let va = new_vertices[a as usize] - centroid;
-                let vb = new_vertices[b as usize] - centroid;
-                let ang_a = va.dot(tangent).atan2(va.dot(bitangent));
-                let ang_b = vb.dot(tangent).atan2(vb.dot(bitangent));
-                ang_a.partial_cmp(&ang_b).unwrap()
-            });
-
-            new_faces.push(Facen::new(cap_indices, -plane.normal));
-        }
-
-        if new_vertices.is_empty() {
-            None
-        } else {
-            Some(Convex {
-                vertices: new_vertices,
-                faces: new_faces,
-            })
-        }
-    }
-
     pub fn centroid(&self) -> glam::Vec3 {
         let v_tot = self.vertices.iter().fold(glam::Vec3::ZERO, |t, v| t + *v);
         v_tot / self.vertices.len() as f32
@@ -264,5 +169,9 @@ impl<F: Face> Convex<F> {
 
     pub fn translate(&mut self, translation: glam::Vec3) {
         self.vertices.iter_mut().for_each(|v| *v += translation);
+    }
+
+    pub fn scale(&mut self, scaling: glam::Vec3) {
+        self.vertices.iter_mut().for_each(|v| *v *= scaling);
     }
 }

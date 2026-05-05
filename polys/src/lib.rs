@@ -1,3 +1,4 @@
+pub mod clip;
 pub mod convex;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
