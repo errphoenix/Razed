@@ -53,7 +53,7 @@ impl MeshCellMap {
         }
     }
 
-    pub fn mesh_index(&self, cell: Cell) -> usize {
+    pub const fn mesh_index(&self, cell: Cell) -> usize {
         let cell = cell.abs();
         let x = cell.x as u32 % self.x;
         let y = cell.y as u32 % self.y;

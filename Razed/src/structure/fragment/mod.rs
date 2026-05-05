@@ -460,9 +460,9 @@ impl FragmentSystem {
                 [IndirectIndex::default(); ANCHORS_COUNT],
                 [0f32; ANCHORS_COUNT],
                 position,
-                1500.0, // todo: health contribution
-                1.0,    // todo: debris rigid body
-                1.0,    // todo: damage and integrity
+                50.0, // todo: health contribution
+                1.0,  // todo: debris rigid body
+                1.0,  // todo: damage and integrity
                 fragment_world,
                 fragment_mesh,
             ));
@@ -477,6 +477,9 @@ impl FragmentSystem {
     /// Create new uninitialised fragments from a `voxels` describing
     /// their positions in space.
     ///
+    /// The given voxel `grid` should be in
+    /// [`absolute-space`](VoxelGrid::to_abs_space).
+    ///
     /// The `voxels` [`VoxelGrid`] is expected to have been built previously
     /// with [`VoxelGrid::build`].
     pub fn generate_fragments(
@@ -487,12 +490,7 @@ impl FragmentSystem {
     ) {
         for &cell in grid.voxels().cells() {
             let point = grid.point_at_or_approx(cell) + origin;
-
-            const D: i32 = 2;
-            let cell = cell.abs();
-            let c_m = Cell::new(cell.x % D, cell.y % D, cell.z % D);
-
-            if let Some(&mesh_id) = mesh_mapping.get(c_m) {
+            if let Some(&mesh_id) = mesh_mapping.get(cell) {
                 self.uninitialised.push(UninitFragment::new(point, mesh_id));
             }
         }

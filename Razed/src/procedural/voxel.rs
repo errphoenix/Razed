@@ -93,6 +93,43 @@ impl VoxelGrid {
         }
     }
 
+    /// Creates an absolute-space copy of this [`VoxelGrid`].
+    ///
+    /// With "absolute-space" is intended that all [`Cell`]s part of the grid
+    /// have a positive coordinate. This is not a simple `.abs()` operation:
+    /// all cells are offset in a way that maintains their spatial relations
+    /// to each-other.
+    ///
+    /// Essentially, this operation moves the grid's "origin" (0,0,0) from the
+    /// center to the lowest left-most point of the grid.
+    ///
+    /// # Panics
+    /// If this [`VoxelGrid`] is empty, as the lowest left-most point cannot be
+    /// determined.
+    pub fn to_abs_space(&self) -> Self {
+        let lowest_cell = {
+            let mut min_cell = Cell::MAX;
+            for &cell in self.voxels.cells() {
+                min_cell = min_cell.min(cell);
+            }
+            min_cell
+        };
+        let lowest_cell_point = self.voxels.resolution.approx_point(lowest_cell);
+
+        let mut voxels = FxSpatialHash::with_capacity(self.voxels.resolution, self.voxels.len());
+        for (&cell, &point) in self.voxels.cells().zip(self.voxels.elements()) {
+            let a_cell = cell - lowest_cell;
+            let a_point = point - lowest_cell_point;
+            voxels.put(a_cell, a_point);
+        }
+
+        Self {
+            generator: self.generator,
+            options: self.options,
+            voxels,
+        }
+    }
+
     pub fn quantize_point(&self, point: glam::Vec3) -> Cell {
         self.voxels.cell_at(point)
     }
@@ -118,13 +155,13 @@ impl VoxelGrid {
 
         let (vw, vh, vd) = self.dimensions();
 
-        let hvw = (vw - (vw % 2)) / 2;
-        let hvh = (vh - (vh % 2)) / 2;
-        let hvd = (vd - (vd % 2)) / 2;
+        let hvw = vw / 2;
+        let hvh = vh / 2;
+        let hvd = vd / 2;
 
-        for x in -hvw..hvw {
-            for y in -hvh..hvh {
-                for z in -hvd..hvd {
+        for x in -hvw..(hvw + (vw % 2)) {
+            for y in -hvh..(hvh + (vh % 2)) {
+                for z in -hvd..(hvd + (vd % 2)) {
                     let cell = Cell { x, y, z };
                     if (self.generator)(cell) {
                         let point = point_from_cell(cell);

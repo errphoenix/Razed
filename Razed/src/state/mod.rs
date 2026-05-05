@@ -733,8 +733,11 @@ impl State {
         self.lattice_bind_pose.extend(new_positions);
 
         let l0 = self.fragments.data().handles().len();
-        self.fragments
-            .generate_fragments(origin, voxel_grid, &self.fragment_mesh_mapping);
+        {
+            let abs_voxel_grid = voxel_grid.to_abs_space();
+            self.fragments
+                .generate_fragments(origin, &abs_voxel_grid, &self.fragment_mesh_mapping);
+        }
         self.fragments.bind_lattice(&lattice_hash, &lattice);
         self.fragments.bind_deforms(&deforms_hash, &deforms);
         let l1 = self.fragments.data().handles().len();
