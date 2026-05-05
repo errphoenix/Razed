@@ -29,22 +29,28 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
     pub fn generate(&mut self, seed_input: &[glam::Vec3], area: glam::Vec3, seek_range: f32) {
         self.seeds.clear();
         self.seeds.extend_from_slice(seed_input);
-        self.seeds.iter_mut().for_each(|p| {
-            p.x += self.rng.random_range(-self.max_offset..self.max_offset);
-            p.y += self.rng.random_range(-self.max_offset..self.max_offset);
-            p.z += self.rng.random_range(-self.max_offset..self.max_offset);
-        });
+
+        let other_seeds = {
+            let mut seeds = self.seeds.clone();
+            if self.max_offset != 0.0 {
+                self.seeds.iter_mut().for_each(|p| {
+                    p.x += self.rng.random_range(-self.max_offset..self.max_offset);
+                    p.y += self.rng.random_range(-self.max_offset..self.max_offset);
+                    p.z += self.rng.random_range(-self.max_offset..self.max_offset);
+                });
+            }
+            seeds
+        };
 
         for i in 0..self.seeds.len() {
-            let mut mesh = Convex::<Vec<u32>>::parallelepiped(glam::Vec3::splat(1.0));
+            // subject mesh (original seed)
             let seed = self.seeds[i];
+            let mut mesh = Convex::<Vec<u32>>::parallelepiped(glam::Vec3::splat(1.0));
+            mesh.translate(seed);
 
-            for j in 0..self.seeds.len() {
-                if i == j {
-                    continue;
-                }
-
-                let other = self.seeds[j];
+            for j in i..self.seeds.len() {
+                // test mesh (rng offset seed)
+                let other = other_seeds[j];
 
                 if (other - seed).length().abs() > seek_range {
                     continue;

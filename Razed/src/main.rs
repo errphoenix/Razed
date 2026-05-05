@@ -72,7 +72,7 @@ struct FragmentGroup {
 
 fn generate_fragment_meshes(cubic_area: glam::Vec3, mesh_stage: MeshStaging) -> FragmentGroup {
     const FRAG_UNIT: f32 = 1.0;
-    const MAX_SHIFT: f32 = 0.1;
+    const MAX_SHIFT: f32 = 0.0;
     const SEEK_RANGE: f32 = 3.0;
 
     let mut grid = voxel_grid(cubic_area.x, cubic_area.y, cubic_area.z, FRAG_UNIT);

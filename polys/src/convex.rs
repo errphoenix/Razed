@@ -261,4 +261,8 @@ impl<F: Face> Convex<F> {
         let centroid = self.centroid();
         self.vertices.iter_mut().for_each(|v| *v -= centroid);
     }
+
+    pub fn translate(&mut self, translation: glam::Vec3) {
+        self.vertices.iter_mut().for_each(|v| *v += translation);
+    }
 }
