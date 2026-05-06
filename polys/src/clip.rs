@@ -137,8 +137,7 @@ pub struct ClipVertex {
     pub visible: bool,
 }
 
-// todo: adjust based on world scale
-const EPS: f32 = f32::EPSILON;
+const EPS: f32 = 0.01;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ClipResult {

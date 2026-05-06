@@ -174,4 +174,19 @@ impl<F: Face> Convex<F> {
     pub fn scale(&mut self, scaling: glam::Vec3) {
         self.vertices.iter_mut().for_each(|v| *v *= scaling);
     }
+
+    /// Compute the mesh's face normals in a preallocated slice of memory.
+    ///
+    /// Each normal corresponds to a single face, therefore the length of
+    /// `normals` must match the number of faces.
+    pub fn compute_normals(&self, normals: &mut [glam::Vec3]) {
+        crate::compute_normals(&self.faces, normals, &self.vertices);
+    }
+
+    /// Compute the mesh's face normals allocating new memory.
+    pub fn compute_normals_alloc(&self) -> Vec<glam::Vec3> {
+        let mut normals = vec![glam::Vec3::ZERO; self.faces.len()];
+        self.compute_normals(&mut normals);
+        normals
+    }
 }

@@ -1,5 +1,9 @@
 pub mod clip;
 pub mod convex;
+pub mod post_process;
+
+#[allow(unused_imports)]
+pub use post_process::compute_normals;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct QuadFace {
@@ -85,6 +89,28 @@ pub trait Face: std::ops::Index<usize, Output = u32> + Clone {
     fn len(&self) -> usize;
 
     fn into_alloc(self) -> Vec<u32>;
+
+    fn iter_indices(&self) -> impl std::iter::Iterator<Item = u32>;
+}
+
+impl IntoIterator for TriFace {
+    type Item = u32;
+
+    type IntoIter = std::array::IntoIter<u32, 3>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        [self.a, self.b, self.c].into_iter()
+    }
+}
+
+impl IntoIterator for QuadFace {
+    type Item = u32;
+
+    type IntoIter = std::array::IntoIter<u32, 4>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        [self.a, self.b, self.c, self.d].into_iter()
+    }
 }
 
 impl Face for TriFace {
@@ -95,6 +121,10 @@ impl Face for TriFace {
     fn into_alloc(self) -> Vec<u32> {
         vec![self.a, self.b, self.c]
     }
+
+    fn iter_indices(&self) -> impl std::iter::Iterator<Item = u32> {
+        self.into_iter()
+    }
 }
 
 impl Face for QuadFace {
@@ -103,7 +133,12 @@ impl Face for QuadFace {
     }
 
     fn into_alloc(self) -> Vec<u32> {
+        let a = [0u32; 4];
         vec![self.a, self.b, self.c, self.d]
+    }
+
+    fn iter_indices(&self) -> impl std::iter::Iterator<Item = u32> {
+        self.into_iter()
     }
 }
 
@@ -119,6 +154,10 @@ impl<const N: usize> Face for [u32; N] {
         }
         vec
     }
+
+    fn iter_indices(&self) -> impl std::iter::Iterator<Item = u32> {
+        self.iter().copied()
+    }
 }
 
 impl Face for Vec<u32> {
@@ -128,6 +167,10 @@ impl Face for Vec<u32> {
 
     fn into_alloc(self) -> Vec<u32> {
         self
+    }
+
+    fn iter_indices(&self) -> impl std::iter::Iterator<Item = u32> {
+        self.iter().copied()
     }
 }
 
@@ -154,6 +197,10 @@ impl<F: Face> Face for Facen<F> {
 
     fn into_alloc(self) -> Vec<u32> {
         self.indexed.into_alloc()
+    }
+
+    fn iter_indices(&self) -> impl std::iter::Iterator<Item = u32> {
+        self.indexed.iter_indices()
     }
 }
 
