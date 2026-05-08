@@ -12,9 +12,158 @@ pub struct ClipMesh {
     pub vertices: Vec<ClipVertex>,
     pub edges: Vec<ClipEdge>,
     pub faces: Vec<ClipFace>,
+
+    // Face normals cache, parallel to the `faces` vector.
+    pub normals_cache: Vec<glam::Vec3>,
 }
 
 impl ClipMesh {
+    /// Finish all clipping operations and produce a general mesh.
+    ///
+    /// This operation requires that the stored cached normals (generated with
+    /// [`ClipMesh::cache_current_normals`] must correspond to the mesh's
+    /// normals before any clipping operation began; See
+    /// [`ClipMesh::ordered_faces`].
+    pub fn finish(self) {
+        let mut points = Vec::with_capacity(self.vertices.len());
+        let mut vmap = vec![-1i32; self.vertices.len()];
+
+        for (i, cv) in self.vertices.iter().enumerate() {
+            if cv.visible {
+                vmap[i] = points.len() as i32;
+                points.push(cv.point);
+            }
+        }
+
+        let mut faces = self.ordered_faces();
+        let mut i = 0;
+        while i < faces.len() {
+            let n_i = faces[i];
+            i += 1;
+            for _ in 0..n_i {
+                faces[i] = vmap[faces[i] as usize] as u32;
+                i += 1;
+            }
+        }
+    }
+
+    /// Get the mesh's faces ordered by their normals.
+    ///
+    /// This operation requires that the stored cached normals (generated with
+    /// [`ClipMesh::cache_current_normals`] must correspond to the mesh's
+    /// normals before any clipping operation began.
+    ///
+    /// This is necessary in order to determine whether a face is clockwise
+    /// or counter-clockwise.
+    pub fn ordered_faces(&self) -> Vec<u32> {
+        let mut sort_vertices_buffer = Vec::new();
+
+        let mut faces = Vec::new();
+        for (i, f) in self.faces.iter().enumerate() {
+            if f.visible {
+                sort_vertices_buffer.clear();
+                sort_vertices_buffer.resize(f.edges.len() + 1, 0u32);
+
+                self.ordered_face_vertices(f, &mut sort_vertices_buffer);
+                let olen = sort_vertices_buffer.len() - 1;
+                faces.push(olen as u32);
+
+                let nf = self.normals_cache[i];
+                let no = compute_normal(&sort_vertices_buffer, &self.vertices);
+
+                if nf.dot(no) > 0.0 {
+                    // clockwise
+                    for j in (0..olen).rev() {
+                        faces.push(sort_vertices_buffer[j]);
+                    }
+                } else {
+                    // counter-clockwise
+                    for j in 0..olen {
+                        faces.push(sort_vertices_buffer[j]);
+                    }
+                }
+            }
+        }
+
+        faces
+    }
+
+    /// Get the ordered, contiguous vertices indices of the given `face` in
+    /// newly allocated memory.
+    ///
+    /// See also [`ClipMesh::ordered_face_vertices`].
+    pub fn ordered_face_vertices_alloc(&self, face: &ClipFace) -> Vec<u32> {
+        let mut out_vertices = vec![0u32; face.edges.len() + 1];
+        self.ordered_face_vertices(face, &mut out_vertices);
+        out_vertices
+    }
+
+    /// Get the ordered, contiguous vertices indices of the given `face`.
+    ///
+    /// Note: the passed `out_vertices` mutable slice must be of minimum
+    /// length of `num of face edges + 1`.
+    ///
+    /// See also [`ClipMesh::ordered_face_vertices_alloc`].
+    pub fn ordered_face_vertices(&self, face: &ClipFace, out_vertices: &mut [u32]) {
+        debug_assert!(out_vertices.len() >= face.edges.len() + 1);
+
+        let mut edges = face.edges.iter().copied().collect::<Vec<u32>>();
+
+        // bubble-sort vertices for each edge
+        {
+            let mut i0 = 0;
+            let mut i1 = 1;
+            let mut choice = 1;
+
+            while i1 < edges.len() - 1 {
+                let current = self.edges[edges[i0] as usize].vertices[choice];
+
+                for j in i1..edges.len() {
+                    let e_t = &self.edges[edges[j] as usize];
+                    if e_t.vertices[0] == current {
+                        edges.swap(i1, j);
+                        choice = 1;
+                        break;
+                    }
+                    if e_t.vertices[1] == current {
+                        edges.swap(i1, j);
+                        choice = 0;
+                        break;
+                    }
+                }
+
+                i0 = i1;
+                i1 += 1;
+            }
+        }
+
+        out_vertices[0] = self.edges[edges[0] as usize].vertices[0];
+        out_vertices[1] = self.edges[edges[0] as usize].vertices[1];
+
+        for (i, &sorted_ei) in edges.iter().enumerate().skip(1) {
+            let m_edge = &self.edges[sorted_ei as usize];
+            if m_edge.vertices[0] == out_vertices[i] {
+                out_vertices[i + 1] = m_edge.vertices[1];
+            } else {
+                out_vertices[i + 1] = m_edge.vertices[0];
+            }
+        }
+    }
+
+    pub fn cache_current_normals(&mut self) {
+        self.normals_cache.clear();
+        self.normals_cache
+            .resize(self.faces.len(), glam::Vec3::ZERO);
+
+        let mut ordered_vertex_buffer = Vec::new();
+        for (i, f) in self.faces.iter().enumerate() {
+            ordered_vertex_buffer.clear();
+            ordered_vertex_buffer.resize(f.edges.len() + 1, 0u32);
+            let normal = self.compute_face_normal(f, &mut ordered_vertex_buffer);
+            self.normals_cache[i] = normal;
+        }
+    }
+
     pub fn process_vertices(&mut self, clip_plane: &Plane) -> ClipResult {
         let mut n = 0;
         let mut p = 0;
@@ -114,11 +263,50 @@ impl ClipMesh {
             }
         }
     }
+
+    /// Compute the normals of a `face` (from ordered vertices).
+    ///
+    /// This function does not expect pre-ordered vertices, only a buffer to do
+    /// so it self through [`ClipMesh::ordered_face_vertices`] to avoid
+    /// allocating new memory.
+    pub fn compute_face_normal(
+        &self,
+        face: &ClipFace,
+        ordered_vertices_buffer: &mut [u32],
+    ) -> glam::Vec3 {
+        self.ordered_face_vertices(face, ordered_vertices_buffer);
+        compute_normal(ordered_vertices_buffer, &self.vertices)
+    }
+
+    /// Compute the normals of a `face` (from ordered vertices) in newly
+    /// allocated memory.
+    pub fn compute_face_normal_alloc(&self, face: &ClipFace) -> glam::Vec3 {
+        let ordered_vertices = self.ordered_face_vertices_alloc(face);
+        compute_normal(&ordered_vertices, &self.vertices)
+    }
+}
+
+fn compute_normal(ordered_vertices: &[u32], g_vertices: &[ClipVertex]) -> glam::Vec3 {
+    let mut normal = glam::Vec3::ZERO;
+    let len = ordered_vertices.len();
+
+    for i in 0..(len - 1) {
+        let vi0 = ordered_vertices[i];
+        let vi1 = ordered_vertices[i + 1];
+
+        let v0 = g_vertices[vi0 as usize].point;
+        let v1 = g_vertices[vi1 as usize].point;
+
+        normal += v0.cross(v1);
+    }
+
+    normal.normalize()
 }
 
 #[derive(Clone, Debug)]
 pub struct ClipFace {
     pub edges: HashSet<u32>,
+    pub normal: glam::Vec3,
     pub visible: bool,
 }
 
@@ -127,6 +315,26 @@ pub struct ClipEdge {
     pub vertices: [u32; 2],
     pub faces: HashSet<u32>,
     pub visible: bool,
+}
+
+impl Eq for ClipEdge {}
+
+impl Ord for ClipEdge {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap_or(std::cmp::Ordering::Less)
+    }
+}
+
+impl PartialEq for ClipEdge {
+    fn eq(&self, other: &Self) -> bool {
+        self.vertices == other.vertices
+    }
+}
+
+impl PartialOrd for ClipEdge {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.vertices.partial_cmp(&other.vertices)
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
