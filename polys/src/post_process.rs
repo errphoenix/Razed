@@ -9,7 +9,7 @@ pub fn compute_normals<F: Face>(faces: &[F], normals: &mut [glam::Vec3], vertice
         let normal = &mut normals[i];
 
         let len = face.len();
-        for v_i in 0..=(len - 2) {
+        for v_i in 0..(len - 1) {
             let vi0 = face[v_i];
             let vi1 = face[v_i + 1];
             let v0 = vertices[vi0 as usize];
