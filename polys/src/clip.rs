@@ -5,7 +5,7 @@
 
 use std::collections::HashSet;
 
-use crate::Plane;
+use crate::{Facen, Plane, convex::Convex, post_process};
 
 #[derive(Clone, Debug, Default)]
 pub struct ClipMesh {
@@ -24,7 +24,7 @@ impl ClipMesh {
     /// [`ClipMesh::cache_current_normals`] must correspond to the mesh's
     /// normals before any clipping operation began; See
     /// [`ClipMesh::ordered_faces`].
-    pub fn finish(self) {
+    pub fn finish(self) -> Convex<Vec<u32>> {
         let mut points = Vec::with_capacity(self.vertices.len());
         let mut vmap = vec![-1i32; self.vertices.len()];
 
@@ -45,6 +45,41 @@ impl ClipMesh {
                 i += 1;
             }
         }
+
+        // this section is very alloc and clone() heavy.
+        // this is perfectly fine for the scope of these algorithms in the
+        // context of Razed, as pre-compute processes.
+
+        let mut mesh_faces = Vec::new();
+        let mut current_face = Facen::<Vec<u32>>::new(Vec::new(), glam::Vec3::ZERO);
+        let mut c_count = faces[0];
+        let mut normal_t = vec![glam::Vec3::ZERO];
+
+        for &i in faces.iter().skip(1) {
+            if c_count == 0 {
+                let mut face = current_face.clone();
+                current_face.indexed.clear();
+
+                post_process::compute_normals(&[face.clone()], &mut normal_t, &points);
+                face.normal = normal_t[0];
+                mesh_faces.push(face);
+
+                c_count = i;
+                continue;
+            }
+
+            current_face.indexed.push(i);
+            c_count -= 1;
+        }
+
+        // flush last face
+        if !current_face.indexed.is_empty() {
+            post_process::compute_normals(&[current_face.clone()], &mut normal_t, &points);
+            current_face.normal = normal_t[0];
+            mesh_faces.push(current_face);
+        }
+
+        Convex::new(points, mesh_faces)
     }
 
     /// Get the mesh's faces ordered by their normals.
