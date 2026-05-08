@@ -3,9 +3,9 @@
 //! Derived from [`Clipping a Mesh Against a Plane by David Eberly, Geometric Tools`](https://www.geometrictools.com/Documentation/ClipMesh.pdf)
 //!
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-use crate::{Facen, Plane, convex::Convex, post_process};
+use crate::{Face, Facen, Plane, convex::Convex, post_process};
 
 #[derive(Clone, Debug, Default)]
 pub struct ClipMesh {
@@ -18,6 +18,62 @@ pub struct ClipMesh {
 }
 
 impl ClipMesh {
+    pub fn new<F: Face>(convex: Convex<F>) -> Self {
+        let vertices = convex
+            .vertices()
+            .iter()
+            .map(|&p| ClipVertex::new(p))
+            .collect::<Vec<_>>();
+
+        let mut edges = Vec::with_capacity(vertices.len() / 2);
+        let mut faces = Vec::with_capacity(convex.faces().len());
+
+        let mut existing_edges = HashMap::with_capacity(edges.capacity());
+        let mut ef_map = HashMap::with_capacity(faces.capacity());
+
+        for (i, face) in convex.faces().iter().enumerate() {
+            for j in 0..face.len() {
+                let v0 = face[j];
+                let v1 = face[(j + 1) % face.len()];
+
+                let entry = ef_map.entry(i).or_insert_with(|| Vec::new());
+
+                if !existing_edges.contains_key(&(v0, v1))
+                    && !existing_edges.contains_key(&(v1, v0))
+                {
+                    let ei = edges.len();
+                    existing_edges.insert((v0, v1), ei as u32);
+                    edges.push(ClipEdge {
+                        vertices: [v0, v1],
+                        ..Default::default()
+                    });
+                    entry.push(ei as u32);
+                } else {
+                    entry.push(existing_edges[&(v0, v1)]);
+                }
+            }
+
+            faces.push(ClipFace::default());
+        }
+
+        ef_map.drain().for_each(|(f_i, f_edges)| {
+            let face = &mut faces[f_i];
+            for ei in f_edges {
+                face.edges.insert(ei);
+                edges[ei as usize].faces.insert(f_i as u32);
+            }
+        });
+
+        let normals_cache = Vec::with_capacity(faces.len());
+
+        Self {
+            vertices,
+            edges,
+            faces,
+            normals_cache,
+        }
+    }
+
     /// Finish all clipping operations and produce a general mesh.
     ///
     /// This operation requires that the stored cached normals (generated with
@@ -378,6 +434,46 @@ pub struct ClipVertex {
     pub distance: f32,
     pub occurs: u32,
     pub visible: bool,
+}
+
+impl Default for ClipFace {
+    fn default() -> Self {
+        Self {
+            edges: Default::default(),
+            normal: Default::default(),
+            visible: true,
+        }
+    }
+}
+
+impl Default for ClipEdge {
+    fn default() -> Self {
+        Self {
+            vertices: Default::default(),
+            faces: Default::default(),
+            visible: true,
+        }
+    }
+}
+
+impl Default for ClipVertex {
+    fn default() -> Self {
+        Self {
+            point: Default::default(),
+            distance: Default::default(),
+            occurs: Default::default(),
+            visible: true,
+        }
+    }
+}
+
+impl ClipVertex {
+    pub fn new(point: glam::Vec3) -> Self {
+        Self {
+            point,
+            ..Default::default()
+        }
+    }
 }
 
 const EPS: f32 = 0.01;
