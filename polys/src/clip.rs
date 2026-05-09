@@ -29,6 +29,8 @@ impl ClipMesh {
         let mut faces = Vec::with_capacity(convex.faces().len());
 
         let mut existing_edges = HashMap::with_capacity(edges.capacity());
+
+        // face index to edge index mapping
         let mut ef_map = HashMap::with_capacity(faces.capacity());
 
         for (i, face) in convex.faces().iter().enumerate() {
@@ -49,7 +51,12 @@ impl ClipMesh {
                     });
                     entry.push(ei as u32);
                 } else {
-                    entry.push(existing_edges[&(v0, v1)]);
+                    if let Some(ei) = existing_edges
+                        .get(&(v0, v1))
+                        .or_else(|| existing_edges.get(&(v1, v0)))
+                    {
+                        entry.push(*ei);
+                    }
                 }
             }
 
@@ -197,6 +204,10 @@ impl ClipMesh {
     /// See also [`ClipMesh::ordered_face_vertices_alloc`].
     pub fn ordered_face_vertices(&self, face: &ClipFace, out_vertices: &mut [u32]) {
         debug_assert!(out_vertices.len() >= face.edges.len() + 1);
+
+        if face.edges.is_empty() {
+            return;
+        }
 
         let mut edges = face.edges.iter().copied().collect::<Vec<u32>>();
 
@@ -397,7 +408,6 @@ fn compute_normal(ordered_vertices: &[u32], g_vertices: &[ClipVertex]) -> glam::
 #[derive(Clone, Debug)]
 pub struct ClipFace {
     pub edges: HashSet<u32>,
-    pub normal: glam::Vec3,
     pub visible: bool,
 }
 
@@ -440,7 +450,6 @@ impl Default for ClipFace {
     fn default() -> Self {
         Self {
             edges: Default::default(),
-            normal: Default::default(),
             visible: true,
         }
     }
