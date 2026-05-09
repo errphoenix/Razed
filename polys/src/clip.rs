@@ -87,6 +87,8 @@ impl ClipMesh {
     /// [`ClipMesh::cache_current_normals`] must correspond to the mesh's
     /// normals before any clipping operation began; See
     /// [`ClipMesh::ordered_faces`].
+    ///
+    /// If the current clip mesh contains no faces, an empty mesh isreturned.
     pub fn finish(self) -> Convex<Vec<u32>> {
         let mut points = Vec::with_capacity(self.vertices.len());
         let mut vmap = vec![-1i32; self.vertices.len()];
@@ -99,6 +101,10 @@ impl ClipMesh {
         }
 
         let mut faces = self.ordered_faces();
+        if faces.is_empty() {
+            return Convex::new(Vec::new(), Vec::new());
+        }
+
         let mut i = 0;
         while i < faces.len() {
             let n_i = faces[i];
