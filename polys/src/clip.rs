@@ -12,9 +12,6 @@ pub struct ClipMesh {
     pub vertices: Vec<ClipVertex>,
     pub edges: Vec<ClipEdge>,
     pub faces: Vec<ClipFace>,
-
-    // Face normals cache, parallel to the `faces` vector.
-    pub normals_cache: Vec<glam::Vec3>,
 }
 
 impl ClipMesh {
@@ -60,7 +57,10 @@ impl ClipMesh {
                 }
             }
 
-            faces.push(ClipFace::default());
+            faces.push(ClipFace {
+                normal: face.normal,
+                ..Default::default()
+            });
         }
 
         ef_map.drain().for_each(|(f_i, f_edges)| {
@@ -71,13 +71,10 @@ impl ClipMesh {
             }
         });
 
-        let normals_cache = Vec::with_capacity(faces.len());
-
         Self {
             vertices,
             edges,
             faces,
-            normals_cache,
         }
     }
 
@@ -172,7 +169,7 @@ impl ClipMesh {
                 let olen = sort_vertices_buffer.len() - 1;
                 faces.push(olen as u32);
 
-                let nf = self.normals_cache[i];
+                let nf = f.normal;
                 let no = compute_normal(&sort_vertices_buffer, &self.vertices);
 
                 if nf.dot(no) > 0.0 {
@@ -255,20 +252,6 @@ impl ClipMesh {
             } else {
                 out_vertices[i + 1] = m_edge.vertices[0];
             }
-        }
-    }
-
-    pub fn cache_current_normals(&mut self) {
-        self.normals_cache.clear();
-        self.normals_cache
-            .resize(self.faces.len(), glam::Vec3::ZERO);
-
-        let mut ordered_vertex_buffer = Vec::new();
-        for (i, f) in self.faces.iter().enumerate() {
-            ordered_vertex_buffer.clear();
-            ordered_vertex_buffer.resize(f.edges.len() + 1, 0u32);
-            let normal = self.compute_face_normal(f, &mut ordered_vertex_buffer);
-            self.normals_cache[i] = normal;
         }
     }
 
@@ -398,9 +381,9 @@ fn compute_normal(ordered_vertices: &[u32], g_vertices: &[ClipVertex]) -> glam::
     let mut normal = glam::Vec3::ZERO;
     let len = ordered_vertices.len();
 
-    for i in 0..(len - 1) {
+    for i in 0..len {
         let vi0 = ordered_vertices[i];
-        let vi1 = ordered_vertices[i + 1];
+        let vi1 = ordered_vertices[(i + 1) % len];
 
         let v0 = g_vertices[vi0 as usize].point;
         let v1 = g_vertices[vi1 as usize].point;
@@ -408,12 +391,14 @@ fn compute_normal(ordered_vertices: &[u32], g_vertices: &[ClipVertex]) -> glam::
         normal += v0.cross(v1);
     }
 
+    normal += 0.1;
     normal.normalize()
 }
 
 #[derive(Clone, Debug)]
 pub struct ClipFace {
     pub edges: HashSet<u32>,
+    pub normal: glam::Vec3,
     pub visible: bool,
 }
 
@@ -456,6 +441,7 @@ impl Default for ClipFace {
     fn default() -> Self {
         Self {
             edges: Default::default(),
+            normal: Default::default(),
             visible: true,
         }
     }

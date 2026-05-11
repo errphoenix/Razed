@@ -45,30 +45,45 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
         for i in 0..self.seeds.len() {
             // subject mesh (original seed)
             let seed = self.seeds[i];
-            let mut mesh = Convex::<Vec<u32>>::parallelepiped(glam::Vec3::splat(1.0));
+            let mut mesh = Convex::<Vec<u32>>::parallelepiped(glam::Vec3::splat(0.5));
             mesh.translate(seed);
 
-            for j in i..self.seeds.len() {
-                // test mesh (rng offset seed)
-                let other = other_seeds[j];
+            let mut clip_mesh = polys::clip::ClipMesh::new(mesh);
 
-                if (other - seed).length().abs() > seek_range {
-                    continue;
-                }
+            // for j in (i + 1)..self.seeds.len() {
+            //     // test mesh (rng offset seed)
+            //     let other = offset_seeds[j];
 
-                let m = seed.midpoint(other);
-                let normal = (seed - other).normalize();
-                let d = normal.dot(m);
+            //     if (other - seed).length().abs() > seek_range {
+            //         continue;
+            //     }
 
-                let plane = Plane::new(normal, d);
-                if let Some(clipped) = mesh.clip_plane(plane) {
-                    mesh = clipped;
-                }
+            //     let m = seed.midpoint(other);
+            //     let normal = (seed - other).normalize();
+            //     let d = normal.dot(m);
 
-                if mesh.vertices().is_empty() {
-                    break;
-                }
-            }
+            //     let plane = Plane::new(normal, d);
+            //     clip_mesh.process_vertices(&plane);
+            //     clip_mesh.process_edges();
+            //     clip_mesh.process_faces();
+            // }
+
+            // let plane = Plane::new(glam::Vec3::Y, 0.2);
+            // clip_mesh.process_vertices(&plane);
+            // clip_mesh.process_edges();
+            // clip_mesh.process_faces();
+
+            let mut mesh = clip_mesh.finish();
+
+            // for &outer_plane in &outer_planes {
+            //     if let Some(clipped) = mesh.clip_plane(outer_plane) {
+            //         mesh = clipped;
+            //     }
+            // }
+
+            // if let Some(clipped) = mesh.clip_plane(Plane::new(glam::Vec3::Y, 0.15)) {
+            //     mesh = clipped;
+            // }
 
             mesh.make_local();
             self.meshes.push(mesh.triangulate());
