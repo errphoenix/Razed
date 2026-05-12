@@ -1,6 +1,6 @@
 use ethel::{
     StartupHandler,
-    mesh::{MeshStaging, Metadata, Vertex},
+    mesh::{MeshStaging, Vertex},
     state::data::hash::{FxSpatialHash, SpatialResolution},
 };
 use janus::{context::Setup, window::DisplayParameters};
@@ -72,8 +72,8 @@ struct FragmentGroup {
 
 fn generate_fragment_meshes(cubic_area: glam::Vec3, mesh_stage: MeshStaging) -> FragmentGroup {
     const FRAG_UNIT: f32 = 1.0;
-    const MAX_SHIFT: f32 = 0.0;
-    const SEEK_RANGE: f32 = 3.0;
+    const MAX_SHIFT: f32 = 0.1;
+    const SEEK_RANGE: f32 = 5.0;
 
     let mut grid = voxel_grid(cubic_area.x, cubic_area.y, cubic_area.z, FRAG_UNIT);
 
@@ -96,7 +96,13 @@ fn generate_fragment_meshes(cubic_area: glam::Vec3, mesh_stage: MeshStaging) -> 
     println!("cells: {cells:?}");
 
     let prev_head = mesh_stage.metadata().len();
-    let voronoi = procedural::cubic_voronoi(&seeds, cubic_area, MAX_SHIFT, SEEK_RANGE, mesh_stage);
+    let voronoi = procedural::cubic_voronoi(
+        &seeds,
+        glam::Vec3::splat(FRAG_UNIT),
+        MAX_SHIFT,
+        SEEK_RANGE,
+        mesh_stage,
+    );
 
     let mut mapping = FxSpatialHash::with_capacity(SpatialResolution::new(FRAG_UNIT), cells.len());
     cells.drain(..).enumerate().for_each(|(i, cell)| {

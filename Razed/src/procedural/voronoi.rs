@@ -26,24 +26,9 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
         }
     }
 
-    pub fn generate(&mut self, seed_input: &[glam::Vec3], area: glam::Vec3, seek_range: f32) {
+    pub fn generate(&mut self, seed_input: &[glam::Vec3], unit: glam::Vec3, seek_range: f32) {
         self.seeds.clear();
         self.seeds.extend_from_slice(seed_input);
-
-        let outer_planes = {
-            let hx = area.x * 0.5;
-            let hy = area.y * 0.5;
-            let hz = area.z * 0.5;
-
-            vec![
-                Plane::new(glam::Vec3::X, -hx),
-                Plane::new(-glam::Vec3::X, hx),
-                Plane::new(glam::Vec3::Y, -hy),
-                Plane::new(-glam::Vec3::Y, hy),
-                Plane::new(glam::Vec3::Z, -hz),
-                Plane::new(-glam::Vec3::Z, hz),
-            ]
-        };
 
         let offset_seeds = {
             let mut seeds = self.seeds.clone();
@@ -61,7 +46,7 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
         for i in 0..self.seeds.len() {
             // subject mesh (original seed)
             let seed = self.seeds[i];
-            let mut mesh = Convex::<Vec<u32>>::parallelepiped(glam::Vec3::splat(0.5));
+            let mut mesh = Convex::<Vec<u32>>::parallelepiped(unit * 0.5);
             mesh.translate(seed);
 
             let mut clip_mesh = polys::clip::ClipMesh::new(mesh);
