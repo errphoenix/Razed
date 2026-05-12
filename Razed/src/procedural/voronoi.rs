@@ -30,13 +30,29 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
         self.seeds.clear();
         self.seeds.extend_from_slice(seed_input);
 
-        let other_seeds = {
+        let outer_planes = {
+            let hx = area.x * 0.5;
+            let hy = area.y * 0.5;
+            let hz = area.z * 0.5;
+
+            vec![
+                Plane::new(glam::Vec3::X, -hx),
+                Plane::new(-glam::Vec3::X, hx),
+                Plane::new(glam::Vec3::Y, -hy),
+                Plane::new(-glam::Vec3::Y, hy),
+                Plane::new(glam::Vec3::Z, -hz),
+                Plane::new(-glam::Vec3::Z, hz),
+            ]
+        };
+
+        let offset_seeds = {
             let mut seeds = self.seeds.clone();
+            let h_offset = self.max_offset * 0.5;
             if self.max_offset != 0.0 {
-                self.seeds.iter_mut().for_each(|p| {
-                    p.x += self.rng.random_range(-self.max_offset..self.max_offset);
-                    p.y += self.rng.random_range(-self.max_offset..self.max_offset);
-                    p.z += self.rng.random_range(-self.max_offset..self.max_offset);
+                seeds.iter_mut().for_each(|p| {
+                    p.x += self.rng.random_range(-h_offset..h_offset);
+                    p.y += self.rng.random_range(-h_offset..h_offset);
+                    p.z += self.rng.random_range(-h_offset..h_offset);
                 });
             }
             seeds
@@ -50,17 +66,17 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
 
             let mut clip_mesh = polys::clip::ClipMesh::new(mesh);
 
-            // for j in (i + 1)..self.seeds.len() {
-            //     // test mesh (rng offset seed)
-            //     let other = offset_seeds[j];
+            for j in (i + 1)..self.seeds.len() {
+                // test mesh (rng offset seed)
+                let other = offset_seeds[j];
 
-            //     if (other - seed).length().abs() > seek_range {
-            //         continue;
-            //     }
+                if (other - seed).length().abs() > seek_range {
+                    continue;
+                }
 
-            //     let m = seed.midpoint(other);
-            //     let normal = (seed - other).normalize();
-            //     let d = normal.dot(m);
+                let m = seed.midpoint(other);
+                let normal = (seed - other).normalize();
+                let d = normal.dot(m);
 
                 let plane = Plane::new(normal, d);
                 clip_mesh.process_vertices(&plane);
@@ -68,24 +84,12 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
                 clip_mesh.process_faces(&plane);
             }
 
-            // let plane = Plane::new(glam::Vec3::Y, 0.2);
-            // clip_mesh.process_vertices(&plane);
-            // clip_mesh.process_edges();
-            // clip_mesh.process_faces();
-
             let mut mesh = clip_mesh.finish();
 
-            // for &outer_plane in &outer_planes {
-            //     if let Some(clipped) = mesh.clip_plane(outer_plane) {
-            //         mesh = clipped;
-            //     }
-            // }
-
-            // if let Some(clipped) = mesh.clip_plane(Plane::new(glam::Vec3::Y, 0.15)) {
-            //     mesh = clipped;
-            // }
-
+            let centroid = mesh.centroid();
             mesh.make_local();
+            mesh.translate(centroid - seed);
+
             self.meshes.push(mesh.triangulate());
         }
     }
