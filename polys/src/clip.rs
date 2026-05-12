@@ -160,7 +160,7 @@ impl ClipMesh {
         let mut sort_vertices_buffer = Vec::new();
 
         let mut faces = Vec::new();
-        for (i, f) in self.faces.iter().enumerate() {
+        for f in self.faces.iter() {
             if f.visible {
                 sort_vertices_buffer.clear();
                 sort_vertices_buffer.resize(f.edges.len() + 1, 0u32);
@@ -331,25 +331,35 @@ impl ClipMesh {
         }
     }
 
-    pub fn process_faces(&mut self) {
-        for (i, face) in self.faces.iter_mut().enumerate() {
-            if face.visible {
-                for &e_i in &face.edges {
+    pub fn process_faces(&mut self, clip_plane: &Plane) {
+        let closed_face = ClipFace {
+            normal: clip_plane.normal,
+            ..Default::default()
+        };
+        let cfi = self.faces.len();
+        self.faces.push(closed_face);
+
+        for i in 0..=cfi {
+            if self.faces[i].visible {
+                for &e_i in &self.faces[i].edges {
                     let edge = &self.edges[e_i as usize];
                     self.vertices[edge.vertices[0] as usize].occurs = 0;
                     self.vertices[edge.vertices[1] as usize].occurs = 0;
                 }
 
-                if let Some(polyline) = get_open_polyline(&mut self.vertices, &self.edges, face) {
+                if let Some(polyline) =
+                    get_open_polyline(&mut self.vertices, &self.edges, &mut self.faces[i])
+                {
                     // close the open polyline
 
                     let idx = self.edges.len();
                     self.edges.push(ClipEdge {
                         vertices: [polyline.start, polyline.end],
-                        faces: HashSet::from([i as u32]),
+                        faces: HashSet::from([i as u32, cfi as u32]),
                         visible: true,
                     });
-                    face.edges.insert(idx as u32);
+                    self.faces[i].edges.insert(idx as u32);
+                    self.faces[cfi].edges.insert(idx as u32);
                 }
             }
         }

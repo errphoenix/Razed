@@ -62,11 +62,11 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
             //     let normal = (seed - other).normalize();
             //     let d = normal.dot(m);
 
-            //     let plane = Plane::new(normal, d);
-            //     clip_mesh.process_vertices(&plane);
-            //     clip_mesh.process_edges();
-            //     clip_mesh.process_faces();
-            // }
+                let plane = Plane::new(normal, d);
+                clip_mesh.process_vertices(&plane);
+                clip_mesh.process_edges();
+                clip_mesh.process_faces(&plane);
+            }
 
             // let plane = Plane::new(glam::Vec3::Y, 0.2);
             // clip_mesh.process_vertices(&plane);
