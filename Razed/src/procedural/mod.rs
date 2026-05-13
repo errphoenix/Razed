@@ -48,7 +48,7 @@ pub fn voxel_grid(width: f32, height: f32, depth: f32, cell_size: f32) -> VoxelG
     )
 }
 
-pub fn voxel_grid_cond(
+pub fn voxel_grid_by(
     width: f32,
     height: f32,
     depth: f32,
