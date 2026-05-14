@@ -29,7 +29,8 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
     pub fn generate(
         &mut self,
         seed_input: &[glam::Vec3],
-        /*currently unused; will change to volume (for total cube) */ _unit: glam::Vec3,
+        volume: glam::Vec3,
+        unit: glam::Vec3,
         seek_range: f32,
     ) {
         self.seeds.clear();
@@ -48,11 +49,14 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
             seeds
         };
 
+        let half_volume = volume * 0.5;
+        let half_unit = unit * 0.5;
+
         for i in 0..self.seeds.len() {
             // subject mesh (original seed)
             let seed = offset_seeds[i];
-            let mut mesh = Convex::<Vec<u32>>::parallelepiped(glam::Vec3::splat(1.5));
-            mesh.translate(glam::Vec3::splat(1.0));
+            let mut mesh = Convex::<Vec<u32>>::parallelepiped(half_volume);
+            mesh.translate(half_volume - half_unit);
 
             let mut clip_mesh = polys::clip::ClipMesh::new(mesh);
 

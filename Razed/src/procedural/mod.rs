@@ -7,12 +7,13 @@ pub use voxel::{VoxelGrid, VoxelGridOptions};
 
 pub fn cubic_voronoi_alloc(
     seeds: &[glam::Vec3],
+    volume: glam::Vec3,
     unit: glam::Vec3,
     max_shift: f32,
     seek_range: f32,
 ) -> CubeVoronoi {
     let mut generator = CubeVoronoiGenerator::new(rand::rng(), max_shift);
-    generator.generate(seeds, unit, seek_range);
+    generator.generate(seeds, volume, unit, seek_range);
     generator.consolidate_alloc()
 }
 
@@ -26,13 +27,14 @@ pub fn cubic_voronoi_alloc(
 /// See [`CubeVoronoiGenerator::generate`].
 pub fn cubic_voronoi(
     seeds: &[glam::Vec3],
+    volume: glam::Vec3,
     unit: glam::Vec3,
     max_shift: f32,
     seek_range: f32,
     out_stage_buffer: MeshStaging,
 ) -> CubeVoronoi {
     let mut generator = CubeVoronoiGenerator::new(rand::rng(), max_shift);
-    generator.generate(seeds, unit, seek_range);
+    generator.generate(seeds, volume, unit, seek_range);
     generator.consolidate(out_stage_buffer)
 }
 

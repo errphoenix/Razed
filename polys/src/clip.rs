@@ -174,7 +174,7 @@ impl ClipMesh {
                 let nf = f.normal;
                 let no = compute_normal(&sort_vertices_buffer, &self.vertices);
 
-                if nf.dot(no) > 0.0 {
+                if nf.dot(no) > EPS {
                     // clockwise
                     for j in (0..olen).rev() {
                         faces.push(sort_vertices_buffer[j]);
@@ -295,7 +295,7 @@ impl ClipMesh {
                 let d1 = p1.distance;
 
                 // edge is culled, remove from all faces
-                if d0 <= 0.0 && d1 <= 0.0 {
+                if d0 <= EPS && d1 <= EPS {
                     for &f_i in &e.faces {
                         let face = &mut self.faces[f_i as usize];
                         face.edges.remove(&(i as u32));
@@ -307,7 +307,7 @@ impl ClipMesh {
                     continue;
                 }
 
-                if d0 >= 0.0 && d1 >= 0.0 {
+                if d0 >= EPS && d1 >= EPS {
                     // edge is retained; early out
                     continue;
                 }
@@ -324,7 +324,7 @@ impl ClipMesh {
                     visible: true,
                 });
 
-                if d0 > 0.0 {
+                if d0 > EPS {
                     e.vertices[1] = idx as u32;
                 } else {
                     e.vertices[0] = idx as u32;

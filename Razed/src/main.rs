@@ -34,8 +34,6 @@ fn main() {
         let group = generate_fragment_meshes(glam::Vec3::splat(3.0), mesh_stage);
         let mesh_stage = group.voronoi.stager;
 
-        println!("{:?}", mesh_stage.metadata());
-
         start_handler.with_mesh_data(mesh_stage);
         start_handler.with_mesh_layout(data::LayoutMeshStorage::create());
 
@@ -88,7 +86,7 @@ fn generate_fragment_meshes(cubic_area: glam::Vec3, mesh_stage: MeshStaging) -> 
     let mut seeds = Vec::with_capacity(count);
     let mut cells = Vec::with_capacity(count);
     for &voxel in grid.voxels().elements() {
-        seeds.push(voxel);
+        seeds.push(voxel + FRAG_UNIT * 0.5);
         cells.push(grid.quantize_point(voxel));
     }
 
@@ -98,6 +96,7 @@ fn generate_fragment_meshes(cubic_area: glam::Vec3, mesh_stage: MeshStaging) -> 
     let prev_head = mesh_stage.metadata().len();
     let voronoi = procedural::cubic_voronoi(
         &seeds,
+        cubic_area,
         glam::Vec3::splat(FRAG_UNIT),
         MAX_SHIFT,
         SEEK_RANGE,
