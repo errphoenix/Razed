@@ -1,5 +1,5 @@
 use ethel::mesh::MeshStaging;
-use polys::{Plane, convex::Convex};
+use polys::{Plane, clip::ClipResult, convex::Convex};
 use rand::{Rng, RngExt};
 
 #[derive(Debug)]
@@ -26,7 +26,12 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
         }
     }
 
-    pub fn generate(&mut self, seed_input: &[glam::Vec3], unit: glam::Vec3, seek_range: f32) {
+    pub fn generate(
+        &mut self,
+        seed_input: &[glam::Vec3],
+        /*currently unused; will change to volume (for total cube) */ _unit: glam::Vec3,
+        seek_range: f32,
+    ) {
         self.seeds.clear();
         self.seeds.extend_from_slice(seed_input);
 
@@ -45,13 +50,17 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
 
         for i in 0..self.seeds.len() {
             // subject mesh (original seed)
-            let seed = self.seeds[i];
-            let mut mesh = Convex::<Vec<u32>>::parallelepiped(unit * 0.5);
-            mesh.translate(seed);
+            let seed = offset_seeds[i];
+            let mut mesh = Convex::<Vec<u32>>::parallelepiped(glam::Vec3::splat(1.5));
+            mesh.translate(glam::Vec3::splat(1.0));
 
             let mut clip_mesh = polys::clip::ClipMesh::new(mesh);
 
-            for j in (i + 1)..self.seeds.len() {
+            for j in 0..self.seeds.len() {
+                if i == j {
+                    continue;
+                }
+
                 // test mesh (rng offset seed)
                 let other = offset_seeds[j];
 
@@ -73,7 +82,7 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
 
             let centroid = mesh.centroid();
             mesh.make_local();
-            mesh.translate(centroid - seed);
+            mesh.translate(centroid - self.seeds[i]);
 
             self.meshes.push(mesh.triangulate());
         }
