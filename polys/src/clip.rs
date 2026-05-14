@@ -136,6 +136,8 @@ impl ClipMesh {
 
             current_face.indexed.push(i);
             c_count -= 1;
+
+            normal_t[0] = glam::Vec3::ZERO;
         }
 
         // flush last face
@@ -401,7 +403,6 @@ fn compute_normal(ordered_vertices: &[u32], g_vertices: &[ClipVertex]) -> glam::
         normal += v0.cross(v1);
     }
 
-    normal += 0.1;
     normal.normalize()
 }
 
