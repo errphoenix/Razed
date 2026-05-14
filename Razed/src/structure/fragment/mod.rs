@@ -488,8 +488,21 @@ impl FragmentSystem {
         grid: &VoxelGrid,
         mesh_mapping: &FxSpatialHash<ethel::mesh::Id>,
     ) {
+        let offset = {
+            let opt = grid.options();
+            let size = glam::vec3(opt.width, opt.height, opt.depth);
+            (opt.cell_size - size) * 0.5
+        };
         for &cell in grid.voxels().cells() {
-            let point = grid.point_at_or_approx(cell) + origin;
+            let point = grid.point_at_or_approx(cell) + origin + offset;
+
+            // temporary: always force the only existing 3x3x3 mesh group
+            let cell = Cell {
+                x: cell.x % 3,
+                y: cell.y % 3,
+                z: cell.z % 3,
+            };
+
             if let Some(&mesh_id) = mesh_mapping.get(cell) {
                 self.uninitialised.push(UninitFragment::new(point, mesh_id));
             }

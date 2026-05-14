@@ -15,7 +15,6 @@ use crate::{
 };
 use ::physics::xpbd::{RawXpbdLattice, XpbdOptions, XpbdSolver};
 use ethel::{
-    mesh::Metadata,
     render::{ScreenSpace, command::DrawArraysIndirectCommand},
     state::{
         camera::{self, ViewPoint},
@@ -535,16 +534,16 @@ impl State {
     }
 
     fn spawn_debug_structure(&mut self, view_point: &ViewPoint) {
-        const WIDTH: f32 = 8.0;
+        const WIDTH: f32 = 9.0;
         const HEIGHT: f32 = 3.0;
-        const DEPTH: f32 = 8.0;
+        const DEPTH: f32 = 9.0;
         const FLOORS: u32 = 8;
         const TOTAL_HEIGHT: f32 = HEIGHT * FLOORS as f32;
 
         let center = glam::vec3(view_point.position.x, GROUND_LEVEL, view_point.position.z);
         let lattice = create_structure_lattice(center, WIDTH, HEIGHT, DEPTH, FLOORS);
 
-        const INNER_SPACE: i32 = 2;
+        const INNER_SPACE: i32 = 3;
 
         let mut voxel_grid = VoxelGrid::new(
             |cell| {
@@ -555,9 +554,7 @@ impl State {
                 };
                 let cell = cell + half_cell;
 
-                cell.y % 4 == 0
-                    || cell.y == (FLOORS as f32 * HEIGHT) as i32 - 1
-                    || cell.x < INNER_SPACE
+                cell.x < INNER_SPACE
                     || cell.x > (WIDTH as i32) - INNER_SPACE - 1
                     || cell.z < INNER_SPACE
                     || cell.z > (DEPTH as i32) - INNER_SPACE - 1
@@ -700,10 +697,7 @@ impl State {
         let mut lattice_hash = FxSpatialHash::new(SpatialResolution::new(1.0));
         lattice_hash.dump_soa(lattice.current_pos, lattice.handles);
 
-        let mut deforms_vox = VoxelGrid::new(
-            voxel_grid.generator,
-            *&voxel_grid.options().with_cell_size(1.0),
-        );
+        let mut deforms_vox = VoxelGrid::new(voxel_grid.generator, *(voxel_grid.options()));
         deforms_vox.repopulate_defaults();
         let generated_len =
             self.deforms

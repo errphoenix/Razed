@@ -1,5 +1,5 @@
 use ethel::mesh::MeshStaging;
-use polys::{Plane, clip::ClipResult, convex::Convex};
+use polys::{Plane, convex::Convex};
 use rand::{Rng, RngExt};
 
 #[derive(Debug)]
