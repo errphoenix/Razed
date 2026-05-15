@@ -87,104 +87,70 @@ impl ClipMesh {
     ///
     /// If the current clip mesh contains no faces, an empty mesh isreturned.
     pub fn finish(self) -> Convex<Vec<u32>> {
+        let mut faces = self.ordered_faces();
+        if faces.is_empty() {
+            return Convex::new(Vec::new(), Vec::new());
+        }
+
+        // prune invisible vertices and remap indices
         let mut points = Vec::with_capacity(self.vertices.len());
         let mut vmap = vec![-1i32; self.vertices.len()];
-
         for (i, cv) in self.vertices.iter().enumerate() {
             if cv.visible {
                 vmap[i] = points.len() as i32;
                 points.push(cv.point);
             }
         }
-
-        let mut faces = self.ordered_faces();
-        if faces.is_empty() {
-            return Convex::new(Vec::new(), Vec::new());
-        }
-
-        let mut i = 0;
-        while i < faces.len() {
-            let n_i = faces[i];
-            i += 1;
-            for _ in 0..n_i {
-                faces[i] = vmap[faces[i] as usize] as u32;
-                i += 1;
+        for f in &mut faces {
+            for i in &mut f.1 {
+                *i = vmap[*i as usize] as u32;
             }
         }
 
-        // this section is very alloc and clone() heavy.
-        // this is perfectly fine for the scope of these algorithms in the
-        // context of Razed, as pre-compute processes.
-
-        let mut mesh_faces = Vec::new();
-        let mut current_face = Facen::<Vec<u32>>::new(Vec::new(), glam::Vec3::ZERO);
-        let mut c_count = faces[0];
-        let mut normal_t = vec![glam::Vec3::ZERO];
-
-        for &i in faces.iter().skip(1) {
-            if c_count == 0 {
-                let mut face = current_face.clone();
-                current_face.indexed.clear();
-
-                post_process::compute_normals(&[face.clone()], &mut normal_t, &points);
-                face.normal = normal_t[0];
-                mesh_faces.push(face);
-
-                c_count = i;
-                continue;
-            }
-
-            current_face.indexed.push(i);
-            c_count -= 1;
-
-            normal_t[0] = glam::Vec3::ZERO;
-        }
-
-        // flush last face
-        if !current_face.indexed.is_empty() {
-            post_process::compute_normals(&[current_face.clone()], &mut normal_t, &points);
-            current_face.normal = normal_t[0];
-            mesh_faces.push(current_face);
-        }
+        let mesh_faces = faces
+            .drain(..)
+            .map(|(id, indices)| {
+                let normal = self.faces[id as usize].normal;
+                Facen::<Vec<_>>::new(indices, normal)
+            })
+            .collect::<Vec<_>>();
 
         Convex::new(points, mesh_faces)
     }
 
     /// Get the mesh's faces ordered by their normals.
     ///
-    /// This operation requires that the stored cached normals (generated with
-    /// [`ClipMesh::cache_current_normals`] must correspond to the mesh's
-    /// normals before any clipping operation began.
-    ///
-    /// This is necessary in order to determine whether a face is clockwise
-    /// or counter-clockwise.
-    pub fn ordered_faces(&self) -> Vec<u32> {
+    /// Each element contains the original face index of the face and a
+    /// collection of the face's ordered vertex indices.
+    pub fn ordered_faces(&self) -> Vec<(u32, Vec<u32>)> {
         let mut sort_vertices_buffer = Vec::new();
 
         let mut faces = Vec::new();
-        for f in self.faces.iter() {
+        for (i, f) in self.faces.iter().enumerate() {
             if f.visible {
                 sort_vertices_buffer.clear();
                 sort_vertices_buffer.resize(f.edges.len() + 1, 0u32);
 
                 self.ordered_face_vertices(f, &mut sort_vertices_buffer);
                 let olen = sort_vertices_buffer.len() - 1;
-                faces.push(olen as u32);
+                let mut face = Vec::with_capacity(olen);
 
                 let nf = f.normal;
                 let no = compute_normal(&sort_vertices_buffer, &self.vertices);
 
-                if nf.dot(no) > EPS {
+                if nf.dot(no) > 0.0 {
                     // clockwise
-                    for j in (0..olen).rev() {
-                        faces.push(sort_vertices_buffer[j]);
+                    for j in 0..olen {
+                        face.push(sort_vertices_buffer[j]);
                     }
                 } else {
                     // counter-clockwise
-                    for j in 0..olen {
-                        faces.push(sort_vertices_buffer[j]);
+                    for j in (0..olen).rev() {
+                        face.push(sort_vertices_buffer[j]);
                     }
                 }
+
+                faces.push((i as u32, face));
             }
         }
 
