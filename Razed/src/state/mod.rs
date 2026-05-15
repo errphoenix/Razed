@@ -6,6 +6,7 @@ use crate::{
         LayoutXpbdDebugData,
     },
     procedural::{VoxelGrid, VoxelGridOptions},
+    render::RenderGroup,
     structure::{
         DebrisSystem, DeformSystem, DeformsRowTableView, FragmentSystem, FragmentsRowTableView,
         create_structure_lattice,
@@ -15,9 +16,13 @@ use crate::{
 };
 use ::physics::xpbd::{RawXpbdLattice, XpbdOptions, XpbdSolver};
 use ethel::{
-    render::{ScreenSpace, command::DrawArraysIndirectCommand},
+    render::{
+        ScreenSpace,
+        command::{DrawArraysIndirectCommand, GpuCommandQueue},
+    },
     state::{
         camera::{self, ViewPoint},
+        cross::{Cross, Producer},
         data::{
             Column, IndirectIndex,
             hash::{Cell, FxSpatialHash, SpatialResolution},
@@ -97,158 +102,246 @@ impl Default for State {
     }
 }
 
-impl ethel::StateHandler<FrameDataBuffers> for State {
+impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
     fn upload_gpu(
         &mut self,
-        frame_boundary: &ethel::state::cross::Cross<
-            ethel::state::cross::Producer,
-            FrameDataBuffers,
-        >,
-        command_queue: &mut ethel::render::command::GpuCommandQueue<ethel::DrawCommand>,
+        frame_boundary: &Cross<Producer, FrameDataBuffers>,
+        command_queue: &mut GpuCommandQueue<ethel::DrawCommand, RenderGroup>,
     ) {
-        self.profiler.capture_duration("upload_gpu", || {
-            command_queue.clear();
+        command_queue.clear();
 
-            let fragment_count = self.fragments.data().len() as u32;
-            for _ in 1..fragment_count {
-                command_queue.push(DrawArraysIndirectCommand {
-                    count: 0,
-                    instance_count: 1,
-                    first_vertex: 0,
-                    base_instance: 0
-                });
+        // populate command buffers
+        {
+            {
+                let fragment_count = self.fragments.data().len();
+                command_queue.push_group(RenderGroup::Fragment);
+                for _ in 1..fragment_count {
+                    command_queue.push_command(DrawArraysIndirectCommand {
+                        count: 0,
+                        instance_count: 1,
+                        first_vertex: 0,
+                        base_instance: 0,
+                    });
+                }
+            }
+            {
+                let debris_count = self.debris.total_debris_count();
+                command_queue.push_group(RenderGroup::Debris);
+                for _ in 0..debris_count {
+                    command_queue.push_command(DrawArraysIndirectCommand {
+                        count: 0,
+                        instance_count: 1,
+                        first_vertex: 0,
+                        base_instance: 0,
+                    });
+                }
+            }
+        }
+        frame_boundary.cross(|section, storage| {
+            let buf_idx = section.as_index();
+
+            const VEC3_VEC4_PADDING: usize = 4;
+
+            // fragments upload
+            {
+                let fragments = &storage.fragments;
+
+                let imap_deforms = self.deforms.data().handles();
+                let pod_deforms_positions = self.deforms.data().deformed_slice();
+                let pod_deforms_bind_pose = &self.deforms.data().pose_slice();
+                let pod_anchors = self.fragments.data().anchors_slice();
+                let pod_anchor_weights = self.fragments.data().anchors_weights_slice();
+                let pod_bind_pose = self.fragments.data().bind_position_slice();
+                let pod_mesh_id = self.fragments.data().mesh_id_slice();
+
+                // SAFETY: the use of LayoutFragmentData ensures we blit to a
+                // valid section of the partitioned buffer.
+                unsafe {
+                    fragments.blit_part(
+                        buf_idx,
+                        LayoutFragmentData::ImapDeforms as usize,
+                        imap_deforms,
+                        0,
+                    );
+                    fragments.blit_part_padded(
+                        buf_idx,
+                        LayoutFragmentData::PodDeformsPositions as usize,
+                        pod_deforms_positions,
+                        0,
+                        VEC3_VEC4_PADDING,
+                    );
+                    fragments.blit_part_padded(
+                        buf_idx,
+                        LayoutFragmentData::PodDeformsBindPose as usize,
+                        pod_deforms_bind_pose,
+                        0,
+                        VEC3_VEC4_PADDING,
+                    );
+                    fragments.blit_part(
+                        buf_idx,
+                        LayoutFragmentData::PodAnchors as usize,
+                        pod_anchors,
+                        0,
+                    );
+                    fragments.blit_part(
+                        buf_idx,
+                        LayoutFragmentData::PodAnchorsWeights as usize,
+                        pod_anchor_weights,
+                        0,
+                    );
+                    fragments.blit_part(
+                        buf_idx,
+                        LayoutFragmentData::PodBindPose as usize,
+                        pod_bind_pose,
+                        0,
+                    );
+                    fragments.blit_part(
+                        buf_idx,
+                        LayoutFragmentData::PodMeshId as usize,
+                        pod_mesh_id,
+                        0,
+                    );
+                }
             }
 
-            frame_boundary.cross(|section, storage| {
-                let buf_idx = section.as_index();
+            // debris upload
+            {
+                let debris = &storage.debris;
+                let pod_positions = self.debris.data().position_slice();
+                let pod_rotations = self.debris.data().rotation_slice();
+                let pod_positions_rubber = &self.debris.rubber().position_slice()[1..];
+                let pod_rotations_rubber = &self.debris.rubber().rotation_slice()[1..];
+                let debris_offset = self.debris.data().len() * size_of::<f32>() * 4;
 
-                const VEC3_VEC4_PADDING: usize = 4;
-
-                // fragments upload
-                {
-                    let fragments = &storage.fragments;
-
-                    let imap_deforms = self.deforms.data().handles();
-                    let pod_deforms_positions = self.deforms.data().deformed_slice();
-                    let pod_deforms_bind_pose = &self.deforms.data().pose_slice();
-                    let pod_anchors = self.fragments.data().anchors_slice();
-                    let pod_anchor_weights = self.fragments.data().anchors_weights_slice();
-                    let pod_bind_pose = self.fragments.data().bind_position_slice();
-                    let pod_mesh_id = self.fragments.data().mesh_id_slice();
-
-                    // SAFETY: the use of LayoutFragmentData ensures we blit to a
-                    // valid section of the partitioned buffer.
-                    unsafe {
-                        fragments.blit_part(buf_idx, LayoutFragmentData::ImapDeforms as usize, imap_deforms, 0);
-                        fragments.blit_part_padded(buf_idx, LayoutFragmentData::PodDeformsPositions as usize, pod_deforms_positions, 0, VEC3_VEC4_PADDING);
-                        fragments.blit_part_padded(buf_idx, LayoutFragmentData::PodDeformsBindPose as usize, pod_deforms_bind_pose, 0, VEC3_VEC4_PADDING);
-                        fragments.blit_part(buf_idx, LayoutFragmentData::PodAnchors as usize, pod_anchors, 0);
-                        fragments.blit_part(buf_idx, LayoutFragmentData::PodAnchorsWeights as usize, pod_anchor_weights, 0);
-                        fragments.blit_part(buf_idx, LayoutFragmentData::PodBindPose as usize, pod_bind_pose, 0);
-                        fragments.blit_part(buf_idx, LayoutFragmentData::PodMeshId as usize, pod_mesh_id, 0);
-                    }
+                // SAFETY: the use of LayoutDebrisData ensures we blit to a
+                // valid section of the partitioned buffer.
+                unsafe {
+                    debris.blit_part_padded(
+                        buf_idx,
+                        LayoutDebrisData::PodPositions as usize,
+                        pod_positions,
+                        0,
+                        VEC3_VEC4_PADDING,
+                    );
+                    debris.blit_part(
+                        buf_idx,
+                        LayoutDebrisData::PodRotations as usize,
+                        pod_rotations,
+                        0,
+                    );
+                    debris.blit_part_padded(
+                        buf_idx,
+                        LayoutDebrisData::PodPositions as usize,
+                        pod_positions_rubber,
+                        debris_offset,
+                        VEC3_VEC4_PADDING,
+                    );
+                    debris.blit_part(
+                        buf_idx,
+                        LayoutDebrisData::PodRotations as usize,
+                        pod_rotations_rubber,
+                        debris_offset,
+                    );
                 }
 
-                // debris upload
-                {
-                    let debris = &storage.debris;
-                    let pod_positions = self.debris.data().position_slice();
-                    let pod_rotations = self.debris.data().rotation_slice();
-                    let pod_positions_rubber = &self.debris.rubber().position_slice()[1..];
-                    let pod_rotations_rubber = &self.debris.rubber().rotation_slice()[1..];
-                    let debris_offset = self.debris.data().len() * size_of::<f32>() * 4;
+                // subtract 2 to ignore degenerate 0 in both tables
+                let debris_count =
+                    (self.debris.data().len() + self.debris.rubber().len()) as u32 - 2;
+                storage.debris_count.store(debris_count, Ordering::Release);
+            }
 
-                    // SAFETY: the use of LayoutDebrisData ensures we blit to a
-                    // valid section of the partitioned buffer.
-                    unsafe {
-                        debris.blit_part_padded(buf_idx, LayoutDebrisData::PodPositions as usize, pod_positions, 0, VEC3_VEC4_PADDING);
-                        debris.blit_part(buf_idx, LayoutDebrisData::PodRotations as usize, pod_rotations, 0);
-                        debris.blit_part_padded(buf_idx, LayoutDebrisData::PodPositions as usize, pod_positions_rubber, debris_offset, VEC3_VEC4_PADDING);
-                        debris.blit_part(buf_idx, LayoutDebrisData::PodRotations as usize, pod_rotations_rubber, debris_offset);
-                    }
+            // generic objects upload
+            {
+                let scene = &storage.generic_objects;
 
-                    // subtract 2 to ignore degenerate 0 in both tables
-                    let debris_count = (self.debris.data().len() + self.debris.rubber().len()) as u32 - 2;
-                    storage.debris_count.store(debris_count, Ordering::Release);
+                let mesh_ids = self.generic_objects.mesh_id_slice();
+                let pod_positions = self.generic_objects.position_slice();
+                let pod_rotations = self.generic_objects.rotation_slice();
+                let pod_scales = self.generic_objects.scale_slice();
+
+                // SAFETY: the use of LayoutRenderableData ensures we blit
+                // to a valid section of the partitioned buffer.
+                unsafe {
+                    scene.blit_part(buf_idx, LayoutRenderableData::MeshId as usize, mesh_ids, 0);
+
+                    scene.blit_part(
+                        buf_idx,
+                        LayoutRenderableData::PodPositions as usize,
+                        pod_positions,
+                        0,
+                    );
+                    scene.blit_part(
+                        buf_idx,
+                        LayoutRenderableData::PodRotations as usize,
+                        pod_rotations,
+                        0,
+                    );
+                    scene.blit_part(
+                        buf_idx,
+                        LayoutRenderableData::PodScales as usize,
+                        pod_scales,
+                        0,
+                    );
                 }
+            }
 
-                // generic objects upload
-                {
-                    let scene = &storage.generic_objects;
+            // lattice debug upload
+            {
+                let xpbd_dbg = &storage.lattice_debug;
+                let constraints = self.lattice.links().relation_slice();
+                let imap_nodes = self.lattice.nodes().handles();
+                let pod_nodes = self.lattice.nodes().current_pos_slice();
+                let selected_link = {
+                    let handle = self.selection.unwrap_or_default();
+                    self.lattice
+                        .links()
+                        .solve_indirect(handle)
+                        .unwrap_or_default()
+                };
 
-                    let mesh_ids = self.generic_objects.mesh_id_slice();
-                    let pod_positions = self.generic_objects.position_slice();
-                    let pod_rotations = self.generic_objects.rotation_slice();
-                    let pod_scales = self.generic_objects.scale_slice();
+                let node_count = self.lattice.links().len() as u32;
+                storage
+                    .lattice_constraint_count
+                    .store(node_count, Ordering::Release);
 
-                    // SAFETY: the use of LayoutRenderableData ensures we blit
-                    // to a valid section of the partitioned buffer.
-                    unsafe {
-                        scene.blit_part(
-                            buf_idx,
-                            LayoutRenderableData::MeshId as usize,
-                            mesh_ids,
-                            0,
-                        );
-
-                        scene.blit_part(
-                            buf_idx,
-                            LayoutRenderableData::PodPositions as usize,
-                            pod_positions,
-                            0,
-                        );
-                        scene.blit_part(
-                            buf_idx,
-                            LayoutRenderableData::PodRotations as usize,
-                            pod_rotations,
-                            0,
-                        );
-                        scene.blit_part(
-                            buf_idx,
-                            LayoutRenderableData::PodScales as usize,
-                            pod_scales,
-                            0,
-                        );
-                    }
+                // SAFETY: the use of LayoutXpbdDebugData ensures we blit to a
+                // valid section of the partitioned buffer.
+                unsafe {
+                    xpbd_dbg.blit_part(
+                        buf_idx,
+                        LayoutXpbdDebugData::Constraints as usize,
+                        constraints,
+                        0,
+                    );
+                    xpbd_dbg.blit_part(
+                        buf_idx,
+                        LayoutXpbdDebugData::ImapNodes as usize,
+                        imap_nodes,
+                        0,
+                    );
+                    xpbd_dbg.blit_part_padded(
+                        buf_idx,
+                        LayoutXpbdDebugData::PodNodes as usize,
+                        pod_nodes,
+                        0,
+                        VEC3_VEC4_PADDING,
+                    );
+                    xpbd_dbg.blit_part(
+                        buf_idx,
+                        LayoutXpbdDebugData::ISelected as usize,
+                        &[selected_link],
+                        0,
+                    );
                 }
+            }
 
-                // lattice debug upload
-                {
-                    let xpbd_dbg = &storage.lattice_debug;
-                    let constraints = self.lattice.links().relation_slice();
-                    let imap_nodes = self.lattice.nodes().handles();
-                    let pod_nodes = self.lattice.nodes().current_pos_slice();
-                    let selected_link = {
-                        let handle = self.selection.unwrap_or_default();
-                        self.lattice.links().solve_indirect(handle).unwrap_or_default()
-                    };
-
-                    let node_count = self.lattice.links().len() as u32;
-                    storage.lattice_constraint_count.store(node_count, Ordering::Release);
-
-                    // SAFETY: the use of LayoutXpbdDebugData ensures we blit to a
-                    // valid section of the partitioned buffer.
-                    unsafe {
-                        xpbd_dbg.blit_part(buf_idx, LayoutXpbdDebugData::Constraints as usize, constraints, 0);
-                        xpbd_dbg.blit_part(buf_idx, LayoutXpbdDebugData::ImapNodes as usize, imap_nodes, 0);
-                        xpbd_dbg.blit_part_padded(buf_idx, LayoutXpbdDebugData::PodNodes as usize, pod_nodes, 0, VEC3_VEC4_PADDING);
-                        xpbd_dbg.blit_part(buf_idx, LayoutXpbdDebugData::ISelected as usize, &[selected_link], 0);
-                    }
-                }
-
-                // final command queue copy
-                {
-                    let commands = &storage.command;
-                    let mut data = commands.view_section_mut(buf_idx);
-                    if let Err(overflow) = command_queue.upload(&mut data) {
-                        event!(
-                            name: "boundary.upload_gpu.command.overflow",
-                            tracing::Level::WARN,
-                            "render command queue overflow during upload: {overflow} commands could not be uploaded and will be discarded"
-                        )
-                    }
-                }
-            });
+            // final command queue copy
+            self.upload_gpu_commands(
+                command_queue,
+                command_queue.first_group().unwrap(),
+                storage,
+                buf_idx,
+            );
         });
     }
 
@@ -363,6 +456,26 @@ impl State {
             rotation,
             scale.to_homogeneous(),
         ))
+    }
+
+    fn upload_gpu_commands(
+        &self,
+        command_queue: &GpuCommandQueue<ethel::DrawCommand, RenderGroup>,
+        group: RenderGroup,
+        frame_data: &FrameDataBuffers,
+        tri_section: usize,
+    ) {
+        let buffer = match group {
+            RenderGroup::Generic => &frame_data.generic_commands,
+            RenderGroup::Fragment => &frame_data.fragment_commands,
+            RenderGroup::Debris => &frame_data.debris_commands,
+            RenderGroup::LatticeDebug => unimplemented!("lattice debug has no command buffer"),
+        };
+        let mut data = buffer.view_section_mut(tri_section);
+
+        if let Some(next) = command_queue.upload_next_group(&mut data) {
+            self.upload_gpu_commands(command_queue, next, frame_data, tri_section);
+        }
     }
 
     fn delete_disabled_fragments(&mut self) {

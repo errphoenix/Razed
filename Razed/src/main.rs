@@ -8,6 +8,7 @@ use janus::{context::Setup, window::DisplayParameters};
 use crate::{
     data::FrameDataBuffers,
     procedural::{CubeVoronoi, voxel_grid},
+    render::RenderGroup,
 };
 
 mod data;
@@ -18,7 +19,7 @@ mod structure;
 
 const DISPLAY_PARAMS: DisplayParameters = DisplayParameters::fullscreen("Razed");
 
-type State = ethel::state::State<FrameDataBuffers, state::State>;
+type State = ethel::state::State<FrameDataBuffers, state::State, RenderGroup>;
 type Renderer = ethel::render::Renderer<FrameDataBuffers, render::Renderer>;
 
 fn main() {

@@ -2,9 +2,34 @@ pub mod shaders;
 
 use std::sync::atomic::Ordering;
 
-use ethel::render::command::GpuCommandDispatch;
+use ethel::render::command::{DrawGroups, GpuCommandDispatch};
 
-use crate::data::{FrameDataBuffers, LayoutFragmentData};
+use crate::data::{FrameDataBuffers, LayoutDebrisData, LayoutFragmentData};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RenderGroup {
+    Generic,
+    Fragment,
+    Debris,
+    LatticeDebug,
+}
+
+impl std::fmt::Display for RenderGroup {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl DrawGroups for RenderGroup {
+    fn as_str(&self) -> &'static str {
+        match self {
+            RenderGroup::Generic => "generic",
+            RenderGroup::Fragment => "fragments",
+            RenderGroup::Debris => "debris_n_rubber",
+            RenderGroup::LatticeDebug => "lattice_debug",
+        }
+    }
+}
 
 #[derive(Debug, Default)]
 pub struct Renderer {

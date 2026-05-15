@@ -9,9 +9,15 @@ use ethel::{
 
 use crate::structure::fragment::ANCHORS_COUNT as FRAGMENT_ANCHORS_COUNT;
 
+pub const FRAGMENT_COMMANDS_ALLOC: usize = 32_000;
+pub const DEBRIS_COMMANDS_ALLOC: usize = 32_000;
+
+/// Temporarily forced to 1 to save memory as generic objects are currently
+/// unused
+pub const GENERIC_COMMANDS_ALLOC: usize = 1;
+
 pub const RENDERABLE_STORAGE_PARTS: usize = 8;
 pub const ENTITY_ALLOCATION: usize = 8192;
-pub const COMMAND_QUEUE_ALLOC: usize = 32_000;
 
 pub const LATTICE_CONSTRAINT_ALLOC: usize = 4096;
 pub const LATTICE_NODE_ALLOC: usize = 512;
@@ -144,7 +150,9 @@ layout_buffer! {
 
 #[derive(Debug, Default)]
 pub struct FrameDataBuffers {
-    pub command: TriBuffer<DrawCommand>,
+    pub fragment_commands: TriBuffer<DrawCommand>,
+    pub debris_commands: TriBuffer<DrawCommand>,
+    pub generic_commands: TriBuffer<DrawCommand>,
 
     pub generic_objects: PartitionedTriBuffer<RENDERABLE_STORAGE_PARTS>,
     pub fragments: PartitionedTriBuffer<FRAGMENTS_STORAGE_PARTS>,
@@ -170,7 +178,9 @@ impl FrameDataBuffers {
         LayoutDebrisData::initialise_partitions(&debris_data);
 
         Self {
-            command: TriBuffer::zeroed(COMMAND_QUEUE_ALLOC),
+            fragment_commands: TriBuffer::zeroed(FRAGMENT_COMMANDS_ALLOC),
+            debris_commands: TriBuffer::zeroed(DEBRIS_COMMANDS_ALLOC),
+            generic_commands: TriBuffer::zeroed(GENERIC_COMMANDS_ALLOC),
 
             generic_objects: generic_objects_buffer,
             fragments: fragment_data,
