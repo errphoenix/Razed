@@ -12,11 +12,22 @@ pub fn compute_normals<F: Face>(faces: &[F], normals: &mut [glam::Vec3], vertice
         if len == 0 {
             continue;
         }
+
+        let face_center = {
+            let mut center = face
+                .iter_indices()
+                .take(len)
+                .map(|i| vertices[i as usize])
+                .sum::<glam::Vec3>();
+            center /= len as f32;
+            center
+        };
+
         for v_i in 0..(len - 1) {
             let vi0 = face[v_i];
-            let vi1 = face[v_i + 1];
-            let v0 = vertices[vi0 as usize];
-            let v1 = vertices[vi1 as usize];
+            let vi1 = face[(v_i + 1) % len];
+            let v0 = vertices[vi0 as usize] - face_center;
+            let v1 = vertices[vi1 as usize] - face_center;
             *normal += v0.cross(v1);
         }
 

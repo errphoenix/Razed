@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{Face, Facen, Plane, convex::Convex, post_process};
+use crate::{Face, Facen, Plane, convex::Convex};
 
 #[derive(Clone, Debug, Default)]
 pub struct ClipMesh {
@@ -393,12 +393,22 @@ fn compute_normal(ordered_vertices: &[u32], g_vertices: &[ClipVertex]) -> glam::
     let mut normal = glam::Vec3::ZERO;
     let len = ordered_vertices.len();
 
+    let face_center = {
+        let mut center = ordered_vertices
+            .iter()
+            .take(len)
+            .map(|&i| g_vertices[i as usize].point)
+            .sum::<glam::Vec3>();
+        center /= len as f32;
+        center
+    };
+
     for i in 0..len {
         let vi0 = ordered_vertices[i];
         let vi1 = ordered_vertices[(i + 1) % len];
 
-        let v0 = g_vertices[vi0 as usize].point;
-        let v1 = g_vertices[vi1 as usize].point;
+        let v0 = g_vertices[vi0 as usize].point - face_center;
+        let v1 = g_vertices[vi1 as usize].point - face_center;
 
         normal += v0.cross(v1);
     }
