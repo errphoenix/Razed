@@ -50,7 +50,7 @@ fn main() {
     let ctx = janus::context::Context::new(
         |state: &mut State, renderer: &mut Renderer| {
             state.handler_init_callback(|handle| {
-                handle.fragment_mesh_mapping = fragment_mesh_mapping;
+                handle.frag_meshmap = fragment_mesh_mapping;
             });
             start_handler.init(state, renderer)
         },

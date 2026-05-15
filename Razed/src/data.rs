@@ -1,23 +1,28 @@
 use std::sync::{Arc, atomic::AtomicU32};
 
+use crate::render::shaders;
 use ethel::{
     DrawCommand, layout_buffer, layout_mesh_buffer,
-    render::buffer::{InitStrategy, PartitionedTriBuffer, TriBuffer},
+    render::buffer::{PartitionedTriBuffer, TriBuffer},
     state::data::{DirectIndex, IndirectIndex},
 };
 
 use crate::structure::fragment::ANCHORS_COUNT as FRAGMENT_ANCHORS_COUNT;
 
-pub const RENDER_STORAGE_PARTS: usize = 8;
+pub const RENDERABLE_STORAGE_PARTS: usize = 8;
 pub const ENTITY_ALLOCATION: usize = 8192;
 pub const COMMAND_QUEUE_ALLOC: usize = 32_000;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd, Eq, Ord, Hash)]
-#[repr(C)]
-pub struct Renderable {
-    pub mesh_id: u32,
-    pub data_handle: IndirectIndex,
-}
+pub const LATTICE_CONSTRAINT_ALLOC: usize = 4096;
+pub const LATTICE_NODE_ALLOC: usize = 512;
+pub const LATTICE_STORAGE_PARTS: usize = 4;
+
+pub const DEBRIS_ALLOC: usize = 16384;
+pub const DEBRIS_STORAGE_PARTS: usize = 3;
+
+pub const FRAGMENTS_ALLOC: usize = 16384;
+pub const FRAGMENTS_STORAGE_PARTS: usize = 8;
+pub const DEFORM_POINTS_ALLOC: usize = 32000;
 
 pub const MESH_BUFFER_LEN: usize = 2048;
 pub const MESH_BUFFER_SIZE: usize = 65536;
@@ -25,160 +30,135 @@ pub const MESH_BUFFER_SIZE: usize = 65536;
 layout_mesh_buffer!(count: MESH_BUFFER_LEN; vertices: MESH_BUFFER_SIZE);
 
 layout_buffer! {
-    const EntityData: RENDER_STORAGE_PARTS, {
-        enum EntityIndexMap: ENTITY_ALLOCATION => {
-            type Renderable;
+    const RenderableData: RENDERABLE_STORAGE_PARTS, {
+        enum MeshID: ENTITY_ALLOCATION => {
+            type u32;
             bind 0;
             shader 0;
         };
-        enum MeshData: ENTITY_ALLOCATION => {
-            type u32;
+        enum PodPositions: ENTITY_ALLOCATION => {
+            type [f32; 4];
             bind 1;
             shader 1;
         };
-
-        enum IMapEntityData: ENTITY_ALLOCATION => {
-            type u32;
+        enum PodRotations: ENTITY_ALLOCATION => {
+            type [f32; 4];
             bind 2;
             shader 2;
         };
-        enum PodPositions: ENTITY_ALLOCATION => {
-            type [f32; 4];
-            bind 3;
-            shader 4;
-        };
-        enum PodRotations: ENTITY_ALLOCATION => {
-            type [f32; 4];
-            bind 4;
-            shader 5;
-        };
         enum PodScales: ENTITY_ALLOCATION => {
             type [f32; 4];
-            bind 5;
-            shader 6;
+            bind 3;
+            shader 3;
         };
     }
 }
 
-pub const XPBD_CONSTRAINTS_ALLOC: usize = 4096;
-pub const XPBD_NODES_ALLOC: usize = 512;
-
 layout_buffer! {
-    const XpbdDebugData: 4, {
-        enum Constraints: XPBD_CONSTRAINTS_ALLOC => {
+    const XpbdDebugData: LATTICE_STORAGE_PARTS, {
+        enum Constraints: LATTICE_CONSTRAINT_ALLOC => {
             type [IndirectIndex; 2];
             bind 0;
-            shader 4;
+            shader shaders::debug::SSBO_INDEX_POD_CONSTRAINTS;
         };
 
-        enum IMapNodes: XPBD_NODES_ALLOC => {
+        enum IMapNodes: LATTICE_NODE_ALLOC => {
             type IndirectIndex;
             bind 1;
-            shader 5;
+            shader shaders::debug::SSBO_INDEX_IMAP_NODES;
         };
-        enum PodNodes: XPBD_CONSTRAINTS_ALLOC => {
+        enum PodNodes: LATTICE_CONSTRAINT_ALLOC => {
             type [f32; 4];
             bind 2;
-            shader 6;
+            shader shaders::debug::SSBO_INDEX_POD_NODES;
         };
 
         enum I_Selected: 1 => {
             type DirectIndex;
             bind 3;
-            shader 7;
+            shader shaders::debug::SSBO_INDEX_I_SELECTED;
         };
     }
 }
 
-pub const FRAGMENTS_ALLOC: usize = 16384;
-pub const FRAGMENTS_DATA_PARTS: usize = 8;
-
 layout_buffer! {
-    const FragmentData: FRAGMENTS_DATA_PARTS, {
+    const FragmentData: FRAGMENTS_STORAGE_PARTS, {
         enum PodAnchors: FRAGMENTS_ALLOC => {
             type [IndirectIndex; FRAGMENT_ANCHORS_COUNT];
             bind 0;
-            shader 0;
+            shader shaders::fragments::SSBO_INDEX_POD_ANCHORS;
         };
         enum PodAnchorsWeights: FRAGMENTS_ALLOC => {
             type [f32; FRAGMENT_ANCHORS_COUNT];
             bind 1;
-            shader 1;
+            shader shaders::fragments::SSBO_INDEX_POD_WEIGHTS;
         };
         enum PodBindPose: FRAGMENTS_ALLOC => {
             type glam::Vec4;
             bind 2;
-            shader 2;
+            shader shaders::fragments::SSBO_INDEX_POD_BINDPOSE;
         };
         enum PodMeshId: FRAGMENTS_ALLOC => {
             type ethel::mesh::Id;
             bind 3;
-            shader 3;
+            shader shaders::fragments::SSBO_INDEX_POD_MESHID;
         };
 
         enum IMapDeforms: DEFORM_POINTS_ALLOC => {
             type IndirectIndex;
             bind 4;
-            shader 6;
+            shader shaders::fragments::SSBO_INDEX_IMAP_DEFORMS;
         };
         enum PodDeformsPositions: DEFORM_POINTS_ALLOC => {
             type [f32; 4];
             bind 5;
-            shader 7;
+            shader shaders::fragments::SSBO_INDEX_POD_DEFORMS_POSITIONS;
         };
         enum PodDeformsBindPose: DEFORM_POINTS_ALLOC => {
             type [f32; 4];
             bind 6;
-            shader 8;
+            shader shaders::fragments::SSBO_INDEX_POD_DEFORMS_BINDPOSE;
         };
     }
 }
 
-pub const DEBRIS_ALLOC: usize = 16384;
-pub const DEBRIS_DATA_PARTS: usize = 3;
-
 layout_buffer! {
-    const DebrisData: DEBRIS_DATA_PARTS, {
+    const DebrisData: DEBRIS_STORAGE_PARTS, {
         enum PodPositions: DEBRIS_ALLOC => {
             type [f32; 4];
             bind 0;
-            shader 0;
+            shader shaders::debris::SSBO_INDEX_POD_POSITIONS;
         };
         enum PodRotations: DEBRIS_ALLOC => {
             type [f32; 4];
             bind 1;
-            shader 1;
+            shader shaders::debris::SSBO_INDEX_POD_ROTATIONS;
         };
         enum PodMeshId: DEBRIS_ALLOC => {
             type ethel::mesh::Id;
             bind 2;
-            shader 2;
+            shader shaders::debris::SSBO_INDEX_POD_MESHID;
         };
     }
 }
-
-pub const DEFORM_POINTS_ALLOC: usize = 32000;
 
 #[derive(Debug, Default)]
 pub struct FrameDataBuffers {
     pub command: TriBuffer<DrawCommand>,
 
-    pub scene: PartitionedTriBuffer<RENDER_STORAGE_PARTS>,
-    pub fragments: PartitionedTriBuffer<FRAGMENTS_DATA_PARTS>,
-    pub debris: PartitionedTriBuffer<DEBRIS_DATA_PARTS>,
+    pub generic_objects: PartitionedTriBuffer<RENDERABLE_STORAGE_PARTS>,
+    pub fragments: PartitionedTriBuffer<FRAGMENTS_STORAGE_PARTS>,
+    pub debris: PartitionedTriBuffer<DEBRIS_STORAGE_PARTS>,
     pub debris_count: Arc<AtomicU32>,
 
-    pub xpbd_debug: PartitionedTriBuffer<4>,
-    pub xpbd_debug_link_count: Arc<AtomicU32>,
-
-    pub deform_debug: TriBuffer<glam::Vec4>,
-    pub deform_debug_count: Arc<AtomicU32>,
+    pub lattice_debug: PartitionedTriBuffer<LATTICE_STORAGE_PARTS>,
+    pub lattice_constraint_count: Arc<AtomicU32>,
 }
 
 impl FrameDataBuffers {
     pub fn new() -> Self {
-        let scene_data_buffer = PartitionedTriBuffer::new(LayoutEntityData::create());
-        LayoutEntityData::initialise_partitions(&scene_data_buffer);
+        let generic_objects_buffer = PartitionedTriBuffer::new(LayoutRenderableData::create());
+        LayoutRenderableData::initialise_partitions(&generic_objects_buffer);
 
         let xpbd_visualiser = PartitionedTriBuffer::new(LayoutXpbdDebugData::create());
         LayoutXpbdDebugData::initialise_partitions(&xpbd_visualiser);
@@ -189,24 +169,16 @@ impl FrameDataBuffers {
         let debris_data = PartitionedTriBuffer::new(LayoutDebrisData::create());
         LayoutDebrisData::initialise_partitions(&debris_data);
 
-        let deform_debug = TriBuffer::new(
-            DEFORM_POINTS_ALLOC,
-            InitStrategy::FillWith(|| glam::Vec4::NAN),
-        );
-
         Self {
             command: TriBuffer::zeroed(COMMAND_QUEUE_ALLOC),
 
-            scene: scene_data_buffer,
+            generic_objects: generic_objects_buffer,
             fragments: fragment_data,
             debris: debris_data,
             debris_count: Arc::new(AtomicU32::new(0)),
 
-            xpbd_debug: xpbd_visualiser,
-            xpbd_debug_link_count: Arc::new(AtomicU32::new(0)),
-
-            deform_debug,
-            deform_debug_count: Arc::new(AtomicU32::new(0)),
+            lattice_debug: xpbd_visualiser,
+            lattice_constraint_count: Arc::new(AtomicU32::new(0)),
         }
     }
 }

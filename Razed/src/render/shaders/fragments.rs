@@ -143,7 +143,6 @@ ethel::shader_glsl! {
             uint fragment_id = gl_DrawID + 1;
 
             uint mesh_id = pod_mesh_id[fragment_id];
-            //uint mesh_id = 5;
             Metadata metadata = metadata[mesh_id];
             uint offset = metadata.offset;
             uint index = offset + gl_VertexID;
@@ -203,7 +202,7 @@ ethel::shader_glsl! {
             float d6 = distance(w_rest, b6) + 0.000001;
             float d7 = distance(w_rest, b7) + 0.000001;
 
-            const float RIGIDITY = 4.0;
+            const float RIGIDITY = 2.0;
             float vw0 = 1.0 / pow(d0, RIGIDITY);
             float vw1 = 1.0 / pow(d1, RIGIDITY);
             float vw2 = 1.0 / pow(d2, RIGIDITY);
@@ -235,7 +234,8 @@ ethel::shader_glsl! {
 
             vec4 world = vec4(deform + w_rest, 1.0);
             fs_world = world.xyz;
-            fs_normal = mix(normal, normalize(abs(world.xyz)), 0.35);
+            //fs_normal = mix(normal, normalize(abs(world.xyz)), 0.35);
+            fs_normal = normal;
             fs_color = vec4(vec3(0.8), 1.0);
 
             gl_Position = projection * view * world;

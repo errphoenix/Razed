@@ -482,7 +482,7 @@ impl FragmentSystem {
     ///
     /// The `voxels` [`VoxelGrid`] is expected to have been built previously
     /// with [`VoxelGrid::build`].
-    pub fn generate_fragments(
+    pub fn generate(
         &mut self,
         origin: glam::Vec3,
         grid: &VoxelGrid,

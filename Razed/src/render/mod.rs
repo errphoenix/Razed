@@ -1,4 +1,4 @@
-mod shaders;
+pub mod shaders;
 
 use std::sync::atomic::Ordering;
 
@@ -106,10 +106,10 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         }
         {
             self.lattice_shader.bind();
-            let xpbd_dbg = &frame_data.xpbd_debug;
+            let xpbd_dbg = &frame_data.lattice_debug;
             xpbd_dbg.bind_shader_storage(buf_idx);
 
-            let xpbd_count = frame_data.xpbd_debug_link_count.load(Ordering::Acquire) as i32;
+            let xpbd_count = frame_data.lattice_constraint_count.load(Ordering::Acquire) as i32;
 
             unsafe {
                 janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 2, xpbd_count);

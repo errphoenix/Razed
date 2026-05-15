@@ -2,8 +2,8 @@ use std::{io::BufWriter, path::PathBuf, str::FromStr, sync::atomic::Ordering};
 
 use crate::{
     data::{
-        FrameDataBuffers, LayoutDebrisData, LayoutEntityData, LayoutFragmentData,
-        LayoutXpbdDebugData, Renderable,
+        FrameDataBuffers, LayoutDebrisData, LayoutFragmentData, LayoutRenderableData,
+        LayoutXpbdDebugData,
     },
     procedural::{VoxelGrid, VoxelGridOptions},
     structure::{
@@ -29,7 +29,8 @@ use physics::rigid::RbVelocity;
 use tracing::{Level, event};
 
 ethel::table_spec! {
-    struct EntityData {
+    struct Renderable {
+        mesh_id: ethel::mesh::Id;
         position: glam::Vec4;
         rotation: glam::Quat;
         scale: glam::Vec4;
@@ -42,10 +43,11 @@ const GROUND_LEVEL: f32 = 0.0;
 pub struct State {
     profiler: ethel::profile::Profiler,
 
-    renderables: Vec<Renderable>,
+    camera: camera::Orbital,
     mesh_ids: Vec<ethel::mesh::Id>,
 
-    entity_data: EntityDataRowTable,
+    pub generic_objects: RenderableRowTable,
+
     lattice: LatticeSystem,
     deforms: DeformSystem,
     fragments: FragmentSystem,
@@ -61,9 +63,7 @@ pub struct State {
     selection: Option<IndirectIndex>,
     dead_fragments: Vec<IndirectIndex>,
 
-    pub fragment_mesh_mapping: FxSpatialHash<ethel::mesh::Id>,
-
-    camera: camera::Orbital,
+    pub frag_meshmap: FxSpatialHash<ethel::mesh::Id>,
 }
 
 const CAMERA_YAW_CLAMP: std::ops::Range<f32> = f32::NEG_INFINITY..f32::INFINITY;
@@ -73,26 +73,26 @@ const CAMERA_PITCH_CLAMP: std::ops::Range<f32> =
 impl Default for State {
     fn default() -> Self {
         Self {
-            profiler: ethel::profile::Profiler::default(),
             lattice: LatticeSystem::new(XpbdSolver::new(
                 XpbdOptions::default().with_ground_level(Some(GROUND_LEVEL)),
             )),
-            lattice_bind_pose: Default::default(),
-            deforms: Default::default(),
-            fragments: Default::default(),
-            debris: Default::default(),
-            renderables: Default::default(),
-            mesh_ids: Default::default(),
-            entity_data: Default::default(),
-            frag_map: Default::default(),
-            selection: Default::default(),
-            dead_fragments: Default::default(),
-            fragment_mesh_mapping: Default::default(),
             camera: camera::Orbital::new(
                 Default::default(),
                 Default::default(),
                 camera::RotationLimits::new(CAMERA_YAW_CLAMP, CAMERA_PITCH_CLAMP),
             ),
+
+            profiler: Default::default(),
+            lattice_bind_pose: Default::default(),
+            deforms: Default::default(),
+            fragments: Default::default(),
+            debris: Default::default(),
+            mesh_ids: Default::default(),
+            generic_objects: Default::default(),
+            frag_map: Default::default(),
+            selection: Default::default(),
+            dead_fragments: Default::default(),
+            frag_meshmap: Default::default(),
         }
     }
 }
@@ -172,55 +172,40 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     storage.debris_count.store(debris_count, Ordering::Release);
                 }
 
-                // standard scene upload
+                // generic objects upload
                 {
-                    let scene = &storage.scene;
+                    let scene = &storage.generic_objects;
 
-                    let entity_map = &self.renderables;
-                    let mesh_handles = &self.mesh_ids;
+                    let mesh_ids = self.generic_objects.mesh_id_slice();
+                    let pod_positions = self.generic_objects.position_slice();
+                    let pod_rotations = self.generic_objects.rotation_slice();
+                    let pod_scales = self.generic_objects.scale_slice();
+
+                    // SAFETY: the use of LayoutRenderableData ensures we blit
+                    // to a valid section of the partitioned buffer.
                     unsafe {
                         scene.blit_part(
                             buf_idx,
-                            LayoutEntityData::EntityIndexMap as usize,
-                            entity_map,
-                            0,
-                        );
-                        scene.blit_part(
-                            buf_idx,
-                            LayoutEntityData::MeshData as usize,
-                            mesh_handles,
-                            0,
-                        );
-                    }
-
-                    let imap_entity_data = self.entity_data.handles();
-                    let pod_positions = self.entity_data.position_slice();
-                    let pod_rotations = self.entity_data.rotation_slice();
-                    let pod_scales = self.entity_data.scale_slice();
-
-                    unsafe {
-                        scene.blit_part(
-                            buf_idx,
-                            LayoutEntityData::ImapEntityData as usize,
-                            imap_entity_data,
+                            LayoutRenderableData::MeshId as usize,
+                            mesh_ids,
                             0,
                         );
 
                         scene.blit_part(
                             buf_idx,
-                            LayoutEntityData::PodPositions as usize,
+                            LayoutRenderableData::PodPositions as usize,
                             pod_positions,
                             0,
                         );
                         scene.blit_part(
                             buf_idx,
-                            LayoutEntityData::PodRotations as usize,
+                            LayoutRenderableData::PodRotations as usize,
                             pod_rotations,
                             0,
                         );
                         scene.blit_part(
                             buf_idx,
-                            LayoutEntityData::PodScales as usize,
+                            LayoutRenderableData::PodScales as usize,
                             pod_scales,
                             0,
                         );
@@ -229,7 +214,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
 
                 // lattice debug upload
                 {
-                    let xpbd_dbg = &storage.xpbd_debug;
+                    let xpbd_dbg = &storage.lattice_debug;
                     let constraints = self.lattice.links().relation_slice();
                     let imap_nodes = self.lattice.nodes().handles();
                     let pod_nodes = self.lattice.nodes().current_pos_slice();
@@ -239,7 +224,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     };
 
                     let node_count = self.lattice.links().len() as u32;
-                    storage.xpbd_debug_link_count.store(node_count, Ordering::Release);
+                    storage.lattice_constraint_count.store(node_count, Ordering::Release);
 
                     // SAFETY: the use of LayoutXpbdDebugData ensures we blit to a
                     // valid section of the partitioned buffer.
@@ -251,14 +236,7 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
                     }
                 }
 
-                // cage deforms debug upload
-                // {
-                //     let deform_dbg = &storage.deform_debug;
-                //     let deform_points = self.deforms.data().deformed_slice();
-                //     deform_dbg.blit_section_padded(buf_idx, deform_points, 0, VEC3_VEC4_PADDING);
-                //     storage.deform_debug_count.store(self.deforms.data().len() as u32, Ordering::Release);
-                // }
-
+                // final command queue copy
                 {
                     let commands = &storage.command;
                     let mut data = commands.view_section_mut(buf_idx);
@@ -372,6 +350,21 @@ impl ethel::StateHandler<FrameDataBuffers> for State {
 }
 
 impl State {
+    pub fn create_generic_object(
+        &mut self,
+        mesh: ethel::mesh::Id,
+        position: glam::Vec3,
+        rotation: glam::Quat,
+        scale: glam::Vec3,
+    ) -> IndirectIndex {
+        self.generic_objects.insert((
+            mesh,
+            position.to_homogeneous(),
+            rotation,
+            scale.to_homogeneous(),
+        ))
+    }
+
     fn delete_disabled_fragments(&mut self) {
         self.profiler.capture_duration("fragment_delete_old", || {
             {
@@ -567,7 +560,7 @@ impl State {
         voxel_grid.repopulate_defaults();
 
         let center = center + glam::vec3(0.0, TOTAL_HEIGHT * 0.5, 0.0);
-        self.register_structure(center, &voxel_grid, lattice);
+        self.generate_structure(center, &voxel_grid, lattice);
     }
 
     fn save_profiler_report(&mut self) {
@@ -658,31 +651,10 @@ impl State {
         }
     }
 
-    pub fn create_renderable(
-        &mut self,
-        mesh_id: u32,
-        position: glam::Vec3,
-        rotation: glam::Quat,
-        scale: glam::Vec3,
-    ) -> u32 {
-        let position = glam::Vec4::new(position.x, position.y, position.z, 1.0);
-        let scale = glam::Vec4::new(scale.x, scale.y, scale.z, 1.0);
-
-        let data_handle = self.entity_data.insert((position, rotation, scale));
-        let entity = Renderable {
-            mesh_id,
-            data_handle,
-        };
-
-        let id = self.renderables.len();
-        self.renderables.push(entity);
-        id as u32
-    }
-
-    pub fn register_structure(
+    pub fn generate_structure(
         &mut self,
         origin: glam::Vec3,
-        voxel_grid: &VoxelGrid,
+        grid: &VoxelGrid,
         lattice: RawXpbdLattice,
     ) {
         let l0 = self.lattice.nodes().handles().len();
@@ -697,7 +669,7 @@ impl State {
         let mut lattice_hash = FxSpatialHash::new(SpatialResolution::new(1.0));
         lattice_hash.dump_soa(lattice.current_pos, lattice.handles);
 
-        let mut deforms_vox = VoxelGrid::new(voxel_grid.generator, *(voxel_grid.options()));
+        let mut deforms_vox = VoxelGrid::new(grid.generator, *(grid.options()));
         deforms_vox.repopulate_defaults();
         let generated_len =
             self.deforms
@@ -716,46 +688,23 @@ impl State {
             self.frag_map.push(0);
         }
 
-        // load initial node positions as bind pose
-        if self.lattice_bind_pose.is_empty() {
-            self.lattice_bind_pose.push(Default::default());
-        }
-        // cut off length to leave l0..l1 range to blank state
-        self.lattice_bind_pose.resize(l0, Default::default());
-
-        let new_positions = &self.lattice.nodes().current_pos_slice()[l0..l1];
-        self.lattice_bind_pose.extend(new_positions);
-
-        let l0 = self.fragments.data().handles().len();
+        // load current node positions as reference bind poses
         {
-            let abs_voxel_grid = voxel_grid.to_abs_space();
-            self.fragments
-                .generate_fragments(origin, &abs_voxel_grid, &self.fragment_mesh_mapping);
+            if self.lattice_bind_pose.is_empty() {
+                self.lattice_bind_pose.push(Default::default());
+            }
+            // cut off length to leave l0..l1 range to blank state
+            self.lattice_bind_pose.resize(l0, Default::default());
+
+            let new_positions = &self.lattice.nodes().current_pos_slice()[l0..l1];
+            self.lattice_bind_pose.extend(new_positions);
         }
+
+        let abs_grid = grid.to_abs_space();
+        let frag_meshmap = &self.frag_meshmap;
+        self.fragments.generate(origin, &abs_grid, &frag_meshmap);
+
         self.fragments.bind_lattice(&lattice_hash, &lattice);
         self.fragments.bind_deforms(&deforms_hash, &deforms);
-        let l1 = self.fragments.data().handles().len();
-
-        // currently unnecessary
-        // fragments are rendered directly, not as renderables
-        // eventually this will no longer be the case: fragments will be
-        // adapted to renderables through compute shaders.
-        // for frag_idx in l0..l1 {
-        //     let table = self.fragments.fragments();
-        //     let position = *unsafe { table.position_slice().get_unchecked(frag_idx) };
-        //     let e_id = self.create_renderable(0, position, Default::default(), glam::Vec3::ONE);
-        //     self.frag_map.push(e_id);
-        // }
-
-        // debug render of nodes
-        // for &node_id in &lattice_map.nodes {
-        //     let position = {
-        //         let nodes = self.xpbd.nodes();
-        //         let pos_id = unsafe { nodes.get_indirect_unchecked(node_id) };
-        //         *unsafe { nodes.current_pos_slice().get_unchecked(pos_id as usize) }
-        //     };
-        //
-        //     self.create_renderable(0, position, Default::default(), glam::Vec3::ONE * 0.5);
-        // }
     }
 }

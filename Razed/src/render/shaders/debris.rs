@@ -14,6 +14,10 @@ macro_rules! ssbo_binding {
     };
 }
 
+pub const SSBO_INDEX_POD_POSITIONS: u32 = ssbo_binding!(POD_Positions);
+pub const SSBO_INDEX_POD_ROTATIONS: u32 = ssbo_binding!(POD_Rotations);
+pub const SSBO_INDEX_POD_MESHID: u32 = ssbo_binding!(POD_MeshID);
+
 ethel::shader_glsl! {
     struct Debris > [460] {
         common {};

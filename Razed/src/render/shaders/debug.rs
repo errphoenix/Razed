@@ -1,17 +1,7 @@
 use super::commons;
-use ethel::shader::{GlslUniform, ShaderKind};
 
-mod lattice {
-    use ethel::{shader::GlslStruct, state::data::IndirectIndex};
-
-    ethel::shader_glsl_struct! {
-        struct Constraint {
-            nodes[2]: [IndirectIndex; 2] => IndirectIndex;
-        }
-    }
-
-    pub const TYPE_CONSTRAINT: GlslStruct = ConstraintGlslStruct::as_definition();
-}
+use ethel::shader::{GlslStruct, GlslUniform, ShaderKind};
+use ethel::state::data::IndirectIndex;
 
 macro_rules! ssbo_binding {
     (POD_Constraints) => {
@@ -27,6 +17,19 @@ macro_rules! ssbo_binding {
         7
     };
 }
+
+ethel::shader_glsl_struct! {
+    struct Constraint {
+        nodes[2]: [IndirectIndex; 2] => IndirectIndex;
+    }
+}
+
+pub const TYPE_CONSTRAINT: GlslStruct = ConstraintGlslStruct::as_definition();
+
+pub const SSBO_INDEX_POD_CONSTRAINTS: u32 = ssbo_binding!(POD_Constraints);
+pub const SSBO_INDEX_POD_NODES: u32 = ssbo_binding!(POD_Nodes);
+pub const SSBO_INDEX_I_SELECTED: u32 = ssbo_binding!(I_Selected);
+pub const SSBO_INDEX_IMAP_NODES: u32 = ssbo_binding!(IMap_Nodes);
 
 ethel::shader_glsl! {
     struct DebugLattice > [460] {
@@ -48,7 +51,7 @@ ethel::shader_glsl! {
                 commons::TYPE_INDEX_INDIRECT
                 commons::TYPE_INDEX_DIRECT
 
-                lattice::TYPE_CONSTRAINT
+                TYPE_CONSTRAINT
             };
 
             ssbo {
