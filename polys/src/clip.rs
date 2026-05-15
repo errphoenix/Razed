@@ -335,7 +335,7 @@ impl ClipMesh {
 
     pub fn process_faces(&mut self, clip_plane: &Plane) {
         let closed_face = ClipFace {
-            normal: clip_plane.normal,
+            normal: -clip_plane.normal,
             ..Default::default()
         };
         let cfi = self.faces.len();
