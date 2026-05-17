@@ -78,57 +78,88 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         }
         let buf_idx = section.as_index();
 
-        let frags = &frame_data.fragments;
-        frags.bind_shader_storage(buf_idx);
+        let frags_buf = &frame_data.fragments;
+        let frags_cmd = &frame_data.fragment_commands;
+        let frags_cmd_view = frags_cmd.view_section(buf_idx);
 
-        let cmd_buf = &frame_data.command;
-        let cmd_view = cmd_buf.view_section(buf_idx);
+        const COMPUTE_WG_INVOCATIONS: u32 =
+            shaders::compute::process_command::WORKGROUP_INVOCATIONS;
 
         {
-            const COMPUTE_WG_INVOCATIONS: u32 =
-                shaders::compute::process_command::WORKGROUP_INVOCATIONS;
+            frags_buf.bind_shader_storage(buf_idx);
+            {
+                self.command_process_compute.bind();
+                let cmd_len = frags_cmd_view.length();
+                let wg_d_count = cmd_len.div_ceil(COMPUTE_WG_INVOCATIONS);
+                self.command_process_compute
+                    .set_workgroups_size(wg_d_count, 1, 1);
+                {
+                    let i_mesh_id =
+                        shaders::compute::process_command::SSBO_INDEX_FRAGMENTS_MESH_IDS;
+                    frags_buf.bind_shader_storage_single(
+                        buf_idx,
+                        LayoutFragmentData::PodMeshId as usize,
+                        Some(i_mesh_id),
+                    );
 
-            let cmd_len = cmd_view.length();
+                    let i_cmd_buf = shaders::compute::process_command::SSBO_INDEX_COMMAND_BUFFER;
+                    frags_cmd.bind_shader_storage(buf_idx, i_cmd_buf as usize, 0);
+                }
+                self.command_process_compute.dispatch();
+            }
+
+            janus::gl::barrier_shader_storage();
+            janus::gl::barrier_commands();
+
+            self.frags_shader.bind();
+            GpuCommandDispatch::from_view(frags_cmd_view).dispatch();
+        }
+
+        janus::gl::barrier_all();
+
+        let debris_buf = &frame_data.debris;
+        let debris_cmd = &frame_data.debris_commands;
+        let debris_cmd_view = debris_cmd.view_section(buf_idx);
+
+        debris_buf.bind_shader_storage(buf_idx);
+        {
+            self.command_process_compute.bind();
+            let cmd_len = debris_cmd_view.length();
             let wg_d_count = cmd_len.div_ceil(COMPUTE_WG_INVOCATIONS);
-
             self.command_process_compute
                 .set_workgroups_size(wg_d_count, 1, 1);
-
             {
                 let i_mesh_id = shaders::compute::process_command::SSBO_INDEX_FRAGMENTS_MESH_IDS;
-                frame_data.fragments.bind_shader_storage_single(
+                debris_buf.bind_shader_storage_single(
                     buf_idx,
-                    LayoutFragmentData::PodMeshId as usize,
+                    LayoutDebrisData::PodMeshId as usize,
                     Some(i_mesh_id),
                 );
 
                 let i_cmd_buf = shaders::compute::process_command::SSBO_INDEX_COMMAND_BUFFER;
-                frame_data
-                    .command
-                    .bind_shader_storage(buf_idx, i_cmd_buf as usize, 0);
+                debris_cmd.bind_shader_storage(buf_idx, i_cmd_buf as usize, 0);
             }
-
-            self.command_process_compute.bind();
             self.command_process_compute.dispatch();
-
-            janus::gl::barrier_shader_storage();
-            janus::gl::barrier_commands();
         }
 
-        self.frags_shader.bind();
-        GpuCommandDispatch::from_view(cmd_view).dispatch();
+        janus::gl::barrier_shader_storage();
+        janus::gl::barrier_commands();
 
-        {
-            self.debris_shader.bind();
-            let debris = &frame_data.debris;
-            debris.bind_shader_storage(buf_idx);
+        self.debris_shader.bind();
+        debris_buf.bind_shader_storage(buf_idx);
+        GpuCommandDispatch::from_view(debris_cmd_view).dispatch();
 
-            let debris_count = frame_data.debris_count.load(Ordering::Acquire) as i32;
+        // {
+        //     self.debris_shader.bind();
+        //     let debris = &frame_data.debris;
+        //     debris.bind_shader_storage(buf_idx);
 
-            unsafe {
-                janus::gl::DrawArraysInstanced(janus::gl::TRIANGLES, 0, 36, debris_count);
-            }
-        }
+        //     let debris_count = frame_data.debris_count.load(Ordering::Acquire) as i32;
+
+        //     unsafe {
+        //         janus::gl::DrawArraysInstanced(janus::gl::TRIANGLES, 0, 36, debris_count);
+        //     }
+        // }
         {
             self.lattice_shader.bind();
             let xpbd_dbg = &frame_data.lattice_debug;
