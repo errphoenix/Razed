@@ -69,8 +69,6 @@ impl UninitFragment {
     }
 }
 
-static mut TMP_MESH_ID: usize = 0;
-
 #[derive(Debug)]
 pub struct FragmentSystem {
     fragments: FragmentsRowTable,
@@ -366,7 +364,7 @@ impl FragmentSystem {
                     .for_each(|((cell, anchor_id), anchor_weight)| {
                         let deform = deforms_hash.get(cell).copied().expect("deforms hash neighbors are populated");
                         let point = deforms.pose(deform);
-                        let ds = fragment_world.distance_squared(*point);
+                        let ds = fragment_world.distance(*point);
 
                         *anchor_id = deform;
                         *anchor_weight = 1.0 / (ds + f32::EPSILON);

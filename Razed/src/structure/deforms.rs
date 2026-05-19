@@ -20,7 +20,6 @@ ethel::table_spec! {
 }
 
 pub const CONTROL_POINT_MAX_RANGE: f32 = 16.0;
-pub const RIGIDITY: f32 = 0.5;
 
 #[derive(Debug, Default)]
 pub struct DeformSystem {
@@ -116,8 +115,8 @@ impl DeformSystem {
                 |(ControlPoint { id, weight }, bind)| {
                     if id.as_int() != 0 {
                         *bind = *lattice.current_pos(*id);
-                        let ds = deformed.distance_squared(*bind) + f32::EPSILON;
-                        *weight = 1.0 / ds.powf(RIGIDITY);
+                        let ds = deformed.distance_squared(*bind);
+                        *weight = 1.0 / (ds + f32::EPSILON);
                     }
                 },
             );
@@ -250,12 +249,12 @@ impl DeformSystem {
                 // we assume node_hash has been loaded with the nodes of
                 // lattice, thus all handles are valid.
                 let position = *unsafe { lattice.current_pos_unchecked(node) };
-                let dist = point.distance_squared(position) + f32::EPSILON;
+                let ds = point.distance_squared(position);
 
                 binds[i] = position;
                 controllers[i] = ControlPoint {
                     id: node,
-                    weight: 1.0 / dist.powf(RIGIDITY),
+                    weight: 1.0 / (ds + f32::EPSILON),
                 };
             });
 

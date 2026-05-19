@@ -202,15 +202,14 @@ ethel::shader_glsl! {
             float d6 = distance(w_rest, b6) + 0.000001;
             float d7 = distance(w_rest, b7) + 0.000001;
 
-            const float RIGIDITY = 2.0;
-            float vw0 = 1.0 / pow(d0, RIGIDITY);
-            float vw1 = 1.0 / pow(d1, RIGIDITY);
-            float vw2 = 1.0 / pow(d2, RIGIDITY);
-            float vw3 = 1.0 / pow(d3, RIGIDITY);
-            float vw4 = 1.0 / pow(d4, RIGIDITY);
-            float vw5 = 1.0 / pow(d5, RIGIDITY);
-            float vw6 = 1.0 / pow(d6, RIGIDITY);
-            float vw7 = 1.0 / pow(d7, RIGIDITY);
+            float vw0 = 1.0 / d0;
+            float vw1 = 1.0 / d1;
+            float vw2 = 1.0 / d2;
+            float vw3 = 1.0 / d3;
+            float vw4 = 1.0 / d4;
+            float vw5 = 1.0 / d5;
+            float vw6 = 1.0 / d6;
+            float vw7 = 1.0 / d7;
 
             float vwt = vw0 + vw1 + vw2 + vw3 + vw4 + vw5 + vw6 + vw7;
             vw0 /= vwt;
