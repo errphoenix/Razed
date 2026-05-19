@@ -115,6 +115,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             {
                 let fragment_count = self.fragments.data().len();
                 command_queue.push_group(RenderGroup::Fragment);
+                // `fragment_count` does not exclude degenerate offset
                 for _ in 1..fragment_count {
                     command_queue.push_command(DrawArraysIndirectCommand {
                         count: 0,
@@ -127,6 +128,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             {
                 let debris_count = self.debris.total_debris_count();
                 command_queue.push_group(RenderGroup::Debris);
+                // `debris_count` already excludes degenerate offset(s)
                 for _ in 0..debris_count {
                     command_queue.push_command(DrawArraysIndirectCommand {
                         count: 0,

@@ -70,7 +70,7 @@ ethel::shader_glsl! {
 
             src() "
                 // account for degenerate 0
-                uint debris_id = gl_InstanceID + 1;
+                uint debris_id = gl_DrawID + 1;
 
                 uint mesh_id = pod_mesh_id[debris_id];
                 Metadata metadata = metadata[mesh_id];

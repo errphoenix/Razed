@@ -98,8 +98,6 @@ ethel::shader_glsl_compute! {
             uint vertex_len = metadata[mesh_id].length;
 
             command_buffer[g_wg].count = vertex_len;
-
-            //atomicAdd(command_buffer[mesh_id].instance_count, 1);
         "
     }
 }

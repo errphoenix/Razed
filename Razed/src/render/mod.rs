@@ -78,15 +78,20 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         }
         let buf_idx = section.as_index();
 
-        let frags_buf = &frame_data.fragments;
-        let frags_cmd = &frame_data.fragment_commands;
-        let frags_cmd_view = frags_cmd.view_section(buf_idx);
-
-        const COMPUTE_WG_INVOCATIONS: u32 =
-            shaders::compute::process_command::WORKGROUP_INVOCATIONS;
-
+        // fragments & debris
         {
-            frags_buf.bind_shader_storage(buf_idx);
+            let frags_buf = &frame_data.fragments;
+            let frags_cmd = &frame_data.fragment_commands;
+            let frags_cmd_view = frags_cmd.view_section(buf_idx);
+
+            let debris_buf = &frame_data.debris;
+            let debris_cmd = &frame_data.debris_commands;
+            let debris_cmd_view = debris_cmd.view_section(buf_idx);
+
+            const COMPUTE_WG_INVOCATIONS: u32 =
+                shaders::compute::process_command::WORKGROUP_INVOCATIONS;
+
+            // command preprocess (compute) - fragments, debris
             {
                 self.command_process_compute.bind();
                 let cmd_len = frags_cmd_view.length();
@@ -107,59 +112,43 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 }
                 self.command_process_compute.dispatch();
             }
+            {
+                self.command_process_compute.bind();
+                let cmd_len = debris_cmd_view.length();
+                let wg_d_count = cmd_len.div_ceil(COMPUTE_WG_INVOCATIONS);
+                self.command_process_compute
+                    .set_workgroups_size(wg_d_count, 1, 1);
+                {
+                    let i_mesh_id =
+                        shaders::compute::process_command::SSBO_INDEX_FRAGMENTS_MESH_IDS;
+                    debris_buf.bind_shader_storage_single(
+                        buf_idx,
+                        LayoutDebrisData::PodMeshId as usize,
+                        Some(i_mesh_id),
+                    );
+
+                    let i_cmd_buf = shaders::compute::process_command::SSBO_INDEX_COMMAND_BUFFER;
+                    debris_cmd.bind_shader_storage(buf_idx, i_cmd_buf as usize, 0);
+                }
+                self.command_process_compute.dispatch();
+            }
 
             janus::gl::barrier_shader_storage();
             janus::gl::barrier_commands();
 
-            self.frags_shader.bind();
-            GpuCommandDispatch::from_view(frags_cmd_view).dispatch();
-        }
-
-        janus::gl::barrier_all();
-
-        let debris_buf = &frame_data.debris;
-        let debris_cmd = &frame_data.debris_commands;
-        let debris_cmd_view = debris_cmd.view_section(buf_idx);
-
-        debris_buf.bind_shader_storage(buf_idx);
-        {
-            self.command_process_compute.bind();
-            let cmd_len = debris_cmd_view.length();
-            let wg_d_count = cmd_len.div_ceil(COMPUTE_WG_INVOCATIONS);
-            self.command_process_compute
-                .set_workgroups_size(wg_d_count, 1, 1);
+            // draw dispatch - fragments, debris
             {
-                let i_mesh_id = shaders::compute::process_command::SSBO_INDEX_FRAGMENTS_MESH_IDS;
-                debris_buf.bind_shader_storage_single(
-                    buf_idx,
-                    LayoutDebrisData::PodMeshId as usize,
-                    Some(i_mesh_id),
-                );
+                frags_buf.bind_shader_storage(buf_idx);
+                self.frags_shader.bind();
+                GpuCommandDispatch::from_view(frags_cmd_view).dispatch();
 
-                let i_cmd_buf = shaders::compute::process_command::SSBO_INDEX_COMMAND_BUFFER;
-                debris_cmd.bind_shader_storage(buf_idx, i_cmd_buf as usize, 0);
+                debris_buf.bind_shader_storage(buf_idx);
+                self.debris_shader.bind();
+                GpuCommandDispatch::from_view(debris_cmd_view).dispatch();
             }
-            self.command_process_compute.dispatch();
         }
 
-        janus::gl::barrier_shader_storage();
-        janus::gl::barrier_commands();
-
-        self.debris_shader.bind();
-        debris_buf.bind_shader_storage(buf_idx);
-        GpuCommandDispatch::from_view(debris_cmd_view).dispatch();
-
-        // {
-        //     self.debris_shader.bind();
-        //     let debris = &frame_data.debris;
-        //     debris.bind_shader_storage(buf_idx);
-
-        //     let debris_count = frame_data.debris_count.load(Ordering::Acquire) as i32;
-
-        //     unsafe {
-        //         janus::gl::DrawArraysInstanced(janus::gl::TRIANGLES, 0, 36, debris_count);
-        //     }
-        // }
+        // draw dispatch - lattice (debug)
         {
             self.lattice_shader.bind();
             let xpbd_dbg = &frame_data.lattice_debug;
@@ -171,27 +160,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 2, xpbd_count);
             }
         }
-        // {
-        //     self.line_dbg_shader.bind();
-        //     unsafe {
-        //         janus::gl::DrawArrays(janus::gl::LINES, 0, 6);
-        //     }
-        // }
-        // {
-        //     const DEFORM_POINTS_SSBO: usize = 0;
-        //     self.deform_dbg_shader.bind();
-        //     frame_data
-        //         .deform_debug
-        //         .bind_shader_storage(buf_idx, DEFORM_POINTS_SSBO);
-        //     let count = frame_data
-        //         .deform_debug_count
-        //         .load(Ordering::Acquire)
-        //         .saturating_sub(1);
-        //     unsafe {
-        //         janus::gl::PointSize(2.0);
-        //         janus::gl::DrawArrays(janus::gl::POINTS, 0, count as i32);
-        //     }
-        // }
     }
 
     fn init_resources(&mut self, _resolution: ethel::render::Resolution) {
@@ -201,37 +169,5 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         self.command_process_compute =
             shaders::compute::ComputeShaderProcessCommand::new_compiled();
-
-        // const VSH_BASE_SOURCE: &[u8] = include_bytes!("../shaders/base.vsh");
-        // const FSH_BASE_SOURCE: &[u8] = include_bytes!("../shaders/base.fsh");
-        // let mut vsh = std::io::BufReader::new(VSH_BASE_SOURCE);
-        // let mut fsh = std::io::BufReader::new(FSH_BASE_SOURCE);
-        // self.base_shader = ShaderHandle::new(&mut vsh, &mut fsh);
-
-        // const VSH_CONSTRAINT_SOURCE: &[u8] = include_bytes!("../shaders/constraint.vsh");
-        // const FSH_SOLID_SOURCE: &[u8] = include_bytes!("../shaders/solid.fsh");
-        // let mut vsh = std::io::BufReader::new(VSH_CONSTRAINT_SOURCE);
-        // let mut fsh = std::io::BufReader::new(FSH_SOLID_SOURCE);
-        // self.xpbd_dbg_shader = ShaderHandle::new(&mut vsh, &mut fsh);
-
-        // const VSH_LINE_SOURCE: &[u8] = include_bytes!("../shaders/line.vsh");
-        // let mut vsh = std::io::BufReader::new(VSH_LINE_SOURCE);
-        // let mut fsh = std::io::BufReader::new(FSH_SOLID_SOURCE);
-        // self.line_dbg_shader = ShaderHandle::new(&mut vsh, &mut fsh);
-
-        // const VSH_FRAG_SOURCE: &[u8] = include_bytes!("../shaders/fragment.vsh");
-        // let mut vsh = std::io::BufReader::new(VSH_FRAG_SOURCE);
-        // let mut fsh = std::io::BufReader::new(FSH_BASE_SOURCE);
-        // self.frags_shader = ShaderHandle::new(&mut vsh, &mut fsh);
-
-        // const VSH_DEFORM_SOURCE: &[u8] = include_bytes!("../shaders/cage.vsh");
-        // let mut vsh = std::io::BufReader::new(VSH_DEFORM_SOURCE);
-        // let mut fsh = std::io::BufReader::new(FSH_SOLID_SOURCE);
-        // self.deform_dbg_shader = ShaderHandle::new(&mut vsh, &mut fsh);
-
-        // const VSH_DEBRIS_SOURCE: &[u8] = include_bytes!("../shaders/debris.vsh");
-        // let mut vsh = std::io::BufReader::new(VSH_DEBRIS_SOURCE);
-        // let mut fsh = std::io::BufReader::new(FSH_BASE_SOURCE);
-        // self.debris_shader = ShaderHandle::new(&mut vsh, &mut fsh);
     }
 }
