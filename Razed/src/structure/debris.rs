@@ -60,6 +60,8 @@ ethel::table_spec! {
         rotation: glam::Quat;
 
         volume: physics::Sphere;
+
+        mesh_id: ethel::mesh::Id;
     }
 }
 
@@ -216,7 +218,7 @@ impl DebrisSystem {
         {
             self.debris_phys.clear_static_volumes();
             let static_volumes = {
-                let (_, pos, _, volumes) = self.rubber.split();
+                let (_, pos, _, volumes, _) = self.rubber.split();
                 pos.join(volumes)
             };
             for (&p, &v) in static_volumes {
@@ -289,8 +291,10 @@ impl DebrisSystem {
             let rotation = self.debris.rotation[direct.as_index()];
             let volume = self.debris.volume[direct.as_index()];
             let age = self.debris.age[direct.as_index()];
+            let mesh_id = self.debris.mesh_id[direct.as_index()];
 
-            self.rubber.insert((age, position, rotation, volume));
+            self.rubber
+                .insert((age, position, rotation, volume, mesh_id));
             self.debris.free(debris_id);
         });
     }

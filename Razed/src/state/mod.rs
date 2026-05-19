@@ -209,8 +209,10 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 let debris = &storage.debris;
                 let pod_positions = self.debris.data().position_slice();
                 let pod_rotations = self.debris.data().rotation_slice();
+                let pod_mesh_id = self.debris.data().mesh_id_slice();
                 let pod_positions_rubber = &self.debris.rubber().position_slice()[1..];
                 let pod_rotations_rubber = &self.debris.rubber().rotation_slice()[1..];
+                let pod_mesh_id_rubber = &self.debris.rubber().mesh_id_slice()[1..];
                 let debris_offset = self.debris.data().len() * size_of::<f32>() * 4;
 
                 // SAFETY: the use of LayoutDebrisData ensures we blit to a
@@ -223,12 +225,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                         0,
                         VEC3_VEC4_PADDING,
                     );
-                    debris.blit_part(
-                        buf_idx,
-                        LayoutDebrisData::PodRotations as usize,
-                        pod_rotations,
-                        0,
-                    );
                     debris.blit_part_padded(
                         buf_idx,
                         LayoutDebrisData::PodPositions as usize,
@@ -236,10 +232,30 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                         debris_offset,
                         VEC3_VEC4_PADDING,
                     );
+
+                    debris.blit_part(
+                        buf_idx,
+                        LayoutDebrisData::PodRotations as usize,
+                        pod_rotations,
+                        0,
+                    );
                     debris.blit_part(
                         buf_idx,
                         LayoutDebrisData::PodRotations as usize,
                         pod_rotations_rubber,
+                        debris_offset,
+                    );
+
+                    debris.blit_part(
+                        buf_idx,
+                        LayoutDebrisData::PodMeshId as usize,
+                        pod_mesh_id,
+                        0,
+                    );
+                    debris.blit_part(
+                        buf_idx,
+                        LayoutDebrisData::PodMeshId as usize,
+                        pod_mesh_id_rubber,
                         debris_offset,
                     );
                 }
