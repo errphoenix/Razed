@@ -110,13 +110,14 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
     ) {
         command_queue.clear();
 
+        let fragment_count = self.fragments.data().len() - 1;
+        let debris_count = self.debris.total_debris_count();
+
         // populate command buffers
         {
             {
-                let fragment_count = self.fragments.data().len();
                 command_queue.push_group(RenderGroup::Fragment);
-                // `fragment_count` does not exclude degenerate offset
-                for _ in 1..fragment_count {
+                for _ in 0..fragment_count {
                     command_queue.push_command(DrawArraysIndirectCommand {
                         count: 0,
                         instance_count: 1,
@@ -126,9 +127,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 }
             }
             {
-                let debris_count = self.debris.total_debris_count();
                 command_queue.push_group(RenderGroup::Debris);
-                // `debris_count` already excludes degenerate offset(s)
                 for _ in 0..debris_count {
                     command_queue.push_command(DrawArraysIndirectCommand {
                         count: 0,
@@ -141,6 +140,13 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         }
         frame_boundary.cross(|section, storage| {
             let buf_idx = section.as_index();
+
+            storage
+                .fragment_commands
+                .set_length(buf_idx, fragment_count as u32);
+            storage
+                .debris_commands
+                .set_length(buf_idx, debris_count as u32);
 
             const VEC3_VEC4_PADDING: usize = 4;
 
