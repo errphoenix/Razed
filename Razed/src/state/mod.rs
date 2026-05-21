@@ -141,13 +141,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         frame_boundary.cross(|section, storage| {
             let buf_idx = section.as_index();
 
-            storage
-                .fragment_commands
-                .set_length(buf_idx, fragment_count as u32);
-            storage
-                .debris_commands
-                .set_length(buf_idx, debris_count as u32);
-
             const VEC3_VEC4_PADDING: usize = 4;
 
             // fragments upload
@@ -221,7 +214,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 let pod_positions_rubber = &self.debris.rubber().position_slice()[1..];
                 let pod_rotations_rubber = &self.debris.rubber().rotation_slice()[1..];
                 let pod_mesh_id_rubber = &self.debris.rubber().mesh_id_slice()[1..];
-                let debris_offset = self.debris.data().len() * size_of::<f32>() * 4;
+                let debris_offset_1 = self.debris.data().len() * size_of::<f32>();
+                let debris_offset_4 = debris_offset_1 * 4;
 
                 // SAFETY: the use of LayoutDebrisData ensures we blit to a
                 // valid section of the partitioned buffer.
@@ -237,7 +231,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                         buf_idx,
                         LayoutDebrisData::PodPositions as usize,
                         pod_positions_rubber,
-                        debris_offset,
+                        debris_offset_4,
                         VEC3_VEC4_PADDING,
                     );
 
@@ -251,7 +245,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                         buf_idx,
                         LayoutDebrisData::PodRotations as usize,
                         pod_rotations_rubber,
-                        debris_offset,
+                        debris_offset_4,
                     );
 
                     debris.blit_part(
@@ -264,13 +258,11 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                         buf_idx,
                         LayoutDebrisData::PodMeshId as usize,
                         pod_mesh_id_rubber,
-                        debris_offset,
+                        debris_offset_1,
                     );
                 }
 
-                // subtract 2 to ignore degenerate 0 in both tables
-                let debris_count =
-                    (self.debris.data().len() + self.debris.rubber().len()) as u32 - 2;
+                let debris_count = self.debris.total_debris_count() as u32;
                 storage.debris_count.store(debris_count, Ordering::Release);
             }
 
@@ -495,9 +487,15 @@ impl State {
             RenderGroup::Debris => &frame_data.debris_commands,
             RenderGroup::LatticeDebug => unimplemented!("lattice debug has no command buffer"),
         };
+
         let mut data = buffer.view_section_mut(tri_section);
 
-        if let Some(next) = command_queue.upload_next_group(&mut data) {
+        let il0 = command_queue.index() as u32;
+        let next = command_queue.upload_next_group(&mut data);
+        let length = command_queue.index() as u32 - il0;
+        buffer.set_length(tri_section, length);
+
+        if let Some(next) = next {
             self.upload_gpu_commands(command_queue, next, frame_data, tri_section);
         }
     }

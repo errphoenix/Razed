@@ -149,7 +149,7 @@ impl DebrisSystem {
     /// This subtracts `2` from the sum of the lengths of the `debris`
     /// and `rubber` to exclude degenerate elements.
     pub fn total_debris_count(&self) -> usize {
-        self.debris.len() + self.rubber.len()
+        self.debris.len() + self.rubber.len() - 2
     }
 
     pub fn data(&self) -> &DebrisRowTable {
