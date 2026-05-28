@@ -60,21 +60,46 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         let proj = screen.projection();
         let cam_forward = view.forward();
 
+        // world axis indicator
+        #[cfg(feature = "devmode")]
+        {
+            self.lines_debug_buffer.clear();
+
+            const OFFSET: f32 = 1.0;
+            let o = view.position + cam_forward * OFFSET;
+
+            const R: glam::Vec4 = glam::vec4(1.0, 0.0, 0.0, 1.0);
+            const G: glam::Vec4 = glam::vec4(0.0, 1.0, 0.0, 1.0);
+            const B: glam::Vec4 = glam::vec4(0.0, 0.0, 1.0, 1.0);
+
+            const AXIS_SIZE: f32 = 0.075;
+            let x = o + glam::Vec3::X * AXIS_SIZE;
+            let y = o + glam::Vec3::Y * AXIS_SIZE;
+            let z = o + glam::Vec3::Z * AXIS_SIZE;
+
+            self.lines_debug_buffer.add(o, R);
+            self.lines_debug_buffer.add(x, R);
+
+            self.lines_debug_buffer.add(o, G);
+            self.lines_debug_buffer.add(y, G);
+
+            self.lines_debug_buffer.add(o, B);
+            self.lines_debug_buffer.add(z, B);
+        }
+
         // prepare debris spatial hash grid
         #[cfg(feature = "devmode")]
         {
             use ethel::state::data::hash::SpatialResolution;
 
-            const COLOR: glam::Vec4 = glam::vec4(1.0, 1.0, 0.6, 0.35);
-            const RANGE: f32 = 8.0;
+            const COLOR: glam::Vec4 = glam::vec4(1.0, 0.2, 1.0, 0.5);
+            const RANGE: f32 = 20.0;
             const RANGE_CELLS: i32 = (RANGE / RESOLUTION.get()) as i32;
 
             const RESOLUTION: SpatialResolution = crate::structure::debris::HASH_RESOLUTION;
 
             let camera = RESOLUTION.encode_point(view.position);
             let f_camera = RESOLUTION.approx_point(camera);
-
-            self.lines_debug_buffer.clear();
 
             for x in -RANGE_CELLS..RANGE_CELLS {
                 for y in -RANGE_CELLS..RANGE_CELLS {

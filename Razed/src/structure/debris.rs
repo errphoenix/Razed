@@ -100,7 +100,7 @@ impl DebrisVolumeBuffer {
 
 const DEBRIS_FREEZE_TIME_THRESHOLD: f32 = 8.0;
 const DEBRIS_FREEZE_MOVE_THRESHOLD: f32 = 0.35;
-pub const HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(2.0);
+pub const HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(4.0);
 
 #[derive(Debug)]
 pub struct DebrisSystem {

@@ -44,7 +44,6 @@ impl DebugLinesData {
     /// Sets the `color` to all points for those that were not manually set.
     pub fn set_color_fallback(&mut self, color: glam::Vec4) {
         let len = self.positions.len();
-        self.colors.clear();
         self.colors.resize(len, color);
     }
 
