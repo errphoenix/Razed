@@ -633,8 +633,8 @@ impl State {
     fn process_fragment_damage(&mut self) {
         self.profiler.push_trace("fragment_damage");
 
-        let deleted_points = self.deforms.deleted_points_frame();
-        let deforms = DeformsRowTableView::from(self.deforms.data());
+        // let deleted_points = self.deforms.deleted_points_frame();
+        // let deforms = DeformsRowTableView::from(self.deforms.data());
         let damaged_nodes = self.lattice.unique_damaged_nodes_frame();
 
         self.profiler
@@ -642,10 +642,10 @@ impl State {
                 self.fragments.clear_damage_buffer();
                 self.fragments.sync_lattice_damage(damaged_nodes);
             });
-        self.profiler
-            .capture_duration("fragment_damage_sync_cage", || {
-                self.fragments.sync_deform_damage(deleted_points, &deforms);
-            });
+        // self.profiler
+        //     .capture_duration("fragment_damage_sync_cage", || {
+        //         self.fragments.sync_deform_damage(deleted_points, &deforms);
+        //     });
 
         self.profiler.pop_trace();
     }
@@ -672,7 +672,7 @@ impl State {
         });
         self.profiler.capture_duration("debris_sleep", || {
             self.debris.accumulate_motion();
-            self.debris.freeze_old_debris(delta);
+            //self.debris.freeze_old_debris(delta);
         });
     }
 
@@ -686,16 +686,16 @@ impl State {
     }
 
     fn spawn_debug_structure(&mut self, view_point: &ViewPoint) {
-        const WIDTH: f32 = 9.0;
-        const HEIGHT: f32 = 3.0;
-        const DEPTH: f32 = 9.0;
+        const WIDTH: f32 = 12.0;
+        const HEIGHT: f32 = 6.0;
+        const DEPTH: f32 = 12.0;
         const FLOORS: u32 = 8;
         const TOTAL_HEIGHT: f32 = HEIGHT * FLOORS as f32;
 
         let center = glam::vec3(view_point.position.x, GROUND_LEVEL, view_point.position.z);
         let lattice = create_structure_lattice(center, WIDTH, HEIGHT, DEPTH, FLOORS);
 
-        const INNER_SPACE: i32 = 3;
+        const INNER_SPACE: i32 = 2;
 
         let mut voxel_grid = VoxelGrid::new(
             |cell| {
