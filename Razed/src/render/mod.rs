@@ -5,6 +5,8 @@ use std::sync::atomic::Ordering;
 use ethel::render::command::{DrawGroups, GpuCommandDispatch};
 
 use crate::data::{FrameDataBuffers, LayoutDebrisData, LayoutFragmentData};
+#[cfg(feature = "devmode")]
+use crate::render::shaders::lines::DebugLinesData;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RenderGroup {
@@ -36,8 +38,12 @@ pub struct Renderer {
     lattice_shader: shaders::debug::ShaderDebugLattice,
     frags_shader: shaders::ShaderFragment,
     debris_shader: shaders::ShaderDebris,
+    lines_shader: shaders::ShaderDebugLines,
 
     command_process_compute: shaders::compute::ComputeShaderProcessCommand,
+
+    #[cfg(feature = "devmode")]
+    lines_debug_buffer: DebugLinesData,
 }
 
 impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
@@ -49,6 +55,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
     ) {
         view.sync().unwrap();
         screen.sync().unwrap();
+
         let view_mat = view.into_mat4().inverse();
         let proj = screen.projection();
         let cam_forward = view.forward();
@@ -56,6 +63,10 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         self.lattice_shader.bind();
         self.lattice_shader.uniform_projection_mat4(*proj);
         self.lattice_shader.uniform_view_mat4(view_mat);
+
+        self.lines_shader.bind();
+        self.lines_shader.uniform_projection_mat4(*proj);
+        self.lines_shader.uniform_view_mat4(view_mat);
 
         self.debris_shader.bind();
         self.debris_shader.uniform_camera_forward_vec3(cam_forward);
@@ -160,12 +171,47 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 2, xpbd_count);
             }
         }
+
+        // draw dispatch - lines (debug)
+        #[cfg(feature = "devmode")]
+        {
+            use crate::data::LayoutDebugLinesData;
+
+            let lines_data = &frame_data.lines_debug;
+
+            unsafe {
+                lines_data.blit_part_padded(
+                    buf_idx,
+                    LayoutDebugLinesData::PodPoints as usize,
+                    &self.lines_debug_buffer.positions,
+                    0,
+                    4,
+                );
+
+                lines_data.blit_part(
+                    buf_idx,
+                    LayoutDebugLinesData::PodColors as usize,
+                    &self.lines_debug_buffer.colors,
+                    0,
+                );
+            }
+
+            self.lines_shader.bind();
+            lines_data.bind_shader_storage(buf_idx);
+
+            let count = self.lines_debug_buffer.len();
+
+            unsafe {
+                janus::gl::DrawArrays(janus::gl::LINES, 0, count as i32);
+            }
+        }
     }
 
     fn init_resources(&mut self, _resolution: ethel::render::Resolution) {
         self.lattice_shader = shaders::debug::ShaderDebugLattice::new_compiled();
         self.frags_shader = shaders::ShaderFragment::new_compiled();
         self.debris_shader = shaders::ShaderDebris::new_compiled();
+        self.lines_shader = shaders::ShaderDebugLines::new_compiled();
 
         self.command_process_compute =
             shaders::compute::ComputeShaderProcessCommand::new_compiled();

@@ -87,7 +87,6 @@ ethel::shader_glsl_compute! {
         src() "
             uint g_wg_row = gl_NumWorkGroups.x * gl_WorkGroupSize.x;
             uvec2 g_wg_id = gl_GlobalInvocationID.xy;
-
             uint g_wg = g_wg_id.y * g_wg_row + g_wg_id.x;
 
             uint mesh_id = pod_mesh_id[g_wg + 1];

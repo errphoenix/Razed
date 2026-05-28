@@ -33,6 +33,9 @@ pub const DEFORM_POINTS_ALLOC: usize = 32000;
 pub const MESH_BUFFER_LEN: usize = 2048;
 pub const MESH_BUFFER_SIZE: usize = 65536;
 
+#[cfg(feature = "devmode")]
+pub const DEBUG_LINES_ALLOC: usize = 16384;
+
 layout_mesh_buffer!(count: MESH_BUFFER_LEN; vertices: MESH_BUFFER_SIZE);
 
 layout_buffer! {
@@ -148,6 +151,22 @@ layout_buffer! {
     }
 }
 
+#[cfg(feature = "devmode")]
+layout_buffer! {
+    const DebugLinesData: 2, {
+        enum PodPoints: DEBUG_LINES_ALLOC => {
+            type [f32; 4];
+            bind 0;
+            shader shaders::lines::SSBO_INDEX_POD_POINTS;
+        };
+        enum PodColors: DEBUG_LINES_ALLOC => {
+            type [f32; 4];
+            bind 1;
+            shader shaders::lines::SSBO_INDEX_POD_COLORS;
+        };
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct FrameDataBuffers {
     pub fragment_commands: TriBuffer<DrawCommand>,
@@ -161,6 +180,9 @@ pub struct FrameDataBuffers {
 
     pub lattice_debug: PartitionedTriBuffer<LATTICE_STORAGE_PARTS>,
     pub lattice_constraint_count: Arc<AtomicU32>,
+
+    #[cfg(feature = "devmode")]
+    pub lines_debug: PartitionedTriBuffer<2>,
 }
 
 impl FrameDataBuffers {
@@ -177,6 +199,11 @@ impl FrameDataBuffers {
         let debris_data = PartitionedTriBuffer::new(LayoutDebrisData::create());
         LayoutDebrisData::initialise_partitions(&debris_data);
 
+        #[cfg(feature = "devmode")]
+        let lines_debug = PartitionedTriBuffer::new(LayoutDebugLinesData::create());
+        #[cfg(feature = "devmode")]
+        LayoutDebugLinesData::initialise_partitions(&debris_data);
+
         Self {
             fragment_commands: TriBuffer::zeroed(FRAGMENT_COMMANDS_ALLOC),
             debris_commands: TriBuffer::zeroed(DEBRIS_COMMANDS_ALLOC),
@@ -189,6 +216,9 @@ impl FrameDataBuffers {
 
             lattice_debug: xpbd_visualiser,
             lattice_constraint_count: Arc::new(AtomicU32::new(0)),
+
+            #[cfg(feature = "devmode")]
+            lines_debug,
         }
     }
 }
