@@ -384,6 +384,23 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             screen.sync().unwrap();
             self.select_lattice_raycast(input, screen.get(), view_point.get());
         } else {
+            {
+                const ANCHOR_Y_MOVE: glam::Vec3 = glam::vec3(0.0, 1.0, 0.0);
+                const ANCHOR_Y_MOVE_SPRINT: f32 = 4.0;
+                let anchor = self.camera.anchor();
+
+                let mut d = ANCHOR_Y_MOVE * delta.as_f32();
+                if input.keys().key_down(janus::input::KeyCode::ShiftLeft) {
+                    d *= ANCHOR_Y_MOVE_SPRINT;
+                }
+
+                if input.keys().key_down(janus::input::KeyCode::ArrowUp) {
+                    self.camera.set_anchor(anchor + d);
+                } else if input.keys().key_down(janus::input::KeyCode::ArrowDown) {
+                    self.camera.set_anchor(anchor - d);
+                }
+            }
+
             let (dx, dy) = input.cursor().delta_f32();
             let (dx, dy) = (dx.to_radians(), dy.to_radians());
             self.camera.update(dx, dy);
