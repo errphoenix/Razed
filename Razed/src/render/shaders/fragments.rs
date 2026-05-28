@@ -77,7 +77,7 @@ ethel::shader_glsl! {
 
             float light_factor = LIGHT_AMBIENT + diffuse;
 
-            outColor = vec4(fs_color.rgb * light_factor, fs_color.a);
+            outColor = vec4(fs_color.rgb * light_factor, 0.2);
             "
         ];
 

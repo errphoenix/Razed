@@ -46,6 +46,9 @@ fn main() {
         janus::gl::DepthFunc(janus::gl::GREATER);
         janus::gl::ClearDepth(0.0);
         janus::gl::Enable(janus::gl::DEPTH_TEST);
+
+        janus::gl::BlendFunc(janus::gl::SRC_ALPHA, janus::gl::ONE_MINUS_SRC_ALPHA);
+        janus::gl::Enable(janus::gl::BLEND);
     });
 
     let ctx = janus::context::Context::new(
