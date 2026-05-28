@@ -60,6 +60,50 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         let proj = screen.projection();
         let cam_forward = view.forward();
 
+        // prepare debris spatial hash grid
+        #[cfg(feature = "devmode")]
+        {
+            use ethel::state::data::hash::SpatialResolution;
+
+            const COLOR: glam::Vec4 = glam::vec4(1.0, 1.0, 0.6, 0.35);
+            const RANGE: f32 = 8.0;
+            const RANGE_CELLS: i32 = (RANGE / RESOLUTION.get()) as i32;
+
+            const RESOLUTION: SpatialResolution = crate::structure::debris::HASH_RESOLUTION;
+
+            let camera = RESOLUTION.encode_point(view.position);
+            let f_camera = RESOLUTION.approx_point(camera);
+
+            self.lines_debug_buffer.clear();
+
+            for x in -RANGE_CELLS..RANGE_CELLS {
+                for y in -RANGE_CELLS..RANGE_CELLS {
+                    for z in -RANGE_CELLS..RANGE_CELLS {
+                        let po = glam::vec3(x as f32, y as f32, z as f32) * RESOLUTION.get();
+                        let px = glam::vec3((x + 1) as f32, y as f32, z as f32) * RESOLUTION.get();
+                        let py = glam::vec3(x as f32, (y + 1) as f32, z as f32) * RESOLUTION.get();
+                        let pz = glam::vec3(x as f32, y as f32, (z + 1) as f32) * RESOLUTION.get();
+
+                        let po = po + f_camera;
+                        let px = px + f_camera;
+                        let py = py + f_camera;
+                        let pz = pz + f_camera;
+
+                        self.lines_debug_buffer.add_position(po);
+                        self.lines_debug_buffer.add_position(px);
+
+                        self.lines_debug_buffer.add_position(po);
+                        self.lines_debug_buffer.add_position(py);
+
+                        self.lines_debug_buffer.add_position(po);
+                        self.lines_debug_buffer.add_position(pz);
+                    }
+                }
+            }
+
+            self.lines_debug_buffer.set_color_fallback(COLOR);
+        }
+
         self.lattice_shader.bind();
         self.lattice_shader.uniform_projection_mat4(*proj);
         self.lattice_shader.uniform_view_mat4(view_mat);
