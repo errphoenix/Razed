@@ -371,6 +371,11 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         self.profiler.page();
         view_point.sync().unwrap();
 
+        if input.keys().key_pressed(janus::input::KeyCode::KeyB) {
+            self.debris.data_mut().clear();
+            self.debris.rubber_mut().clear();
+        }
+
         if input.keys().key_pressed(janus::input::KeyCode::KeyP) {
             self.save_profiler_report();
         }
@@ -564,6 +569,8 @@ impl State {
                 inherit_a *= 0.01;
                 inherit_v *= 0.035;
                 inherit_av *= 0.01;
+
+                let position = position - glam::Vec3::X * 2f32;
 
                 buffer.push(DebrisData {
                     position,

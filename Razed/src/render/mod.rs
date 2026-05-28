@@ -92,7 +92,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         {
             use ethel::state::data::hash::SpatialResolution;
 
-            const COLOR: glam::Vec4 = glam::vec4(1.0, 0.2, 1.0, 0.5);
+            const COLOR: glam::Vec4 = glam::vec4(1.0, 0.2, 1.0, 0.1);
             const RANGE: f32 = 20.0;
             const RANGE_CELLS: i32 = (RANGE / RESOLUTION.get()) as i32;
 

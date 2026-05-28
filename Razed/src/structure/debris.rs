@@ -5,7 +5,10 @@ use ethel::state::data::{
     hash::{FxLsSpatialHash, SpatialResolution},
 };
 use janus::context::DeltaTime;
-use physics::rigid::{RbVelocity, RigidBodySolver};
+use physics::{
+    Aabb,
+    rigid::{RbVelocity, RigidBodySolver},
+};
 
 const MOTION_ACCUM_BUCKET_SIZE: Duration = Duration::from_millis(300);
 const MOTION_ACCUM_BUCKET_COUNT: usize = 6;
@@ -171,15 +174,21 @@ impl DebrisSystem {
     pub fn hash_debris(&mut self) {
         self.debris_hash.clear();
 
-        let debris_pos = self.debris.position_view().join(self.debris.handles_view());
-        debris_pos
-            .into_iter()
-            .enumerate()
-            .for_each(|(i, (&pos, &handle))| {
-                let cell = self.debris_hash.cell_at(pos);
-                let direct_id = DirectIndex::from_index(i, handle.generation());
-                self.debris_hash.put(cell, direct_id);
-            });
+        let pos = self.debris.position_view();
+        let bounds = self.debris.volume_view();
+        let handles = self.debris.handles_view();
+        let debris = pos.join(bounds).join(handles);
+
+        for (i, (&pos, &bounds, &handle)) in debris.into_iter().enumerate() {
+            let cells = self.debris_hash.aligned_adjacent_cells(pos);
+            let direct_id = DirectIndex::from_index(i, handle.generation());
+            for cell in cells {
+                let aabb = Aabb::from_cell(cell, self.debris_hash.resolution);
+                if aabb.intersects_sphere(bounds, pos) {
+                    self.debris_hash.put(cell, direct_id);
+                }
+            }
+        }
     }
 
     pub fn simulate_bodies(&mut self, delta: DeltaTime) {

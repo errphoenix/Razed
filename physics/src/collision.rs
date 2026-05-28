@@ -28,6 +28,16 @@ impl Aabb {
         }
     }
 
+    pub fn from_cell(
+        cell: ethel::state::data::hash::Cell,
+        resolution: ethel::state::data::hash::SpatialResolution,
+    ) -> Self {
+        Self::new(
+            glam::Vec3::splat(resolution.get()),
+            resolution.approx_point(cell),
+        )
+    }
+
     pub fn with_center(self, new_center: glam::Vec3) -> Self {
         let extents = self.extents();
         Self::new(extents, new_center)
@@ -144,5 +154,39 @@ pub fn detect_n2(
                 });
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ethel::state::data::hash::{Cell, SpatialResolution};
+
+    use super::*;
+
+    #[test]
+    fn intersect_aabb_sphere() {
+        let aabb = Aabb::new(glam::Vec3::splat(1.0), glam::Vec3::ZERO);
+        let sphere = Sphere::new(0.5);
+        let sphere_o = glam::Vec3::ZERO;
+
+        assert!(aabb.intersects_sphere(sphere, sphere_o));
+
+        let aabb = Aabb::from_cell(Cell::new(2, 1, 1), SpatialResolution::new(1.0));
+        let sphere = Sphere::new(0.5);
+        let sphere_o = glam::vec3(1.85, 0.8, 0.75);
+
+        assert!(aabb.intersects_sphere(sphere, sphere_o));
+
+        let aabb = Aabb::from_cell(Cell::new(2, 1, 1), SpatialResolution::new(1.0));
+        let sphere = Sphere::new(0.5);
+        let sphere_o = glam::vec3(5.85, 0.8, 0.75);
+
+        assert!(!aabb.intersects_sphere(sphere, sphere_o));
+
+        let aabb = Aabb::from_cell(Cell::new(-2, -1, -1), SpatialResolution::new(1.0));
+        let sphere = Sphere::new(0.5);
+        let sphere_o = glam::vec3(-1.85, -0.8, -0.75);
+
+        assert!(aabb.intersects_sphere(sphere, sphere_o));
     }
 }
