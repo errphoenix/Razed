@@ -108,13 +108,16 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         frame_boundary: &Cross<Producer, FrameDataBuffers>,
         command_queue: &mut GpuCommandQueue<ethel::DrawCommand, RenderGroup>,
     ) {
-        command_queue.clear();
-
-        let fragment_count = self.fragments.data().len() - 1;
-        let debris_count = self.debris.total_debris_count();
+        self.profiler.push_trace("upload_gpu");
+        let t0 = Instant::now();
 
         // populate command buffers
         {
+            command_queue.clear();
+
+            let fragment_count = self.fragments.data().len() - 1;
+            let debris_count = self.debris.total_debris_count();
+
             {
                 command_queue.push_group(RenderGroup::Fragment);
                 for _ in 0..fragment_count {
@@ -138,6 +141,10 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 }
             }
         }
+        let t1 = Instant::now();
+        self.profiler.log_explicit("commands", t0, t1);
+        let t0 = t1;
+
         frame_boundary.cross(|section, storage| {
             let buf_idx = section.as_index();
 
@@ -359,6 +366,10 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 buf_idx,
             );
         });
+
+        let t1 = Instant::now();
+        self.profiler.log_explicit("data", t0, t1);
+        self.profiler.pop_trace();
     }
 
     fn step(
