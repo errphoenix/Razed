@@ -65,6 +65,8 @@ ethel::table_spec! {
         volume: physics::Sphere;
 
         mesh_id: ethel::mesh::Id;
+
+        volume_id: IndirectIndex;
     }
 }
 
@@ -101,8 +103,48 @@ impl DebrisVolumeBuffer {
     }
 }
 
-const DEBRIS_FREEZE_TIME_THRESHOLD: f32 = 8.0;
-const DEBRIS_FREEZE_MOVE_THRESHOLD: f32 = 0.35;
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct RubberStaticEntity {
+    pub position: glam::Vec3,
+    pub volume: ::physics::Sphere,
+    pub handle: IndirectIndex,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+struct RubberVolumeStage {
+    entities: Vec<RubberStaticEntity>,
+}
+
+impl RubberVolumeStage {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            entities: Vec::with_capacity(capacity),
+        }
+    }
+
+    pub fn push(&mut self, position: glam::Vec3, volume: ::physics::Sphere, handle: IndirectIndex) {
+        self.entities.push(RubberStaticEntity {
+            position,
+            volume,
+            handle,
+        });
+    }
+
+    pub fn clear(&mut self) {
+        self.entities.clear();
+    }
+
+    pub fn drain(&mut self) -> std::vec::Drain<'_, RubberStaticEntity> {
+        self.entities.drain(..)
+    }
+}
+
+const DEBRIS_FREEZE_TIME_THRESHOLD: f32 = 4.0;
+const DEBRIS_FREEZE_MOVE_THRESHOLD: f32 = 0.75;
 pub const HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(4.0);
 
 #[derive(Debug)]
@@ -114,6 +156,7 @@ pub struct DebrisSystem {
     debris_volume_buffer: DebrisVolumeBuffer,
     debris_trash_buffer: Vec<IndirectIndex>,
 
+    rubber_volume_stage: RubberVolumeStage,
     rubber: RubberRowTable,
 }
 
@@ -125,6 +168,7 @@ impl Default for DebrisSystem {
             debris_hash: FxLsSpatialHash::new(HASH_RESOLUTION),
             debris_volume_buffer: DebrisVolumeBuffer::default(),
             debris_trash_buffer: Vec::new(),
+            rubber_volume_stage: RubberVolumeStage::default(),
             rubber: RubberRowTable::default(),
         }
     }
@@ -142,6 +186,7 @@ impl DebrisSystem {
             debris_hash: FxLsSpatialHash::with_capacity(HASH_RESOLUTION, capacity),
             debris_volume_buffer: DebrisVolumeBuffer::new(),
             debris_trash_buffer: Vec::with_capacity(capacity / 2),
+            rubber_volume_stage: RubberVolumeStage::new(),
             rubber: RubberRowTable::with_capacity(capacity / 2),
         }
     }
@@ -167,8 +212,40 @@ impl DebrisSystem {
         &self.rubber
     }
 
-    pub fn rubber_mut(&mut self) -> &mut RubberRowTable {
-        &mut self.rubber
+    pub fn clear_rubber(&mut self) {
+        for i in (1..self.rubber.len()).rev() {
+            let handle = self.rubber.handles[i];
+            let volume_id = self.rubber.volume_id[i];
+            self.rubber.free(handle);
+            self.debris_phys.remove_static_volume(volume_id);
+        }
+    }
+
+    pub fn delete_rubber(&mut self, handle: IndirectIndex) {
+        let direct = self.rubber.solve_indirect(handle);
+
+        #[cfg(any(feature = "devmode", debug_assertions))]
+        if direct.is_none() {
+            tracing::event!(
+                tracing::Level::ERROR,
+                "Tried to delete invalid rubber entity {handle:?}."
+            );
+        }
+
+        let direct = direct.unwrap();
+        let volume_id = self.rubber.volume_id[direct.as_index()];
+
+        #[cfg(any(feature = "devmode", debug_assertions))]
+        if volume_id.as_int() == 0 {
+            tracing::event!(
+                tracing::Level::ERROR,
+                "Volume ID for rubber entity {handle:?} is, unexpectedbly, unitialized."
+            );
+            return;
+        }
+
+        self.rubber.free(handle);
+        self.debris_phys.remove_static_volume(volume_id);
     }
 
     pub fn hash_debris(&mut self) {
@@ -179,19 +256,33 @@ impl DebrisSystem {
         let handles = self.debris.handles_view();
         let debris = pos.join(bounds).join(handles);
 
-        for (i, (&pos, &bounds, &handle)) in debris.into_iter().enumerate() {
-            let cells = self.debris_hash.aligned_adjacent_cells(pos);
+        for (i, (&pos, &_bounds, &handle)) in debris.into_iter().enumerate() {
+            let cell = self.debris_hash.cell_at(pos);
             let direct_id = DirectIndex::from_index(i, handle.generation());
-            for cell in cells {
-                let aabb = Aabb::from_cell(cell, self.debris_hash.resolution);
-                if aabb.intersects_sphere(bounds, pos) {
-                    self.debris_hash.put(cell, direct_id);
-                }
-            }
+            self.debris_hash.put(cell, direct_id);
+
+            // let cells = self.debris_hash.aligned_adjacent_cells(pos);
+
+            // let direct_id = DirectIndex::from_index(i, handle.generation());
+            // for cell in cells {
+            //     let aabb = {
+            //         let entry = self.spatial_bounds_cache.entry(cell);
+            //         let res = self.debris_hash.resolution;
+            //         entry.or_insert_with(|| Aabb::from_cell(cell, res))
+            //     };
+
+            //     if aabb.intersects_sphere(bounds, pos) {
+            //         self.debris_hash.put(cell, direct_id);
+            //     }
+            // }
         }
     }
 
-    pub fn simulate_bodies(&mut self, delta: DeltaTime) {
+    pub fn simulate_bodies(
+        &mut self,
+        delta: DeltaTime,
+        #[cfg(feature = "devmode")] profiler: &mut ethel::profile::Profiler,
+    ) {
         let positions = &mut self.debris.position;
         let rotations = &mut self.debris.rotation;
         let velocities = &mut self.debris.velocity;
@@ -225,13 +316,15 @@ impl DebrisSystem {
             });
 
         {
-            self.debris_phys.clear_static_volumes();
-            let static_volumes = {
-                let (_, pos, _, volumes, _) = self.rubber.split();
-                pos.join(volumes)
-            };
-            for (&p, &v) in static_volumes {
-                self.debris_phys.add_static_volume(p, v);
+            for RubberStaticEntity {
+                position,
+                volume,
+                handle,
+            } in self.rubber_volume_stage.drain()
+            {
+                let volume_id = self.debris_phys.add_static_volume(position, volume);
+                let direct = self.rubber.solve_indirect(handle).unwrap();
+                self.rubber.volume_id[direct.as_index()] = volume_id;
             }
 
             self.debris_phys
@@ -302,8 +395,16 @@ impl DebrisSystem {
             let age = self.debris.age[direct.as_index()];
             let mesh_id = self.debris.mesh_id[direct.as_index()];
 
-            self.rubber
-                .insert((age, position, rotation, volume, mesh_id));
+            let rubber_data = (
+                age,
+                position,
+                rotation,
+                volume,
+                mesh_id,
+                IndirectIndex::default(),
+            );
+            let handle = self.rubber.insert(rubber_data);
+            self.rubber_volume_stage.push(position, volume, handle);
             self.debris.free(debris_id);
         });
     }

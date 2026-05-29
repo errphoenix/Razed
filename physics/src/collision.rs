@@ -140,7 +140,7 @@ pub fn detect_n2(
             let v1 = volumes[j];
 
             let d_sq = p0.distance_squared(p1);
-            if v0.intersects(v1, d_sq) && d_sq > 0.01 {
+            if v0.intersects(v1, d_sq) && d_sq > 0.0001 {
                 let (n, depth) = v0.peneration_with(v1, p0, p1, d_sq);
 
                 let id0 = direct_indices[i];

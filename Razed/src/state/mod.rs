@@ -384,7 +384,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 
         if input.keys().key_pressed(janus::input::KeyCode::KeyB) {
             self.debris.data_mut().clear();
-            self.debris.rubber_mut().clear();
+            self.debris.clear_rubber();
         }
 
         if input.keys().key_pressed(janus::input::KeyCode::KeyP) {
@@ -678,12 +678,22 @@ impl State {
     fn update_debris(&mut self, delta: DeltaTime) {
         self.profiler
             .capture_duration("debris_hash", || self.debris.hash_debris());
-        self.profiler.capture_duration("debris_phys_rb", || {
+
+        #[cfg(feature = "devmode")]
+        {
+            self.profiler.push_trace("debris_physics");
+            self.debris.simulate_bodies(delta, &mut self.profiler);
+            self.profiler.pop_trace();
+        }
+
+        #[cfg(not(feature = "devmode"))]
+        self.profiler.capture_duration("debris_physics", || {
             self.debris.simulate_bodies(delta);
         });
+
         self.profiler.capture_duration("debris_sleep", || {
             self.debris.accumulate_motion();
-            //self.debris.freeze_old_debris(delta);
+            self.debris.freeze_old_debris(delta);
         });
     }
 
