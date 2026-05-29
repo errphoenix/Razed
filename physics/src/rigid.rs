@@ -327,8 +327,8 @@ impl RigidBodySolver {
                 velocities[id1].linear -= impulse * 0.5 * masses[id1];
 
                 let t = collision.normal.any_orthonormal_vector();
-                velocities[id0].angular += t * rel_v;
-                velocities[id1].angular -= t * rel_v;
+                velocities[id0].angular += t * rel_v * 0.5;
+                velocities[id1].angular -= t * rel_v * 0.5;
             }
         });
     }

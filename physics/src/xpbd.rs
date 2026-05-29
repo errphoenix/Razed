@@ -343,7 +343,7 @@ pub struct RawXpbdLattice {
 
 pub const DEFAULT_SOLVE_ITERATIONS: u32 = 8;
 pub const DEFAULT_SUB_STEPS: u32 = 4;
-pub const DAMPING: f32 = 0.9935;
+pub const DAMPING: f32 = 0.9985;
 
 /// Indicates that a data table constrains node SoA data.
 pub trait HasNodes {
@@ -451,7 +451,7 @@ impl Default for XpbdSolver {
     }
 }
 
-pub const DEFAULT_STEP_MULT: f32 = 1.1;
+pub const DEFAULT_STEP_MULT: f32 = 1.2;
 
 #[derive(Clone, Copy, Debug)]
 pub struct XpbdOptions {
