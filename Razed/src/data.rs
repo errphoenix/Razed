@@ -9,8 +9,8 @@ use ethel::{
 
 use crate::structure::fragment::ANCHORS_COUNT as FRAGMENT_ANCHORS_COUNT;
 
-pub const FRAGMENT_COMMANDS_ALLOC: usize = 32_000;
-pub const DEBRIS_COMMANDS_ALLOC: usize = 32_000;
+pub const FRAGMENT_COMMANDS_ALLOC: usize = 131072;
+pub const DEBRIS_COMMANDS_ALLOC: usize = 131072;
 
 /// Temporarily forced to 1 to save memory as generic objects are currently
 /// unused
@@ -19,16 +19,16 @@ pub const GENERIC_COMMANDS_ALLOC: usize = 1;
 pub const RENDERABLE_STORAGE_PARTS: usize = 8;
 pub const ENTITY_ALLOCATION: usize = 8192;
 
-pub const LATTICE_CONSTRAINT_ALLOC: usize = 4096;
-pub const LATTICE_NODE_ALLOC: usize = 512;
+pub const LATTICE_CONSTRAINT_ALLOC: usize = 32768;
+pub const LATTICE_NODE_ALLOC: usize = 8192;
 pub const LATTICE_STORAGE_PARTS: usize = 4;
 
-pub const DEBRIS_ALLOC: usize = 16384;
+pub const DEBRIS_ALLOC: usize = 131072;
 pub const DEBRIS_STORAGE_PARTS: usize = 3;
 
-pub const FRAGMENTS_ALLOC: usize = 16384;
+pub const FRAGMENTS_ALLOC: usize = 131072;
 pub const FRAGMENTS_STORAGE_PARTS: usize = 8;
-pub const DEFORM_POINTS_ALLOC: usize = 32000;
+pub const DEFORM_POINTS_ALLOC: usize = 181072;
 
 pub const MESH_BUFFER_LEN: usize = 2048;
 pub const MESH_BUFFER_SIZE: usize = 65536;
