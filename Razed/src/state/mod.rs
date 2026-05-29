@@ -1,4 +1,4 @@
-use std::{io::BufWriter, path::PathBuf, str::FromStr, sync::atomic::Ordering};
+use std::{io::BufWriter, path::PathBuf, str::FromStr, sync::atomic::Ordering, time::Instant};
 
 use crate::{
     data::{
@@ -723,12 +723,39 @@ impl State {
     }
 
     fn save_profiler_report(&mut self) {
+        {
+            const FRAME_COUNT_MIN: usize = 1000;
+            let frame_count = self.profiler.frames_stack().len();
+            if frame_count < FRAME_COUNT_MIN {
+                event!(
+                    Level::WARN,
+                    "User requested profiler report but frames count is too little: expected atleast {}, but only got {}.",
+                    FRAME_COUNT_MIN,
+                    frame_count
+                )
+            }
+        }
+
         let path = PathBuf::from_str("framestack_latest.bin").unwrap();
         if path.exists() {
             if let Ok(creation_time) = path.metadata().map(|meta| meta.created()).flatten() {
                 let date: chrono::DateTime<chrono::Utc> = creation_time.into();
                 let formatted_date = date.format("%d_%m_%y-%H_%M_%S");
-                let new_path = format!("framestack_old_{}.bin", formatted_date);
+
+                let name = format!("framestack_old_{}", formatted_date);
+                let duplicates = std::fs::read_dir(".")
+                    .unwrap()
+                    .filter_map(|f| f.ok())
+                    .filter(|f| f.file_name().into_string().unwrap().starts_with(&name))
+                    .count();
+
+                let d_identifier = if duplicates != 0 {
+                    format!("_{duplicates}")
+                } else {
+                    String::new()
+                };
+
+                let new_path = format!("framestack_old_{}{d_identifier}.bin", formatted_date);
 
                 std::fs::rename(&path, new_path).expect("assumed user has sufficient permissions");
 
