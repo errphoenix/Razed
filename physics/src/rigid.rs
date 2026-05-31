@@ -216,6 +216,14 @@ impl RigidBodySolver {
         }
     }
 
+    pub fn collision_buffer(&self) -> &[LightCollision] {
+        &self.collision_buffer
+    }
+
+    pub fn collision_buffer_mut(&mut self) -> &mut Vec<LightCollision> {
+        &mut self.collision_buffer
+    }
+
     pub fn clear_static_volumes(&mut self) {
         self.static_volumes.clear();
         self.static_volumes_hash.clear();

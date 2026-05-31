@@ -112,7 +112,7 @@ impl Sphere {
 ///
 /// The indices of the bodies depend on the ID map passed to the collision
 /// detection function, they are intended to be global indices.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct LightCollision {
     pub normal: glam::Vec3,
     pub depth: f32,
