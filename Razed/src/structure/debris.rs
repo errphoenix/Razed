@@ -12,7 +12,7 @@ use physics::{
     collision::LightCollision,
     rigid::{RbVelocity, RigidBodySolver},
 };
-use rayon::iter::ParallelBridge;
+use rayon::iter::{ParallelIterator};
 
 const MOTION_ACCUM_BUCKET_SIZE: Duration = Duration::from_millis(300);
 const MOTION_ACCUM_BUCKET_COUNT: usize = 6;
@@ -330,9 +330,8 @@ impl DebrisSystem {
         {
             let par_iter = self
                 .debris_hash
-                .elements()
-                .filter(|vec| !vec.is_empty())
-                .par_bridge();
+                .par_iter()
+                .filter_map(|(_, bucket)| (!bucket.is_empty()).then(|| bucket));
 
             self.collision_job
                 .dispatch_jobs(par_iter, |WorkBuffers { buffer, result }, debris| {
