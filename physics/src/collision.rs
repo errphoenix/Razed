@@ -120,6 +120,29 @@ pub struct LightCollision {
     pub index_b: DirectIndex,
 }
 
+pub fn detect_sphere(
+    p0: glam::Vec3,
+    p1: glam::Vec3,
+    v0: Sphere,
+    v1: Sphere,
+    id0: DirectIndex,
+    id1: DirectIndex,
+) -> Option<LightCollision> {
+    let d_sq = p0.distance_squared(p1);
+    if v0.intersects(v1, d_sq) && d_sq > 0.0001 {
+        let (n, depth) = v0.peneration_with(v1, p0, p1, d_sq);
+
+        return Some(LightCollision {
+            normal: n,
+            depth,
+            index_a: id0,
+            index_b: id1,
+        });
+    }
+
+    None
+}
+
 /// Detect collisions between all bodies, given their `positions` and
 /// `volumes`.
 pub fn detect_n2(
@@ -138,21 +161,10 @@ pub fn detect_n2(
             let p1 = positions[j];
             let v0 = volumes[i];
             let v1 = volumes[j];
+            let id0 = direct_indices[i];
+            let id1 = direct_indices[j];
 
-            let d_sq = p0.distance_squared(p1);
-            if v0.intersects(v1, d_sq) && d_sq > 0.0001 {
-                let (n, depth) = v0.peneration_with(v1, p0, p1, d_sq);
-
-                let id0 = direct_indices[i];
-                let id1 = direct_indices[j];
-
-                results.push(LightCollision {
-                    normal: n,
-                    depth,
-                    index_a: id0,
-                    index_b: id1,
-                });
-            }
+            results.extend(detect_sphere(p0, p1, v0, v1, id0, id1));
         }
     }
 }

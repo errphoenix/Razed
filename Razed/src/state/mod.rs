@@ -679,14 +679,6 @@ impl State {
         self.profiler
             .capture_duration("debris_hash", || self.debris.hash_debris());
 
-        #[cfg(feature = "devmode")]
-        {
-            self.profiler.push_trace("debris_physics");
-            self.debris.simulate_bodies(delta, &mut self.profiler);
-            self.profiler.pop_trace();
-        }
-
-        #[cfg(not(feature = "devmode"))]
         self.profiler.capture_duration("debris_physics", || {
             self.debris.simulate_bodies(delta);
         });

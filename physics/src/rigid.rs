@@ -229,6 +229,14 @@ impl RigidBodySolver {
         self.static_volumes_hash.clear();
     }
 
+    pub fn static_volumes_hash(&self) -> &FxLsSpatialHash<IndirectIndex> {
+        &self.static_volumes_hash
+    }
+
+    pub fn static_volumes_data(&self) -> &StaticVolumeRowTable {
+        &self.static_volumes
+    }
+
     pub fn add_static_volume(&mut self, position: glam::Vec3, volume: Sphere) -> IndirectIndex {
         let id = self.static_volumes.insert((position, volume));
         let cell = self.static_volumes_hash.cell_at(position);

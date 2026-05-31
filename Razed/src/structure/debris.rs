@@ -78,13 +78,19 @@ ethel::table_spec! {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct DebrisVolumeBuffer {
+pub struct CollisionBuffers {
+    pub debris: DebrisBuffer,
+    pub rubber: Vec<RubberStaticData>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct DebrisBuffer {
     pub positions: Vec<glam::Vec3>,
     pub volumes: Vec<::physics::Sphere>,
     pub direct_indices: Vec<DirectIndex>,
 }
 
-impl DebrisVolumeBuffer {
+impl DebrisBuffer {
     pub fn new() -> Self {
         Self::default()
     }
@@ -108,12 +114,25 @@ impl DebrisVolumeBuffer {
         self.volumes.clear();
         self.direct_indices.clear();
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.direct_indices.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.direct_indices.len()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct RubberStaticData {
+    pub position: glam::Vec3,
+    pub volume: ::physics::Sphere,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 struct RubberStaticEntity {
-    pub position: glam::Vec3,
-    pub volume: ::physics::Sphere,
+    pub data: RubberStaticData,
     pub handle: IndirectIndex,
 }
 
@@ -135,8 +154,7 @@ impl RubberVolumeStage {
 
     pub fn push(&mut self, position: glam::Vec3, volume: ::physics::Sphere, handle: IndirectIndex) {
         self.entities.push(RubberStaticEntity {
-            position,
-            volume,
+            data: RubberStaticData { position, volume },
             handle,
         });
     }
@@ -158,9 +176,9 @@ pub const HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(4.0);
 pub struct DebrisSystem {
     debris: DebrisRowTable,
     debris_phys: RigidBodySolver,
-    debris_hash: FxLsSpatialHash<DirectIndex>,
+    debris_hash: FxLsSpatialHash<IndirectIndex>,
 
-    collision_job: LazyLock<BufferedRoutine<DebrisVolumeBuffer, LightCollision>>,
+    collision_job: LazyLock<BufferedRoutine<CollisionBuffers, LightCollision>>,
 
     debris_trash_buffer: Vec<IndirectIndex>,
 
@@ -174,10 +192,12 @@ impl Default for DebrisSystem {
             debris: DebrisRowTable::default(),
             debris_phys: RigidBodySolver::default(),
             debris_hash: FxLsSpatialHash::new(HASH_RESOLUTION),
-            collision_job: LazyLock::new(|| BufferedRoutine::new(rayon::current_num_threads())),
+
             debris_trash_buffer: Vec::new(),
             rubber_volume_stage: RubberVolumeStage::default(),
             rubber: RubberRowTable::default(),
+
+            collision_job: LazyLock::new(|| BufferedRoutine::new(rayon::current_num_threads())),
         }
     }
 }
@@ -190,12 +210,14 @@ impl DebrisSystem {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             debris: DebrisRowTable::with_capacity(capacity),
+            debris_phys: RigidBodySolver::default(),
             debris_hash: FxLsSpatialHash::with_capacity(HASH_RESOLUTION, capacity),
-            collision_job: LazyLock::new(|| BufferedRoutine::new(rayon::current_num_threads())),
+
             debris_trash_buffer: Vec::with_capacity(capacity / 2),
             rubber_volume_stage: RubberVolumeStage::new(),
             rubber: RubberRowTable::with_capacity(capacity / 2),
-            ..Default::default()
+
+            collision_job: LazyLock::new(|| BufferedRoutine::new(rayon::current_num_threads())),
         }
     }
 
@@ -264,33 +286,104 @@ impl DebrisSystem {
         let handles = self.debris.handles_view();
         let debris = pos.join(bounds).join(handles);
 
-        for (i, (&pos, &_bounds, &handle)) in debris.into_iter().enumerate() {
+        for (&pos, &_bounds, &handle) in debris.into_iter() {
             let cell = self.debris_hash.cell_at(pos);
-            let direct_id = DirectIndex::from_index(i, handle.generation());
-            self.debris_hash.put(cell, direct_id);
-
-            // let cells = self.debris_hash.aligned_adjacent_cells(pos);
-
-            // let direct_id = DirectIndex::from_index(i, handle.generation());
-            // for cell in cells {
-            //     let aabb = {
-            //         let entry = self.spatial_bounds_cache.entry(cell);
-            //         let res = self.debris_hash.resolution;
-            //         entry.or_insert_with(|| Aabb::from_cell(cell, res))
-            //     };
-
-            //     if aabb.intersects_sphere(bounds, pos) {
-            //         self.debris_hash.put(cell, direct_id);
-            //     }
-            // }
+            self.debris_hash.put(cell, handle);
         }
     }
 
-    pub fn simulate_bodies(
-        &mut self,
-        delta: DeltaTime,
-        #[cfg(feature = "devmode")] profiler: &mut ethel::profile::Profiler,
-    ) {
+    pub fn simulate_bodies(&mut self, delta: DeltaTime) {
+        // register pending static entites
+        for RubberStaticEntity { data, handle } in self.rubber_volume_stage.drain() {
+            let volume_id = self
+                .debris_phys
+                .add_static_volume(data.position, data.volume);
+
+            let direct = self.rubber.solve_indirect(handle).unwrap();
+            self.rubber.volume_id[direct.as_index()] = volume_id;
+        }
+
+        {
+            let positions = &self.debris.position;
+            let volumes = &self.debris.volume;
+
+            let rubber_par_iter = self.debris_phys.static_volumes_hash().par_iter();
+            let par_iter = self
+                .debris_hash
+                .par_iter()
+                .chain(rubber_par_iter)
+                .filter_map(|(&cell, bucket)| (!bucket.is_empty()).then(|| cell));
+
+            let static_hash = self.debris_phys.static_volumes_hash();
+            let static_data = self.debris_phys.static_volumes_data();
+
+            self.collision_job
+                .dispatch_jobs(par_iter, |WorkBuffers { buffer, result }, cell| {
+                    let debris = &mut buffer.debris;
+                    let rubber = &mut buffer.rubber;
+
+                    // dynamic - dynamic
+                    {
+                        // reconstruct debris buffer
+                        debris.clear();
+                        if let Some(bucket) = self.debris_hash.get(cell) {
+                            bucket.iter().for_each(|i| {
+                                let direct = unsafe { self.debris.solve_indirect_unchecked(*i) };
+                                let position = positions[direct.as_index()];
+                                let volume = volumes[direct.as_index()];
+                                debris.push(position, volume, direct);
+                            });
+                        }
+
+                        let DebrisBuffer {
+                            positions,
+                            volumes,
+                            direct_indices,
+                        } = &debris;
+
+                        ::physics::collision::detect_n2(positions, volumes, direct_indices, result);
+                    }
+
+                    // static - dynamic
+                    {
+                        if !debris.is_empty() {
+                            // reconstruct rubber buffer
+                            rubber.clear();
+                            if let Some(bucket) = static_hash.get(cell) {
+                                bucket.iter().for_each(|i| {
+                                    let direct =
+                                        unsafe { self.debris.solve_indirect_unchecked(*i) };
+                                    let position = static_data.position[direct.as_index()];
+                                    let volume = static_data.volume[direct.as_index()];
+                                    rubber.push(RubberStaticData { position, volume });
+                                });
+                            }
+
+                            let rubber = &buffer.rubber;
+
+                            for i in 0..debris.len() {
+                                let p0 = debris.positions[i];
+                                let v0 = debris.volumes[i];
+                                let id0 = debris.direct_indices[i];
+
+                                // static body needs no id
+                                let id1 = DirectIndex::default();
+
+                                for &RubberStaticData {
+                                    position: p1,
+                                    volume: v1,
+                                } in rubber
+                                {
+                                    result.extend(::physics::collision::detect_sphere(
+                                        p0, p1, v0, v1, id0, id1,
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                });
+        }
+
         let positions = &mut self.debris.position;
         let rotations = &mut self.debris.rotation;
         let velocities = &mut self.debris.velocity;
@@ -299,76 +392,6 @@ impl DebrisSystem {
         let masses = &self.debris.mass;
         let inv_inertia_loc = &self.debris.inv_inertia_loc;
         let inv_inertia_abs = &mut self.debris.inv_inertia_abs;
-        let volumes = &self.debris.volume;
-
-
-        // single threaded
-        {
-            // self.debris_hash
-            //     .elements()
-            //     .filter(|vec| !vec.is_empty())
-            //     .for_each(|debris| {
-            //         self.debris_volume_buffer.clear();
-
-            //         debris.iter().for_each(|index| {
-            //             let position = positions[index.as_index()];
-            //             let volume = volumes[index.as_index()];
-            //             self.debris_volume_buffer.push(position, volume, *index);
-            //         });
-
-            //         let DebrisVolumeBuffer {
-            //             positions,
-            //             volumes,
-            //             direct_indices,
-            //         } = &self.debris_volume_buffer;
-
-            //         self.debris_phys
-            //             .detect_collisions(positions, volumes, direct_indices);
-            //     });
-        }
-
-        {
-            let par_iter = self
-                .debris_hash
-                .par_iter()
-                .filter_map(|(_, bucket)| (!bucket.is_empty()).then(|| bucket));
-
-            self.collision_job
-                .dispatch_jobs(par_iter, |WorkBuffers { buffer, result }, debris| {
-                    buffer.clear();
-
-                    debris.iter().for_each(|index| {
-                        let position = positions[index.as_index()];
-                        let volume = volumes[index.as_index()];
-                        buffer.push(position, volume, *index);
-                    });
-
-                    let DebrisVolumeBuffer {
-                        positions,
-                        volumes,
-                        direct_indices,
-                    } = &buffer;
-
-                    ::physics::collision::detect_n2(positions, volumes, direct_indices, result);
-                });
-        }
-
-
-        {
-            for RubberStaticEntity {
-                position,
-                volume,
-                handle,
-            } in self.rubber_volume_stage.drain()
-            {
-                let volume_id = self.debris_phys.add_static_volume(position, volume);
-                let direct = self.rubber.solve_indirect(handle).unwrap();
-                self.rubber.volume_id[direct.as_index()] = volume_id;
-            }
-
-            self.debris_phys
-                .detect_static_collisions(&self.debris_hash, positions, volumes);
-        }
 
         self.debris_phys
             .solve_collisions(positions, velocities, masses);
