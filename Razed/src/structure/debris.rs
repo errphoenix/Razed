@@ -1,4 +1,7 @@
-use std::time::{Duration, Instant};
+use std::{
+    sync::LazyLock,
+    time::{Duration, Instant},
+};
 
 use ethel::state::data::{
     Column, DirectIndex, IndirectIndex,
@@ -12,7 +15,7 @@ use physics::{
     collision::LightCollision,
     rigid::{RbVelocity, RigidBodySolver},
 };
-use rayon::iter::{ParallelIterator};
+use rayon::iter::ParallelIterator;
 
 const MOTION_ACCUM_BUCKET_SIZE: Duration = Duration::from_millis(300);
 const MOTION_ACCUM_BUCKET_COUNT: usize = 6;
@@ -147,7 +150,6 @@ impl RubberVolumeStage {
     }
 }
 
-const COLLISION_JOB_THREAD_COUNT: usize = 4;
 const DEBRIS_FREEZE_TIME_THRESHOLD: f32 = 4.0;
 const DEBRIS_FREEZE_MOVE_THRESHOLD: f32 = 0.75;
 pub const HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(4.0);
@@ -158,9 +160,8 @@ pub struct DebrisSystem {
     debris_phys: RigidBodySolver,
     debris_hash: FxLsSpatialHash<DirectIndex>,
 
-    collision_job: BufferedRoutine<DebrisVolumeBuffer, LightCollision>,
+    collision_job: LazyLock<BufferedRoutine<DebrisVolumeBuffer, LightCollision>>,
 
-    debris_volume_buffer: DebrisVolumeBuffer,
     debris_trash_buffer: Vec<IndirectIndex>,
 
     rubber_volume_stage: RubberVolumeStage,
@@ -173,8 +174,7 @@ impl Default for DebrisSystem {
             debris: DebrisRowTable::default(),
             debris_phys: RigidBodySolver::default(),
             debris_hash: FxLsSpatialHash::new(HASH_RESOLUTION),
-            collision_job: BufferedRoutine::new(COLLISION_JOB_THREAD_COUNT),
-            debris_volume_buffer: DebrisVolumeBuffer::default(),
+            collision_job: LazyLock::new(|| BufferedRoutine::new(rayon::current_num_threads())),
             debris_trash_buffer: Vec::new(),
             rubber_volume_stage: RubberVolumeStage::default(),
             rubber: RubberRowTable::default(),
@@ -191,7 +191,7 @@ impl DebrisSystem {
         Self {
             debris: DebrisRowTable::with_capacity(capacity),
             debris_hash: FxLsSpatialHash::with_capacity(HASH_RESOLUTION, capacity),
-            debris_volume_buffer: DebrisVolumeBuffer::new(),
+            collision_job: LazyLock::new(|| BufferedRoutine::new(rayon::current_num_threads())),
             debris_trash_buffer: Vec::with_capacity(capacity / 2),
             rubber_volume_stage: RubberVolumeStage::new(),
             rubber: RubberRowTable::with_capacity(capacity / 2),
