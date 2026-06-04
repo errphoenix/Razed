@@ -672,29 +672,32 @@ impl XpbdSolver {
         if self.allow_breaking {
             self.broken_links.iter().for_each(|&handle| {
                 if self.clear_degenerate_nodes {
-                    let id = constraint_table.solve_indirect(handle).unwrap();
-                    let [a, b] = constraint_table.constraints().relations[id.as_index()];
+                    if let Some(id) = constraint_table.solve_indirect(handle) {
+                        let [a, b] = constraint_table.constraints().relations[id.as_index()];
 
-                    // delete node if this deleted constraint was their last
-                    // else, only keep tracking count: constraints are only
-                    // recounted at the start of the next step, but multiple
-                    // constraints to the same node might break in one step.
-                    {
-                        let ca =
-                            unsafe { self.frame_constraint_map.get_unchecked_mut(a.as_index()) };
-                        if *ca == 1 {
-                            // nodes.free(a);
-                            self.degenerate_nodes.push(a);
-                        } else {
-                            *ca -= 1;
-                        }
-                        let cb =
-                            unsafe { self.frame_constraint_map.get_unchecked_mut(b.as_index()) };
-                        if *cb == 1 {
-                            // nodes.free(b);
-                            self.degenerate_nodes.push(b);
-                        } else {
-                            *cb -= 1;
+                        // delete node if this deleted constraint was their last
+                        // else, only keep tracking count: constraints are only
+                        // recounted at the start of the next step, but multiple
+                        // constraints to the same node might break in one step.
+                        {
+                            let ca = unsafe {
+                                self.frame_constraint_map.get_unchecked_mut(a.as_index())
+                            };
+                            if *ca == 1 {
+                                // nodes.free(a);
+                                self.degenerate_nodes.push(a);
+                            } else {
+                                *ca -= 1;
+                            }
+                            let cb = unsafe {
+                                self.frame_constraint_map.get_unchecked_mut(b.as_index())
+                            };
+                            if *cb == 1 {
+                                // nodes.free(b);
+                                self.degenerate_nodes.push(b);
+                            } else {
+                                *cb -= 1;
+                            }
                         }
                     }
                 }
