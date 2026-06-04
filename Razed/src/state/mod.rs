@@ -376,24 +376,15 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         &mut self,
         input: &mut ethel::InputSystem,
         screen: &mut janus::sync::Mirror<ScreenSpace>,
-        view_point: &mut janus::sync::Mirror<camera::ViewPoint>,
+        view_point: &janus::sync::TriCell<camera::ViewPoint>,
         delta: janus::context::DeltaTime,
     ) {
         self.profiler.page();
-        view_point.sync().unwrap();
+        let vp_prev = view_point.get();
 
-        if input.keys().key_pressed(janus::input::KeyCode::KeyB) {
-            self.debris.data_mut().clear();
-            self.debris.clear_rubber();
-        }
-
-        if input.keys().key_pressed(janus::input::KeyCode::KeyP) {
-            self.save_profiler_report();
-        }
-
-        if !input.cursor_options().grabbed {
+        if !input.cursor_options().check_grabbed() {
             screen.sync().unwrap();
-            self.select_lattice_raycast(input, screen.get(), view_point.get());
+            self.select_lattice_raycast(input, screen.get(), view_point);
         } else {
             {
                 const ANCHOR_Y_MOVE: glam::Vec3 = glam::vec3(0.0, 1.0, 0.0);
@@ -416,28 +407,34 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             let (dx, dy) = (dx.to_radians(), dy.to_radians());
             self.camera.update(dx, dy);
 
-            let dw = *input.mouse_wheel();
+            let dw = input.mouse_wheel();
             *self.camera.distance_mut() -= dw * delta.as_f32() * 100.0;
 
-            view_point.publish_with(|vp| {
-                *vp = *self.camera.viewpoint();
-            });
+            let _ = view_point.set_and_advance(*self.camera.viewpoint());
         }
 
+        // shadow tricell with previous read viewpoint value
+        // ensures we are still reading the correct frame despite the advance
+        // operation
+        let view_point = vp_prev;
+
+        if input.keys().key_pressed(janus::input::KeyCode::KeyB) {
+            self.debris.data_mut().clear();
+            self.debris.clear_rubber();
+        }
+        if input.keys().key_pressed(janus::input::KeyCode::KeyP) {
+            self.save_profiler_report();
+        }
         if input.keys().key_pressed(janus::input::KeyCode::KeyH) {
-            self.spawn_debug_structure(view_point.get());
+            self.spawn_debug_structure(&view_point);
         }
 
         const CAMERA_KEY: janus::input::KeyCode = janus::input::KeyCode::Tab;
         if input.keys().key_pressed(CAMERA_KEY) {
-            input.cursor_options().publish_with(|opt| {
-                opt.grabbed = true;
-            });
+            input.cursor_options().set_grabbed(true);
         }
         if input.keys().key_released(CAMERA_KEY) {
-            input.cursor_options().publish_with(|opt| {
-                opt.grabbed = false;
-            });
+            input.cursor_options().set_grabbed(false);
         }
 
         self.lattice.clear_damage_buffers();
@@ -797,7 +794,7 @@ impl State {
 
     fn select_lattice_raycast(
         &mut self,
-        input: &mut ethel::InputSystem,
+        input: &ethel::InputSystem,
         screen: &ScreenSpace,
         view_point: &ViewPoint,
     ) {
@@ -827,7 +824,7 @@ impl State {
         let mut closest = None::<f32>;
 
         for (i, [a, b]) in constraints.into_iter().enumerate() {
-            const RAY_SIZE: f32 = 0.05;
+            const RAY_SIZE: f32 = 0.1;
 
             // view start at 1 to ignore degenerate element 0
             let i = i + 1;

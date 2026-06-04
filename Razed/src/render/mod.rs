@@ -50,10 +50,9 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
     fn pre_frame(
         &mut self,
         screen: &mut janus::sync::Mirror<ethel::render::ScreenSpace>,
-        view: &mut janus::sync::Mirror<ethel::state::camera::ViewPoint>,
+        view: &janus::sync::TriCell<ethel::state::camera::ViewPoint>,
         _delta: janus::context::DeltaTime,
     ) {
-        view.sync().unwrap();
         screen.sync().unwrap();
 
         let view_mat = view.into_mat4().inverse();
