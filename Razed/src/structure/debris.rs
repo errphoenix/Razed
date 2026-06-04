@@ -382,6 +382,18 @@ impl DebrisSystem {
                         }
                     }
                 });
+
+            let contacts = self.debris_phys.collision_buffer_mut();
+
+            self.collision_job
+                .thread_buffers()
+                .buffers_mut()
+                .for_each(|buffer| {
+                    let thread_results = &mut buffer.result;
+                    thread_results.drain(..).for_each(|contact| {
+                        contacts.push(contact);
+                    });
+                });
         }
 
         let positions = &mut self.debris.position;
