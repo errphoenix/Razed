@@ -10,7 +10,7 @@ panic = "abort"
 
 [dependencies]
 janus = { path = "../../janus", features = ["expose_gl", "render", "input", "jobs"] }
-ethel = { path = "../../ethel", features = ["profile", "rayon"] }
+ethel = { path = "../../ethel", features = ["profile", "rayon", "assets"] }
 physics = { path = "../physics" }
 polys = { path = "../polys" }
 glam = "=0.31.0"

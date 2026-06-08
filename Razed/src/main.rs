@@ -11,6 +11,7 @@ use crate::{
     render::RenderGroup,
 };
 
+mod assets;
 mod data;
 mod procedural;
 mod render;
