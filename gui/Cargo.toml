@@ -4,7 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-ethel = { version = "0.1.0", path = "../../ethel", features = ["assets"] }
+janus = { path = "../../janus" }
+ethel = { path = "../../ethel", features = ["assets"] }
 glam = "=0.31.0"
 paste = "1.0.15"
 taffy = "0.10.1"
+
+[features]
+default = []
+taffy = []

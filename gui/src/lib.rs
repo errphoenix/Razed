@@ -1,5 +1,98 @@
-use ethel::state::data::IndirectIndex;
+use ethel::{assets::TextureId, state::data::IndirectIndex};
+
+use janus::StringHash;
+#[cfg(feature = "taffy")]
+pub use taffy::prelude::*;
+
+#[cfg(not(feature = "taffy"))]
 use taffy::prelude::*;
+
+ethel::table_spec! {
+    struct InterfaceCommon {
+        archetype: ComponentKind;
+        anchor: glam::Vec2;
+        bounds: Box2d;
+        parent: Option<WidgetId>;
+        children: Vec<WidgetId>;
+    }
+}
+
+ethel::table_spec! {
+    struct InterfacePanel {
+        background_color: glam::Vec3;
+        hover_tint: glam::Vec4;
+        opacity: f32;
+    }
+}
+
+ethel::table_spec! {
+    struct InterfaceText {
+        string: StringHash;
+        font_name: StringHash;
+        color: glam::Vec4;
+        size: u32;
+    }
+}
+
+ethel::table_spec! {
+    struct InterfaceImage {
+        tint: glam::Vec4;
+        opacity: f32;
+        texture: TextureId;
+    }
+}
+
+ethel::table_spec! {
+    struct InterfaceButton {
+        label: StringHash;
+        font_name: StringHash;
+        text_color: glam::Vec3;
+        text_size: u32;
+
+        hover_tint: glam::Vec3;
+        press_tint: glam::Vec3;
+
+        callback: ButtonCallback;
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ButtonCallback(pub fn());
+
+impl ButtonCallback {
+    pub const fn new(callback: fn()) -> Self {
+        Self(callback)
+    }
+
+    pub const fn null() -> Self {
+        Self(|| ())
+    }
+}
+
+impl From<ButtonCallback> for fn() {
+    fn from(value: ButtonCallback) -> Self {
+        value.0
+    }
+}
+
+impl Default for ButtonCallback {
+    fn default() -> Self {
+        Self::null()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct WidgetId(pub IndirectIndex);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub enum ComponentKind {
+    #[default]
+    Null,
+    Panel,
+    Text,
+    Image,
+    Button,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct Box2d {
@@ -79,32 +172,10 @@ impl Box2d {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct WidgetId(pub IndirectIndex);
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
-pub enum ComponentKind {
-    #[default]
-    Null,
-    Panel,
-    Text,
-    Image,
-    Button,
-}
-
-ethel::table_spec! {
-    struct InterfaceCommon {
-        archetype: ComponentKind;
-        anchor: glam::Vec2;
-        bounds: Box2d;
-        parent: Option<WidgetId>;
-        children: Vec<WidgetId>;
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct NodeJointId {
     pub table_id: WidgetId,
+    #[cfg(feature = "taffy")]
     pub tree_id: NodeId,
 }
 
@@ -126,6 +197,7 @@ impl InterfaceSystem {
 
         let root_node = NodeJointId {
             table_id: ROOT_ID,
+            #[cfg(feature = "taffy")]
             tree_id,
         };
 
@@ -146,6 +218,7 @@ impl InterfaceSystem {
 
         let root_node = NodeJointId {
             table_id: ROOT_ID,
+            #[cfg(feature = "taffy")]
             tree_id,
         };
 
@@ -158,6 +231,11 @@ impl InterfaceSystem {
 
     pub const fn root_id(&self) -> NodeJointId {
         self.root_node
+    }
+
+    #[cfg(feature = "taffy")]
+    pub const fn taffy_layout(&self) -> &TaffyTree<WidgetId> {
+        &self.layout
     }
 
     pub fn evaluate_layout(&mut self) {}
