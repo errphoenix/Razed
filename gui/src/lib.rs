@@ -1,4 +1,7 @@
-use ethel::{assets::TextureId, state::data::IndirectIndex};
+use ethel::{
+    assets::TextureId,
+    state::data::{Column, IndirectIndex},
+};
 
 use janus::StringHash;
 #[cfg(feature = "taffy")]
@@ -12,7 +15,7 @@ ethel::table_spec! {
         archetype: ComponentKind;
         anchor: glam::Vec2;
         bounds: Box2d;
-        parent: Option<WidgetId>;
+        parent: WidgetId;
         children: Vec<WidgetId>;
     }
 }
@@ -44,13 +47,10 @@ ethel::table_spec! {
 
 ethel::table_spec! {
     struct InterfaceButton {
-        label: StringHash;
-        font_name: StringHash;
-        text_color: glam::Vec3;
-        text_size: u32;
+        text_id: IndirectIndex;
 
-        hover_tint: glam::Vec3;
-        press_tint: glam::Vec3;
+        hover_tint: glam::Vec4;
+        press_tint: glam::Vec4;
 
         callback: ButtonCallback;
     }
@@ -81,17 +81,30 @@ impl Default for ButtonCallback {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct WidgetId(pub IndirectIndex);
+
+impl WidgetId {
+    pub const fn new(index: IndirectIndex) -> Self {
+        Self(index)
+    }
+
+    pub const fn is_null(self) -> bool {
+        self.0.as_int() == 0
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub enum ComponentKind {
     #[default]
     Null,
-    Panel,
-    Text,
-    Image,
-    Button,
+    Panel(IndirectIndex),
+    Text(IndirectIndex),
+    Image(IndirectIndex),
+    Button {
+        handle: IndirectIndex,
+        text_handle: IndirectIndex,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
@@ -182,8 +195,13 @@ pub struct NodeJointId {
 #[derive(Debug)]
 pub struct InterfaceSystem {
     layout: TaffyTree<WidgetId>,
-    commons: InterfaceCommonRowTable,
     root_node: NodeJointId,
+
+    commons: InterfaceCommonRowTable,
+    panels: InterfacePanelRowTable,
+    texts: InterfaceTextRowTable,
+    images: InterfaceImageRowTable,
+    buttons: InterfaceButtonRowTable,
 }
 
 impl InterfaceSystem {
@@ -205,6 +223,10 @@ impl InterfaceSystem {
             layout,
             root_node,
             commons: InterfaceCommonRowTable::new(),
+            panels: InterfacePanelRowTable::new(),
+            texts: InterfaceTextRowTable::new(),
+            images: InterfaceImageRowTable::new(),
+            buttons: InterfaceButtonRowTable::new(),
         }
     }
 
@@ -226,6 +248,10 @@ impl InterfaceSystem {
             layout,
             root_node,
             commons: InterfaceCommonRowTable::with_capacity(capacity),
+            panels: InterfacePanelRowTable::with_capacity(capacity),
+            texts: InterfaceTextRowTable::with_capacity(capacity),
+            images: InterfaceImageRowTable::with_capacity(capacity),
+            buttons: InterfaceButtonRowTable::with_capacity(capacity),
         }
     }
 
@@ -236,6 +262,158 @@ impl InterfaceSystem {
     #[cfg(feature = "taffy")]
     pub const fn taffy_layout(&self) -> &TaffyTree<WidgetId> {
         &self.layout
+    }
+
+    pub fn parent_of(&self, widget: WidgetId) -> Option<WidgetId> {
+        if let Some(direct) = self.commons.solve_indirect(widget.0) {
+            self.commons.parent.get(direct.as_index()).copied()
+        } else {
+            None
+        }
+    }
+
+    pub fn has_parent(&self, widget: WidgetId) -> Option<bool> {
+        self.parent_of(widget).map(|id| !id.is_null())
+    }
+
+    /// Make a core element into a panel element.
+    ///
+    /// This requires the core element's `id`.
+    ///
+    /// # Returns
+    /// Returns the `IndirectIndex` of the panel data.
+    /// Or returns `None` if the given core `id` is invalid.
+    pub fn make_panel(
+        &mut self,
+        id: WidgetId,
+        color: glam::Vec3,
+        hover_tint: glam::Vec4,
+        opacity: f32,
+    ) -> Option<IndirectIndex> {
+        if let Some(commons_id) = self.commons.solve_indirect(id.0) {
+            let panel_element = (color, hover_tint, opacity);
+            let panel_id = self.panels.insert(panel_element);
+            self.commons.archetype[commons_id.as_index()] = ComponentKind::Panel(panel_id);
+            Some(panel_id)
+        } else {
+            None
+        }
+    }
+
+    /// Make a core element into a text element.
+    ///
+    /// This requires the core element's `id`.
+    ///
+    /// # Returns
+    /// Returns the `IndirectIndex` of the text data.
+    /// Or returns `None` if the given core `id` is invalid.
+    pub fn make_text(
+        &mut self,
+        id: WidgetId,
+        string: StringHash,
+        font_name: StringHash,
+        color: glam::Vec4,
+        size: u32,
+    ) -> Option<IndirectIndex> {
+        if let Some(commons_id) = self.commons.solve_indirect(id.0) {
+            let text_id = self.create_text(string, font_name, color, size);
+            self.commons.archetype[commons_id.as_index()] = ComponentKind::Text(text_id);
+            Some(text_id)
+        } else {
+            None
+        }
+    }
+
+    /// Make a core element into an image element.
+    ///
+    /// This requires the core element's `id`.
+    ///
+    /// # Returns
+    /// Returns the `IndirectIndex` of the image data.
+    /// Or returns `None` if the given core `id` is invalid.
+    pub fn make_image(
+        &mut self,
+        id: WidgetId,
+        tint: glam::Vec4,
+        opacity: f32,
+        texture: TextureId,
+    ) -> Option<IndirectIndex> {
+        if let Some(commons_id) = self.commons.solve_indirect(id.0) {
+            let image_element = (tint, opacity, texture);
+            let image_id = self.images.insert(image_element);
+            self.commons.archetype[commons_id.as_index()] = ComponentKind::Image(image_id);
+            Some(image_id)
+        } else {
+            None
+        }
+    }
+
+    /// Make a core element into a button element.
+    ///
+    /// This, other than the core element's `root_id`, also requires the
+    /// `text_id` of a text element, created with [`Self::create_text`].
+    ///
+    /// # Returns
+    /// Returns the `IndirectIndex` of the button data.
+    /// Or returns `None` if the given core `root_id` is invalid.
+    pub fn make_button(
+        &mut self,
+        root_id: WidgetId,
+        text_id: IndirectIndex,
+        hover_tint: glam::Vec4,
+        press_tint: glam::Vec4,
+        callback: ButtonCallback,
+    ) -> Option<IndirectIndex> {
+        if let Some(commons_id) = self.commons.solve_indirect(root_id.0) {
+            let button_element = (text_id, hover_tint, press_tint, callback);
+            let button_id = self.buttons.insert(button_element);
+            self.commons.archetype[commons_id.as_index()] = ComponentKind::Button {
+                handle: button_id,
+                text_handle: text_id,
+            };
+            Some(button_id)
+        } else {
+            None
+        }
+    }
+
+    /// Create a new empty or core element.
+    ///
+    /// This returns a new [`WidgetId`] which can be used to create
+    /// specific element types through [`Self::make_panel`],
+    /// [`Self::make_text`], [`Self::make_image`], or [`Self::make_button`].
+    pub fn add_new(
+        &mut self,
+        parent: Option<WidgetId>,
+        anchor: glam::Vec2,
+        bounds: Box2d,
+        children: Option<&[WidgetId]>,
+    ) -> WidgetId {
+        let children = if let Some(children) = children {
+            children.to_vec()
+        } else {
+            // does not allocate
+            Vec::new()
+        };
+        let parent = parent.unwrap_or_default();
+        let element = (ComponentKind::Null, anchor, bounds, parent, children);
+        WidgetId(self.commons.insert(element))
+    }
+
+    /// Create a new text element without direct associations to the widget
+    /// tree.
+    ///
+    /// This text element can then be used for a button element with
+    /// [`Self::make_button`].
+    pub fn create_text(
+        &mut self,
+        string: StringHash,
+        font_name: StringHash,
+        color: glam::Vec4,
+        size: u32,
+    ) -> IndirectIndex {
+        let text_element = (string, font_name, color, size);
+        self.texts.insert(text_element)
     }
 
     pub fn evaluate_layout(&mut self) {}
