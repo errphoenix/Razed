@@ -593,6 +593,17 @@ pub enum ComponentKind {
         text_handle: IndirectIndex,
     },
 }
+impl std::fmt::Display for ComponentKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ComponentKind::Null => write!(f, "null"),
+            ComponentKind::Panel(_) => write!(f, "panel"),
+            ComponentKind::Text(_) => write!(f, "text"),
+            ComponentKind::Image(_) => write!(f, "image"),
+            ComponentKind::Button { .. } => write!(f, "button"),
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct Box2d {
@@ -684,6 +695,9 @@ pub struct NodeJointId {
 
 #[derive(Debug, thiserror::Error)]
 pub enum WidgetError {
+    #[error("archetype '{0}' is already defined")]
+    ArchetypeAlreadyDefined(ComponentKind),
+
     #[error("parent by given ID {0} not found")]
     ParentNotFound(WidgetId),
 
@@ -692,6 +706,9 @@ pub enum WidgetError {
 
     #[error("taffy layout error: {0}")]
     TaffyLayoutError(taffy::TaffyError),
+
+    #[error("invalid widget handle {0}: cannot be resolved")]
+    InvalidWidgetHandle(u32),
 }
 
 #[derive(Debug)]
@@ -801,6 +818,15 @@ impl InterfaceSystem {
             .expect("failed to evaluate taffy layout");
     }
 
+    fn assert_null_archetype(&self, root_id: DirectIndex) -> Result<(), WidgetError> {
+        let archetype = self.commons.archetype[root_id.as_index()];
+        if matches!(archetype, ComponentKind::Null) {
+            Ok(())
+        } else {
+            Err(WidgetError::ArchetypeAlreadyDefined(archetype))
+        }
+    }
+
     /// Make a core element into a panel element.
     ///
     /// This requires the core element's `id`.
@@ -814,14 +840,15 @@ impl InterfaceSystem {
         color: glam::Vec3,
         hover_tint: glam::Vec4,
         opacity: f32,
-    ) -> Option<IndirectIndex> {
+    ) -> Result<IndirectIndex, WidgetError> {
         if let Some(commons_id) = self.commons.solve_indirect(id.0) {
+            self.assert_null_archetype(commons_id)?;
             let panel_element = (color, hover_tint, opacity);
             let panel_id = self.panels.insert(panel_element);
             self.commons.archetype[commons_id.as_index()] = ComponentKind::Panel(panel_id);
-            Some(panel_id)
+            Ok(panel_id)
         } else {
-            None
+            Err(WidgetError::InvalidWidgetHandle(id.0.as_int()))
         }
     }
 
@@ -839,13 +866,14 @@ impl InterfaceSystem {
         font_name: StringHash,
         color: glam::Vec4,
         size: u32,
-    ) -> Option<IndirectIndex> {
+    ) -> Result<IndirectIndex, WidgetError> {
         if let Some(commons_id) = self.commons.solve_indirect(id.0) {
+            self.assert_null_archetype(commons_id)?;
             let text_id = self.create_text(string, font_name, color, size);
             self.commons.archetype[commons_id.as_index()] = ComponentKind::Text(text_id);
-            Some(text_id)
+            Ok(text_id)
         } else {
-            None
+            Err(WidgetError::InvalidWidgetHandle(id.0.as_int()))
         }
     }
 
@@ -862,14 +890,15 @@ impl InterfaceSystem {
         tint: glam::Vec4,
         opacity: f32,
         texture: TextureId,
-    ) -> Option<IndirectIndex> {
+    ) -> Result<IndirectIndex, WidgetError> {
         if let Some(commons_id) = self.commons.solve_indirect(id.0) {
+            self.assert_null_archetype(commons_id)?;
             let image_element = (tint, opacity, texture);
             let image_id = self.images.insert(image_element);
             self.commons.archetype[commons_id.as_index()] = ComponentKind::Image(image_id);
-            Some(image_id)
+            Ok(image_id)
         } else {
-            None
+            Err(WidgetError::InvalidWidgetHandle(id.0.as_int()))
         }
     }
 
@@ -888,17 +917,18 @@ impl InterfaceSystem {
         hover_tint: glam::Vec4,
         press_tint: glam::Vec4,
         callback: ButtonCallback,
-    ) -> Option<IndirectIndex> {
+    ) -> Result<IndirectIndex, WidgetError> {
         if let Some(commons_id) = self.commons.solve_indirect(root_id.0) {
+            self.assert_null_archetype(commons_id)?;
             let button_element = (text_id, hover_tint, press_tint, callback);
             let button_id = self.buttons.insert(button_element);
             self.commons.archetype[commons_id.as_index()] = ComponentKind::Button {
                 handle: button_id,
                 text_handle: text_id,
             };
-            Some(button_id)
+            Ok(button_id)
         } else {
-            None
+            Err(WidgetError::InvalidWidgetHandle(root_id.0.as_int()))
         }
     }
 
