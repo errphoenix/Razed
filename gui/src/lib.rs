@@ -1,5 +1,6 @@
 use ethel::{
     assets::TextureId,
+    render::Resolution,
     state::data::{Column, IndirectIndex},
 };
 
@@ -25,14 +26,115 @@ impl Default for TaffyNodeId {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum Alignment {
+    #[default]
+    Auto,
+
+    Start,
+    Center,
+    End,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum Wrap {
+    #[default]
+    DontWrap,
+    Wrap,
+    Reverse,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum GridFlow {
+    #[default]
+    Row,
+    Column,
+    RowDense,
+    ColumnDense,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum FlexDirection {
+    #[default]
+    Row,
+    Column,
+    RowReverse,
+    ColumnReverse,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum Overflow {
+    #[default]
+    Visible,
+    Hidden,
+    Clip,
+    Scroll,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct CommonLayoutOptions {
+    min_size: glam::Vec2,
+    max_size: glam::Vec2,
+    aspect_ratio: Option<f32>,
+
+    overflow_x: Overflow,
+    overflow_y: Overflow,
+
+    margin: glam::Vec4,
+    padding: glam::Vec4,
+}
+
+#[derive(Clone, Debug, Default)]
+pub enum LayoutStyle {
+    #[default]
+    Empty,
+
+    Absolute {
+        position: glam::Vec2,
+        size: glam::Vec2,
+        floating: bool,
+        inset: f32,
+
+        common: CommonLayoutOptions,
+    },
+
+    Flexbox {
+        direction: FlexDirection,
+        justify_content: Alignment,
+        justify_item: Alignment,
+        align_content: Alignment,
+        align_item: Alignment,
+
+        common: CommonLayoutOptions,
+    },
+
+    Grid {
+        template_rows: u32,
+        template_columns: u32,
+        item_row: u32,
+        item_column: u32,
+        flow: GridFlow,
+
+        justify_content: Alignment,
+        justify_item: Alignment,
+        align_content: Alignment,
+        align_item: Alignment,
+
+        common: CommonLayoutOptions,
+    },
+}
+
 ethel::table_spec! {
     struct InterfaceCommon {
         archetype: ComponentKind;
-        anchor: glam::Vec2;
-        bounds: Box2d;
         parent: WidgetId;
         children: Vec<WidgetId>;
         taffy_id: TaffyNodeId;
+        layout_style: LayoutStyle;
+
+        // feedback values from taffy tree after evaluation
+        feedback_anchor: glam::Vec2;
+        feedback_bounds: Box2d;
     }
 }
 
@@ -136,6 +238,9 @@ pub struct Box2d {
 }
 
 impl Box2d {
+    pub const NULL: Self = Box2d::new(glam::Vec2::ZERO, glam::Vec2::ZERO);
+    pub const UNIT: Self = Box2d::new(glam::Vec2::ONE, glam::Vec2::ONE);
+
     pub const fn new(min: glam::Vec2, max: glam::Vec2) -> Self {
         Self { min, max }
     }
@@ -231,6 +336,8 @@ pub struct InterfaceSystem {
     layout: TaffyTree<WidgetId>,
     root_node: NodeJointId,
 
+    resolution: Resolution,
+
     commons: InterfaceCommonRowTable,
     panels: InterfacePanelRowTable,
     texts: InterfaceTextRowTable,
@@ -239,7 +346,7 @@ pub struct InterfaceSystem {
 }
 
 impl InterfaceSystem {
-    pub fn new() -> Self {
+    pub fn new(resolution: Resolution) -> Self {
         let mut layout = TaffyTree::with_capacity(1);
         const ROOT_ID: WidgetId = WidgetId(IndirectIndex::null(0));
 
@@ -256,6 +363,7 @@ impl InterfaceSystem {
         Self {
             layout,
             root_node,
+            resolution,
             commons: InterfaceCommonRowTable::new(),
             panels: InterfacePanelRowTable::new(),
             texts: InterfaceTextRowTable::new(),
@@ -264,7 +372,7 @@ impl InterfaceSystem {
         }
     }
 
-    pub fn with_capacity(capacity: usize) -> Self {
+    pub fn with_capacity(resolution: Resolution, capacity: usize) -> Self {
         let mut layout = TaffyTree::with_capacity(capacity + 1);
         const ROOT_ID: WidgetId = WidgetId(IndirectIndex::null(0));
 
@@ -281,12 +389,25 @@ impl InterfaceSystem {
         Self {
             layout,
             root_node,
+            resolution,
             commons: InterfaceCommonRowTable::with_capacity(capacity),
             panels: InterfacePanelRowTable::with_capacity(capacity),
             texts: InterfaceTextRowTable::with_capacity(capacity),
             images: InterfaceImageRowTable::with_capacity(capacity),
             buttons: InterfaceButtonRowTable::with_capacity(capacity),
         }
+    }
+
+    pub const fn resolution(&self) -> Resolution {
+        self.resolution
+    }
+
+    /// Update the internal `resolution` of the interface layout.
+    ///
+    /// # Returns
+    /// Returns the previously stored `Resolution`.
+    pub const fn set_resolution(&mut self, resolution: Resolution) -> Resolution {
+        std::mem::replace(&mut self.resolution, resolution)
     }
 
     pub const fn root_id(&self) -> NodeJointId {
@@ -308,6 +429,13 @@ impl InterfaceSystem {
 
     pub fn has_parent(&self, widget: WidgetId) -> Option<bool> {
         self.parent_of(widget).map(|id| !id.is_null())
+    }
+
+    pub fn evaluate_layout(&mut self) {
+        let available = Size::MAX_CONTENT;
+        self.layout
+            .compute_layout(self.root_node.tree_id, available)
+            .expect("failed to evaluate taffy layout");
     }
 
     /// Make a core element into a panel element.
@@ -419,27 +547,28 @@ impl InterfaceSystem {
     pub fn add_new(
         &mut self,
         parent: Option<WidgetId>,
-        anchor: glam::Vec2,
-        bounds: Box2d,
         children: Option<&[WidgetId]>,
+        layout_style: LayoutStyle,
     ) -> Result<WidgetId, WidgetError> {
         let node_id = self
             .layout
             .new_leaf(Style::DEFAULT)
             .map_err(WidgetError::TaffyLayoutError)?;
 
-        if let Some(parent) = parent {
+        let parent = parent.unwrap_or(self.root_node.table_id);
+
+        // add this to parent
+        {
             let parent_direct = self
                 .commons
                 .solve_indirect(parent.0)
                 .ok_or(WidgetError::ParentNotFound(parent))?;
-
             let parent_taffy_id = self.commons.taffy_id[parent_direct.as_index()];
             self.layout
                 .add_child(parent_taffy_id.0, node_id)
-                .map_err(WidgetError::TaffyLayoutError)?
+                .map_err(WidgetError::TaffyLayoutError)?;
         }
-
+        // add children to this
         let children = if let Some(children) = children {
             children.iter().try_for_each(|child| {
                 if let Some(direct) = self.commons.solve_indirect(child.0) {
@@ -458,15 +587,15 @@ impl InterfaceSystem {
             Vec::new()
         };
 
-        let parent = parent.unwrap_or_default();
-
         Ok(WidgetId(self.commons.insert((
             ComponentKind::Null,
-            anchor,
-            bounds,
             parent,
             children,
             TaffyNodeId(node_id),
+            layout_style,
+            // init default feedback values
+            glam::Vec2::ZERO,
+            Box2d::NULL,
         ))))
     }
 
@@ -525,6 +654,4 @@ impl InterfaceSystem {
     pub fn button_data_mut(&mut self) -> &mut InterfaceButtonRowTable {
         &mut self.buttons
     }
-
-    pub fn evaluate_layout(&mut self) {}
 }
