@@ -416,5 +416,45 @@ impl InterfaceSystem {
         self.texts.insert(text_element)
     }
 
+    pub fn core_data(&self) -> &InterfaceCommonRowTable {
+        &self.commons
+    }
+
+    pub fn core_data_mut(&mut self) -> &mut InterfaceCommonRowTable {
+        &mut self.commons
+    }
+
+    pub fn panel_data(&self) -> &InterfacePanelRowTable {
+        &self.panels
+    }
+
+    pub fn panel_data_mut(&mut self) -> &mut InterfacePanelRowTable {
+        &mut self.panels
+    }
+
+    pub fn image_data(&self) -> &InterfaceImageRowTable {
+        &self.images
+    }
+
+    pub fn image_data_mut(&mut self) -> &mut InterfaceImageRowTable {
+        &mut self.images
+    }
+
+    pub fn text_data(&self) -> &InterfaceTextRowTable {
+        &self.texts
+    }
+
+    pub fn text_data_mut(&mut self) -> &mut InterfaceTextRowTable {
+        &mut self.texts
+    }
+
+    pub fn button_data(&self) -> &InterfaceButtonRowTable {
+        &self.buttons
+    }
+
+    pub fn button_data_mut(&mut self) -> &mut InterfaceButtonRowTable {
+        &mut self.buttons
+    }
+
     pub fn evaluate_layout(&mut self) {}
 }
