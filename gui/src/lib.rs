@@ -100,6 +100,12 @@ impl Default for ButtonCallback {
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct WidgetId(pub IndirectIndex);
 
+impl std::fmt::Display for WidgetId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.as_int())
+    }
+}
+
 impl WidgetId {
     pub const fn new(index: IndirectIndex) -> Self {
         Self(index)
@@ -206,6 +212,18 @@ pub struct NodeJointId {
     pub table_id: WidgetId,
     #[cfg(feature = "taffy")]
     pub tree_id: NodeId,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum WidgetError {
+    #[error("parent by given ID {0} not found")]
+    ParentNotFound(WidgetId),
+
+    #[error("child by given ID {0} not found")]
+    ChildNotFound(WidgetId),
+
+    #[error("taffy layout error: {0}")]
+    TaffyLayoutError(taffy::TaffyError),
 }
 
 #[derive(Debug)]
@@ -404,8 +422,36 @@ impl InterfaceSystem {
         anchor: glam::Vec2,
         bounds: Box2d,
         children: Option<&[WidgetId]>,
-    ) -> WidgetId {
+    ) -> Result<WidgetId, WidgetError> {
+        let node_id = self
+            .layout
+            .new_leaf(Style::DEFAULT)
+            .map_err(WidgetError::TaffyLayoutError)?;
+
+        if let Some(parent) = parent {
+            let parent_direct = self
+                .commons
+                .solve_indirect(parent.0)
+                .ok_or(WidgetError::ParentNotFound(parent))?;
+
+            let parent_taffy_id = self.commons.taffy_id[parent_direct.as_index()];
+            self.layout
+                .add_child(parent_taffy_id.0, node_id)
+                .map_err(WidgetError::TaffyLayoutError)?
+        }
+
         let children = if let Some(children) = children {
+            children.iter().try_for_each(|child| {
+                if let Some(direct) = self.commons.solve_indirect(child.0) {
+                    let taffy_id = self.commons.taffy_id[direct.as_index()];
+
+                    self.layout
+                        .add_child(node_id, taffy_id.0)
+                        .map_err(WidgetError::TaffyLayoutError)
+                } else {
+                    Err(WidgetError::ChildNotFound(*child))
+                }
+            })?;
             children.to_vec()
         } else {
             // does not allocate
