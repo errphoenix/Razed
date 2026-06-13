@@ -10,6 +10,21 @@ pub use taffy::prelude::*;
 #[cfg(not(feature = "taffy"))]
 use taffy::prelude::*;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct TaffyNodeId(pub(crate) NodeId);
+
+impl TaffyNodeId {
+    pub fn is_null(self) -> bool {
+        self.0 == NodeId::new(0)
+    }
+}
+
+impl Default for TaffyNodeId {
+    fn default() -> Self {
+        Self(NodeId::new(0))
+    }
+}
+
 ethel::table_spec! {
     struct InterfaceCommon {
         archetype: ComponentKind;
@@ -17,6 +32,7 @@ ethel::table_spec! {
         bounds: Box2d;
         parent: WidgetId;
         children: Vec<WidgetId>;
+        taffy_id: TaffyNodeId;
     }
 }
 
@@ -395,9 +411,17 @@ impl InterfaceSystem {
             // does not allocate
             Vec::new()
         };
+
         let parent = parent.unwrap_or_default();
-        let element = (ComponentKind::Null, anchor, bounds, parent, children);
-        WidgetId(self.commons.insert(element))
+
+        Ok(WidgetId(self.commons.insert((
+            ComponentKind::Null,
+            anchor,
+            bounds,
+            parent,
+            children,
+            TaffyNodeId(node_id),
+        ))))
     }
 
     /// Create a new text element without direct associations to the widget
