@@ -36,7 +36,7 @@ ethel::table_spec! {
         layout_style: LayoutStyle;
 
         // feedback values from taffy tree after evaluation
-        feedback_anchor: glam::Vec2;
+        feedback_anchor: glam::Vec2; // top left corner
         feedback_bounds: Box2d;
     }
 }
@@ -79,7 +79,6 @@ ethel::table_spec! {
 
 #[derive(Clone, Copy, Debug)]
 pub struct ButtonCallback(pub fn());
-
 impl ButtonCallback {
     pub const fn new(callback: fn()) -> Self {
         Self(callback)
@@ -89,13 +88,11 @@ impl ButtonCallback {
         Self(|| ())
     }
 }
-
 impl From<ButtonCallback> for fn() {
     fn from(value: ButtonCallback) -> Self {
         value.0
     }
 }
-
 impl Default for ButtonCallback {
     fn default() -> Self {
         Self::null()
@@ -104,13 +101,11 @@ impl Default for ButtonCallback {
 
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct WidgetId(pub IndirectIndex);
-
 impl std::fmt::Display for WidgetId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0.as_int())
     }
 }
-
 impl WidgetId {
     pub const fn new(index: IndirectIndex) -> Self {
         Self(index)
@@ -150,7 +145,6 @@ pub struct Box2d {
     min: glam::Vec2,
     max: glam::Vec2,
 }
-
 impl Box2d {
     pub const NULL: Self = Box2d::new(glam::Vec2::ZERO, glam::Vec2::ZERO);
     pub const UNIT: Self = Box2d::new(glam::Vec2::ONE, glam::Vec2::ONE);
@@ -264,7 +258,6 @@ pub struct InterfaceSystem {
     images: InterfaceImageRowTable,
     buttons: InterfaceButtonRowTable,
 }
-
 impl InterfaceSystem {
     pub fn new(resolution: Resolution) -> Self {
         let mut layout = TaffyTree::with_capacity(1);
@@ -352,10 +345,39 @@ impl InterfaceSystem {
     }
 
     pub fn evaluate_layout(&mut self) {
-        let available = Size::MAX_CONTENT;
+        let available = Size {
+            width: AvailableSpace::Definite(self.resolution.width),
+            height: AvailableSpace::Definite(self.resolution.height),
+        };
+
         self.layout
             .compute_layout(self.root_node.tree_id, available)
             .expect("failed to evaluate taffy layout");
+
+        let count = self.commons.len();
+        let feedback_anchor = &mut self.commons.feedback_anchor;
+        let feedback_bounds = &mut self.commons.feedback_bounds;
+        let taffy_ids = &self.commons.taffy_id;
+
+        for i in 1..count {
+            let taffy_id = taffy_ids[i];
+            if taffy_id.is_null() {
+                continue;
+            }
+
+            let taffy_id = taffy_id.0;
+            let fb_anchor = &mut feedback_anchor[i];
+            let fb_bounds = &mut feedback_bounds[i];
+
+            let node = self.layout.get_final_layout(taffy_id);
+            let position = node.location;
+            let size = node.size;
+            let min = glam::vec2(position.x, position.y - size.height);
+            let max = glam::vec2(position.x + size.height, position.y);
+
+            *fb_anchor = glam::vec2(position.x, position.y);
+            *fb_bounds = Box2d { min, max };
+        }
     }
 
     fn assert_null_archetype(&self, root_id: DirectIndex) -> Result<(), WidgetError> {
@@ -483,9 +505,10 @@ impl InterfaceSystem {
         children: Option<&[WidgetId]>,
         layout_style: LayoutStyle,
     ) -> Result<WidgetId, WidgetError> {
+        let taffy_style = layout_style.into_taffy_style();
         let node_id = self
             .layout
-            .new_leaf(Style::DEFAULT)
+            .new_leaf(taffy_style)
             .map_err(WidgetError::TaffyLayoutError)?;
 
         let parent = parent.unwrap_or(self.root_node.table_id);

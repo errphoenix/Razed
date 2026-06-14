@@ -290,7 +290,7 @@ pub enum LayoutStyle {
 }
 
 impl LayoutStyle {
-    pub(crate) fn into_taffy_style(self) -> Style {
+    pub(crate) fn into_taffy_style(&self) -> Style {
         match self {
             LayoutStyle::Null => Style {
                 display: taffy::Display::None,
@@ -328,13 +328,13 @@ impl LayoutStyle {
                     size,
                     min_size,
                     max_size,
-                    aspect_ratio,
                     margin,
                     padding,
 
+                    aspect_ratio: *aspect_ratio,
                     overflow: taffy::Point {
-                        x: overflow_x.into(),
-                        y: overflow_y.into(),
+                        x: (*overflow_x).into(),
+                        y: (*overflow_y).into(),
                     },
 
                     ..Default::default()
@@ -368,22 +368,22 @@ impl LayoutStyle {
                     display: taffy::Display::Flex,
                     position: taffy::Position::Relative,
 
-                    flex_direction: direction.into(),
-                    justify_content: justify_content.try_into().ok(),
-                    align_content: align_content.try_into().ok(),
-                    justify_self: justify_self.try_into().ok(),
-                    align_self: align_self.try_into().ok(),
+                    flex_direction: (*direction).into(),
+                    justify_content: (*justify_content).try_into().ok(),
+                    align_content: (*align_content).try_into().ok(),
+                    justify_self: (*justify_self).try_into().ok(),
+                    align_self: (*align_self).try_into().ok(),
 
                     size,
                     min_size,
                     max_size,
-                    aspect_ratio,
                     margin,
                     padding,
 
+                    aspect_ratio: *aspect_ratio,
                     overflow: taffy::Point {
-                        x: overflow_x.into(),
-                        y: overflow_y.into(),
+                        x: (*overflow_x).into(),
+                        y: (*overflow_y).into(),
                     },
 
                     ..Default::default()
@@ -417,9 +417,9 @@ impl LayoutStyle {
                 let margin = margin.map_or(taffy::Rect::auto(), |margin| margin.into());
                 let padding = padding.map_or(taffy::Rect::zero(), |padding| padding.into());
 
-                let grid_template_rows = taffy::style_helpers::evenly_sized_tracks(template_rows);
+                let grid_template_rows = taffy::style_helpers::evenly_sized_tracks(*template_rows);
                 let grid_template_columns =
-                    taffy::style_helpers::evenly_sized_tracks(template_columns);
+                    taffy::style_helpers::evenly_sized_tracks(*template_columns);
 
                 Style {
                     display: taffy::Display::Flex,
@@ -427,25 +427,25 @@ impl LayoutStyle {
 
                     grid_template_rows,
                     grid_template_columns,
-                    grid_row: item_row.into(),
-                    grid_column: item_column.into(),
-                    grid_auto_flow: flow.into(),
+                    grid_row: (*item_row).into(),
+                    grid_column: (*item_column).into(),
+                    grid_auto_flow: (*flow).into(),
 
-                    justify_content: justify_content.try_into().ok(),
-                    align_content: align_content.try_into().ok(),
-                    justify_self: justify_self.try_into().ok(),
-                    align_self: align_self.try_into().ok(),
+                    justify_content: (*justify_content).try_into().ok(),
+                    align_content: (*align_content).try_into().ok(),
+                    justify_self: (*justify_self).try_into().ok(),
+                    align_self: (*align_self).try_into().ok(),
 
                     size,
                     min_size,
                     max_size,
-                    aspect_ratio,
                     margin,
                     padding,
 
+                    aspect_ratio: *aspect_ratio,
                     overflow: taffy::Point {
-                        x: overflow_x.into(),
-                        y: overflow_y.into(),
+                        x: (*overflow_x).into(),
+                        y: (*overflow_y).into(),
                     },
 
                     ..Default::default()
