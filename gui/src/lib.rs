@@ -4,7 +4,11 @@ use ethel::{
     state::data::{Column, DirectIndex, IndirectIndex},
 };
 
-use janus::StringHash;
+use janus::{
+    StringHash,
+    context::DeltaTime,
+    input::{self, InputSnapshot, Keys, MouseButton},
+};
 
 pub mod style;
 
@@ -38,6 +42,11 @@ ethel::table_spec! {
         // feedback values from taffy tree after evaluation
         feedback_anchor: glam::Vec2; // top left corner
         feedback_bounds: Box2d;
+
+        hovered: bool;
+        pressed: bool;
+        hover_time: f32;
+        press_time: f32;
     }
 }
 
@@ -218,6 +227,10 @@ impl Box2d {
         self.max.y *= scaling.y;
         self.translate(offset);
     }
+
+    pub fn contains(&self, x: f32, y: f32) -> bool {
+        x > self.min.x && y > self.min.y && x < self.max.x && y < self.max.y
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -344,16 +357,58 @@ impl InterfaceSystem {
         self.parent_of(widget).map(|id| !id.is_null())
     }
 
-    pub fn evaluate_layout(&mut self) {
-        let available = Size {
-            width: AvailableSpace::Definite(self.resolution.width),
-            height: AvailableSpace::Definite(self.resolution.height),
-        };
+    pub fn process_hover_events(&mut self, x: f32, y: f32, delta: DeltaTime) {
+        let delta = delta.as_f32();
 
-        self.layout
-            .compute_layout(self.root_node.tree_id, available)
-            .expect("failed to evaluate taffy layout");
+        let count = self.commons.len();
+        let bounds = &self.commons.feedback_bounds;
+        let hovered = &mut self.commons.hovered;
+        let hover_time = &mut self.commons.hover_time;
 
+        for i in 1..count {
+            let bounds = bounds[i];
+            if bounds.contains(x, y) {
+                hovered[i] = true;
+                hover_time[i] += delta;
+            } else {
+                hovered[i] = false;
+                hover_time[i] = 0f32;
+            }
+        }
+    }
+
+    pub fn process_key_events(&mut self, keys: &Keys, delta: DeltaTime) {
+        let click = keys.mouse_down(MouseButton::Left) | keys.mouse_down(MouseButton::Right);
+        let delta = delta.as_f32();
+
+        let count = self.commons.len();
+        let hovered = &self.commons.hovered;
+        let pressed = &mut self.commons.pressed;
+        let press_time = &mut self.commons.press_time;
+
+        for i in 1..count {
+            let press = hovered[i] & click;
+            let pt0 = press_time[i];
+            let pt1 = (pt0 + delta) * press as u32 as f32;
+
+            pressed[i] = press;
+            press_time[i] = pt1;
+
+            // if hovered[i] {
+            //     pressed[i] = click;
+            //     if click {
+            //         press_time[i] += delta;
+            //     } else {
+            //         press_time[i] = 0f32;
+            //     }
+            // } else {
+            //     pressed[i] = false;
+            //     press_time[i] = 0f32;
+            // }
+        }
+    }
+
+    pub fn synchronise_layout(&mut self) {
         let count = self.commons.len();
         let feedback_anchor = &mut self.commons.feedback_anchor;
         let feedback_bounds = &mut self.commons.feedback_bounds;
@@ -378,6 +433,17 @@ impl InterfaceSystem {
             *fb_anchor = glam::vec2(position.x, position.y);
             *fb_bounds = Box2d { min, max };
         }
+    }
+
+    pub fn evaluate_layout(&mut self) {
+        let available = Size {
+            width: AvailableSpace::Definite(self.resolution.width),
+            height: AvailableSpace::Definite(self.resolution.height),
+        };
+
+        self.layout
+            .compute_layout(self.root_node.tree_id, available)
+            .expect("failed to evaluate taffy layout");
     }
 
     fn assert_null_archetype(&self, root_id: DirectIndex) -> Result<(), WidgetError> {
@@ -552,6 +618,10 @@ impl InterfaceSystem {
             // init default feedback values
             glam::Vec2::ZERO,
             Box2d::NULL,
+            false,
+            false,
+            0f32,
+            0f32,
         ))))
     }
 
