@@ -377,6 +377,35 @@ impl InterfaceSystem {
         }
     }
 
+    fn process_key_event(&mut self, table_index: usize, event: KeyEvent, delta: DeltaTime) {
+        let delta = delta.as_f32();
+        let hovered = &self.commons.hovered;
+        let pressed = &mut self.commons.pressed;
+        let press_time = &mut self.commons.press_time;
+
+        // mouse press, hold, release
+        {
+            let click = event.is_mouse() && !event.is_released();
+            let press = hovered[table_index] & click;
+            let pt0 = press_time[table_index];
+            let pt1 = (pt0 + delta) * press as u32 as f32;
+            pressed[table_index] = press;
+            press_time[table_index] = pt1;
+        }
+
+        // keyboard (todo)
+        {}
+    }
+
+    pub fn feed_key_events(&mut self, events: &[KeyEvent], delta: DeltaTime) {
+        let count = self.commons.len();
+        for i in 1..count {
+            for event in events {
+                self.process_key_event(i, *event, delta);
+            }
+        }
+    }
+
     pub fn process_key_events(&mut self, keys: &Keys, delta: DeltaTime) {
         let click = keys.mouse_down(MouseButton::Left) | keys.mouse_down(MouseButton::Right);
         let delta = delta.as_f32();
