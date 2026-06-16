@@ -7,7 +7,7 @@ use ethel::{
 use janus::{
     StringHash,
     context::DeltaTime,
-    input::{self, InputSnapshot, Keys, MouseButton},
+    input::{KeyEvent, Keys, MouseButton},
 };
 
 pub mod style;
