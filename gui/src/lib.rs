@@ -10,6 +10,7 @@ use janus::{
     input::{KeyEvent, Keys, MouseButton},
 };
 
+pub mod draw;
 pub mod style;
 
 pub use style::*;
