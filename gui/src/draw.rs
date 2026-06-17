@@ -50,8 +50,8 @@ impl ElementBatcher<'_> {
                 }
                 crate::ComponentKind::Button {
                     handle,
-                    text_handle: _text_handle,
-                } => self.gather_button(index, handle),
+                    text_handle,
+                } => self.gather_button(index, handle, text_handle),
                 crate::ComponentKind::Text(_indirect_index) => {
                     // todo
                     continue;
@@ -79,16 +79,50 @@ impl ElementBatcher<'_> {
         }
     }
 
-    fn gather_text(&self, common_handle: usize, text_index: IndirectIndex) -> QuadElement {
+    fn _gather_text(&self, _common_handle: usize, _text_index: IndirectIndex) -> QuadElement {
         todo!()
     }
 
-    fn gather_image(&self, common_handle: usize, image_index: IndirectIndex) -> QuadElement {
-        todo!()
+    fn gather_image(&self, _common_handle: usize, image_index: IndirectIndex) -> QuadElement {
+        let (tint, &opacity, &texture) = self.images.coalesced(image_index);
+        let opacity = (tint.w + opacity).min(1.0);
+
+        let color = glam::vec4(tint.x, tint.y, tint.z, opacity);
+        let attachment = InterfaceAttachment::Texture(texture);
+
+        QuadElement {
+            color,
+            attachment: Some(attachment),
+        }
     }
 
-    fn gather_button(&self, common_handle: usize, button_index: IndirectIndex) -> QuadElement {
-        todo!()
+    fn gather_button(
+        &self,
+        common_handle: usize,
+        button_index: IndirectIndex,
+        _text_index: IndirectIndex,
+    ) -> QuadElement {
+        let hovered = self.commons.hovered[common_handle];
+        let pressed = self.commons.pressed[common_handle];
+
+        let button_direct = self.buttons.solve(button_index).as_index();
+        let base_color = self.buttons.base_color[button_direct];
+        let hover_tint = self.buttons.hover_tint[button_direct];
+        let press_tint = self.buttons.press_tint[button_direct];
+
+        let hover_f = (hovered & !pressed) as u32 as f32;
+        let press_f = pressed as u32 as f32;
+
+        let mut color = glam::vec4(base_color.x, base_color.y, base_color.z, 1.0);
+        color = color * (1.0 - hover_f) + hover_f * hover_tint;
+        color = color * (1.0 - press_f) + press_f * press_tint;
+
+        // todo: text
+
+        QuadElement {
+            color,
+            attachment: None,
+        }
     }
 }
 
@@ -103,23 +137,17 @@ impl QuadElement {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct InterfaceAttachment {
-    pub back_handle: usize,
-    pub object: AttachedObject,
-}
-
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum AttachedObject {
+pub enum InterfaceAttachment {
     Texture(TextureId),
 }
-impl AttachedObject {
+impl InterfaceAttachment {
     /// Indicates where the attached object must be drawn in relation to the
     /// root.
     pub const fn layer_ordering(&self) -> LayerOrdering {
         match self {
-            AttachedObject::Texture(_) => LayerOrdering::Under,
+            InterfaceAttachment::Texture(_) => LayerOrdering::Under,
         }
     }
 }

@@ -80,6 +80,7 @@ ethel::table_spec! {
     struct InterfaceButton {
         text_id: IndirectIndex;
 
+        base_color: glam::Vec3;
         hover_tint: glam::Vec4;
         press_tint: glam::Vec4;
 
@@ -572,13 +573,14 @@ impl InterfaceSystem {
         &mut self,
         root_id: WidgetId,
         text_id: IndirectIndex,
+        base_color: glam::Vec3,
         hover_tint: glam::Vec4,
         press_tint: glam::Vec4,
         callback: ButtonCallback,
     ) -> Result<IndirectIndex, WidgetError> {
         if let Some(commons_id) = self.commons.solve_indirect(root_id.0) {
             self.assert_null_archetype(commons_id)?;
-            let button_element = (text_id, hover_tint, press_tint, callback);
+            let button_element = (text_id, base_color, hover_tint, press_tint, callback);
             let button_id = self.buttons.insert(button_element);
             self.commons.archetype[commons_id.as_index()] = ComponentKind::Button {
                 handle: button_id,
