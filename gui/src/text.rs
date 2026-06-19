@@ -1,4 +1,63 @@
-use cosmic_text::{Align, Attrs, Buffer, FontSystem, Metrics, Shaping};
+use std::ops::Deref;
+
+use cosmic_text::{
+    Align, Attrs, Buffer, FontSystem, Metrics, Shaping,
+    fontdb::{self, Database},
+};
+
+#[derive(Debug)]
+pub struct FontLibrary {
+    database: Database,
+}
+impl FontLibrary {
+    pub fn new() -> Self {
+        Self {
+            database: Database::new(),
+        }
+    }
+
+    fn load_fonts_dir_impl(path: impl AsRef<std::path::Path>, recursive: bool) -> Vec<Font> {
+        if path.as_ref().is_dir()
+            && let Ok(dir) = std::fs::read_dir(path)
+        {
+            dir.filter_map(Result::ok)
+                .fold(Vec::new(), |mut fonts, entry| {
+                    if entry.path().is_dir() && recursive {
+                        let subdir = Self::load_fonts_dir_impl(entry.path(), recursive);
+                        fonts.extend(subdir);
+                    } else if entry.path().is_file() {
+                    }
+                    fonts
+                });
+
+            todo!()
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn load_font_file_impl(
+        db: &mut Database,
+        path: impl AsRef<std::path::Path>,
+    ) -> Result<Font, ()> {
+        // for now ignore error, handle this better later on
+        db.load_font_file(path).map_err(|_| ())?;
+        todo!()
+    }
+
+    pub fn from_paths(paths: &[impl AsRef<std::path::Path>]) -> Self {
+        {
+            paths.iter().filter(|path| true).for_each(|path| {});
+        }
+        todo!()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Font {
+    id: cosmic_text::fontdb::ID,
+    weight: cosmic_text::Weight,
+}
 
 pub struct TextContext {
     buffer: cosmic_text::Buffer,
