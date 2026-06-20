@@ -1,7 +1,13 @@
-use std::{borrow::Cow, collections::HashMap, ffi::OsStr, sync::Arc};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    ffi::OsStr,
+    ops::Deref,
+    sync::{Arc, LazyLock},
+};
 
 use cosmic_text::{
-    Align, Attrs, Buffer, FontSystem, Metrics, Shaping, Weight,
+    Align, Attrs, Buffer, Family, FontSystem, Metrics, Shaping, Weight,
     fontdb::{Database, FaceInfo, Source},
 };
 use janus::{StringHash, StringMap};
@@ -80,10 +86,34 @@ impl FontLibrary {
             fonts
         };
 
+        static FALLBACK_FAMILY: &str = "Arial";
+
         let path = path.as_ref().to_path_buf();
         if let Some(&font) = fonts.first() {
-            let weight = db.face(font).unwrap().weight;
-            (Ok(Font { id: font, weight }), path)
+            let f = db.face(font).unwrap();
+            let weight = f.weight;
+
+            let family = f
+                .families
+                .first()
+                .map(|(f, _)| f.clone())
+                .unwrap_or_else(|| {
+                    tracing::event!(
+                        tracing::Level::WARN,
+                        "failed to determine font family for font: fallback to '{}'",
+                        FALLBACK_FAMILY
+                    );
+                    FALLBACK_FAMILY.to_string()
+                });
+
+            (
+                Ok(Font {
+                    id: font,
+                    weight,
+                    family,
+                }),
+                path,
+            )
         } else {
             (Err(FontError::NoFontsFoundAtSource(path.clone())), path)
         }
@@ -157,58 +187,74 @@ impl FontLibrary {
         Self::treat_font_result(result, path)
     }
 
-    pub fn get(&self, hash_id: StringHash) -> Option<Font> {
-        self.map.get(&hash_id).copied()
+    pub fn get(&self, hash_id: StringHash) -> Option<&Font> {
+        self.map.get(&hash_id)
     }
 
     pub(crate) fn get_font_from_hash(&self, hash_id: StringHash) -> Option<&FaceInfo> {
         self.get(hash_id).map(|f| self.get_font(f)).flatten()
     }
 
-    pub(crate) fn get_font(&self, font: Font) -> Option<&FaceInfo> {
+    pub(crate) fn get_font(&self, font: &Font) -> Option<&FaceInfo> {
         self.database.face(font.id)
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Font {
     id: cosmic_text::fontdb::ID,
     weight: cosmic_text::Weight,
+    family: String,
 }
 
-pub struct TextContext {
+pub struct TextContext<'a> {
     buffer: cosmic_text::Buffer,
     font_system: FontSystem,
+    attribs: Attrs<'a>,
+    alignment: Align,
 }
-impl TextContext {
+impl<'a> TextContext<'a> {
     pub fn new(metrics: Metrics, font_system: FontSystem) -> Self {
         Self {
             buffer: Buffer::new_empty(metrics),
+            attribs: Attrs::new(),
+            alignment: Align::Left,
             font_system,
         }
     }
 
-    pub fn set_size(&mut self, width_opt: Option<f32>, height_opt: Option<f32>) {
+    /// Set the size of the buffer for text layouting.
+    pub fn set_buffer_size(&mut self, width_opt: Option<f32>, height_opt: Option<f32>) {
         self.buffer.set_size(width_opt, height_opt);
     }
 
-    pub fn set_text(
-        &mut self,
-        string: &str,
-        attribs: &Attrs,
-        alignment: Option<crate::ItemAlignment>,
-    ) {
-        let alignment = match alignment {
-            None => None,
-            Some(alignment) => Some(match alignment {
-                crate::ItemAlignment::Center | crate::ItemAlignment::Auto => Align::Center,
-                crate::ItemAlignment::Start => Align::Left,
-                crate::ItemAlignment::End => Align::Right,
-            }),
-        };
+    pub fn attributes(&self) -> &Attrs<'a> {
+        &self.attribs
+    }
 
-        self.buffer
-            .set_text(string, attribs, Shaping::Advanced, alignment);
+    pub fn attributes_mut(&mut self) -> &mut Attrs<'a> {
+        &mut self.attribs
+    }
+
+    pub fn set_alignment(&mut self, alignment: crate::ItemAlignment) {
+        self.alignment = match alignment {
+            crate::ItemAlignment::Center | crate::ItemAlignment::Auto => Align::Center,
+            crate::ItemAlignment::Start => Align::Left,
+            crate::ItemAlignment::End => Align::Right,
+        };
+    }
+
+    pub fn set_font(&mut self, font: &'a Font) {
+        self.attribs.family = Family::Name(&font.family);
+    }
+
+    pub fn set_text(&mut self, string: &str) {
+        self.buffer.set_text(
+            string,
+            &self.attribs,
+            Shaping::Advanced,
+            Some(self.alignment),
+        );
     }
 
     pub fn layout(&mut self) -> Option<TextLayoutData> {
