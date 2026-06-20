@@ -1,36 +1,53 @@
-use std::ops::Deref;
+use std::{borrow::Cow, collections::HashMap, ffi::OsStr, sync::Arc};
 
 use cosmic_text::{
-    Align, Attrs, Buffer, FontSystem, Metrics, Shaping,
-    fontdb::{self, Database},
+    Align, Attrs, Buffer, FontSystem, Metrics, Shaping, Weight,
+    fontdb::{Database, FaceInfo, Source},
 };
+use janus::{StringHash, StringMap};
+
+#[derive(Debug, thiserror::Error)]
+pub enum FontError {
+    #[error("failed to load font due to IO error: {0}")]
+    LoadIoError(std::io::Error),
+    #[error("no fonts found at specified source path: {0}")]
+    NoFontsFoundAtSource(std::path::PathBuf),
+}
+
+pub type FontResult = Result<Font, FontError>;
 
 #[derive(Debug)]
 pub struct FontLibrary {
     database: Database,
+    map: StringMap<Font>,
 }
 impl FontLibrary {
     pub fn new() -> Self {
         Self {
             database: Database::new(),
+            map: HashMap::with_hasher(janus::StringHasher::new()),
         }
     }
 
-    fn load_fonts_dir_impl(path: impl AsRef<std::path::Path>, recursive: bool) -> Vec<Font> {
+    fn load_fonts_dir_impl(
+        db: &mut Database,
+        path: &impl AsRef<std::path::Path>,
+        recursive: bool,
+    ) -> Vec<(FontResult, std::path::PathBuf)> {
         if path.as_ref().is_dir()
             && let Ok(dir) = std::fs::read_dir(path)
         {
             dir.filter_map(Result::ok)
                 .fold(Vec::new(), |mut fonts, entry| {
                     if entry.path().is_dir() && recursive {
-                        let subdir = Self::load_fonts_dir_impl(entry.path(), recursive);
+                        let subdir = Self::load_fonts_dir_impl(db, &entry.path(), recursive);
                         fonts.extend(subdir);
                     } else if entry.path().is_file() {
+                        let result = Self::load_font_file_impl(db, &entry.path());
+                        fonts.push(result);
                     }
                     fonts
-                });
-
-            todo!()
+                })
         } else {
             Vec::new()
         }
@@ -38,18 +55,118 @@ impl FontLibrary {
 
     fn load_font_file_impl(
         db: &mut Database,
-        path: impl AsRef<std::path::Path>,
-    ) -> Result<Font, ()> {
-        // for now ignore error, handle this better later on
-        db.load_font_file(path).map_err(|_| ())?;
-        todo!()
+        path: &impl AsRef<std::path::Path>,
+    ) -> (FontResult, std::path::PathBuf) {
+        let read = std::fs::read(path).map_err(FontError::LoadIoError);
+        if let Err(err) = read {
+            return (Err(err), path.as_ref().to_path_buf());
+        }
+        let raw = read.unwrap();
+
+        // A font file may provide multiple fonts of differing weight, but we
+        // will only take the most "regular" one out of all these.
+        // We do this by sorting the fonts by their associated weight, but
+        // offsetting by the negative 'normal' weight, so that the normal
+        // weight is always prioritized, followed by the thinner weights, then
+        // the thicker ones.
+        let fonts = {
+            let mut fonts = db.load_font_source(Source::Binary(Arc::new(raw)));
+            fonts.sort_by(|&id0, &id1| {
+                const REGULAR: u16 = Weight::NORMAL.0;
+                let w0 = db.face(id0).unwrap().weight.0 - REGULAR;
+                let w1 = db.face(id1).unwrap().weight.0 - REGULAR;
+                w0.cmp(&w1)
+            });
+            fonts
+        };
+
+        let path = path.as_ref().to_path_buf();
+        if let Some(&font) = fonts.first() {
+            let weight = db.face(font).unwrap().weight;
+            (Ok(Font { id: font, weight }), path)
+        } else {
+            (Err(FontError::NoFontsFoundAtSource(path.clone())), path)
+        }
     }
 
-    pub fn from_paths(paths: &[impl AsRef<std::path::Path>]) -> Self {
-        {
-            paths.iter().filter(|path| true).for_each(|path| {});
+    fn resolve_fontfile_name(path: &'_ impl AsRef<std::path::Path>) -> Cow<'_, str> {
+        // track amount of unknown font names avoid name collisions
+        static UNKNOWN_NAMES_COUNT: std::sync::Mutex<u32> = std::sync::Mutex::new(0);
+
+        path.as_ref()
+            .file_prefix()
+            .map(OsStr::to_string_lossy)
+            .unwrap_or_else(|| {
+                let n = {
+                    let mut g = UNKNOWN_NAMES_COUNT.lock().unwrap();
+                    let n = *g;
+                    *g += 1;
+                    n
+                };
+                Cow::Owned(format!("unknown-font-{n}"))
+            })
+    }
+
+    fn treat_font_result(
+        result: FontResult,
+        path: std::path::PathBuf,
+    ) -> Option<(StringHash, Font)> {
+        match result {
+            Ok(font) => {
+                let name = Self::resolve_fontfile_name(&path).to_string();
+                let hash = janus::hash_string(&name);
+                tracing::event!(
+                    tracing::Level::INFO,
+                    "successfully loaded font: {name:^16} [source=:{}]",
+                    path.display(),
+                );
+                Some((hash, font))
+            }
+            Err(err) => {
+                tracing::event!(tracing::Level::ERROR, "failed to load font: {}", err);
+                None
+            }
         }
-        todo!()
+    }
+
+    pub fn from_paths(paths: &[impl AsRef<std::path::Path>], recursive: bool) -> Self {
+        let mut db = Database::new();
+
+        let mut fonts = paths.iter().filter(|path| path.as_ref().exists()).fold(
+            Vec::new(),
+            |mut book, path| {
+                let ids = Self::load_fonts_dir_impl(&mut db, path, recursive);
+                book.extend(ids);
+                book
+            },
+        );
+
+        let fonts_map = fonts
+            .drain(..)
+            .filter_map(|(result, path)| Self::treat_font_result(result, path))
+            .collect::<StringMap<_>>();
+
+        Self {
+            database: db,
+            map: fonts_map,
+        }
+    }
+
+    pub fn load_font(&mut self, path: impl AsRef<std::path::Path>) -> Option<(StringHash, Font)> {
+        let (result, path) = Self::load_font_file_impl(&mut self.database, &path);
+        Self::treat_font_result(result, path)
+    }
+
+    pub fn get(&self, hash_id: StringHash) -> Option<Font> {
+        self.map.get(&hash_id).copied()
+    }
+
+    pub(crate) fn get_font_from_hash(&self, hash_id: StringHash) -> Option<&FaceInfo> {
+        self.get(hash_id).map(|f| self.get_font(f)).flatten()
+    }
+
+    pub(crate) fn get_font(&self, font: Font) -> Option<&FaceInfo> {
+        self.database.face(font.id)
     }
 }
 
