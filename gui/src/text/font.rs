@@ -24,15 +24,35 @@ pub type FontResult = Result<Font, FontError>;
 
 #[derive(Debug)]
 pub struct FontLibrary {
-    database: Database,
     map: StringMap<Font>,
 }
 impl FontLibrary {
     pub fn new() -> Self {
         Self {
-            database: Database::new(),
             map: HashMap::with_hasher(janus::StringHasher::new()),
         }
+    }
+
+    pub fn from_paths(
+        db: &mut Database,
+        paths: &[impl AsRef<std::path::Path>],
+        recursive: bool,
+    ) -> Self {
+        let mut fonts = paths.iter().filter(|path| path.as_ref().exists()).fold(
+            Vec::new(),
+            |mut book, path| {
+                let ids = Self::load_fonts_dir_impl(db, path, recursive);
+                book.extend(ids);
+                book
+            },
+        );
+
+        let fonts_map = fonts
+            .drain(..)
+            .filter_map(|(result, path)| Self::treat_font_result(result, path))
+            .collect::<StringMap<_>>();
+
+        Self { map: fonts_map }
     }
 
     fn load_fonts_dir_impl(
@@ -159,29 +179,6 @@ impl FontLibrary {
         }
     }
 
-    pub fn from_paths(paths: &[impl AsRef<std::path::Path>], recursive: bool) -> Self {
-        let mut db = Database::new();
-
-        let mut fonts = paths.iter().filter(|path| path.as_ref().exists()).fold(
-            Vec::new(),
-            |mut book, path| {
-                let ids = Self::load_fonts_dir_impl(&mut db, path, recursive);
-                book.extend(ids);
-                book
-            },
-        );
-
-        let fonts_map = fonts
-            .drain(..)
-            .filter_map(|(result, path)| Self::treat_font_result(result, path))
-            .collect::<StringMap<_>>();
-
-        Self {
-            database: db,
-            map: fonts_map,
-        }
-    }
-
     pub fn load_font(&mut self, path: impl AsRef<std::path::Path>) -> Option<(StringHash, Font)> {
         let (result, path) = Self::load_font_file_impl(&mut self.database, &path);
         Self::treat_font_result(result, path)
@@ -190,14 +187,6 @@ impl FontLibrary {
     pub fn get(&self, hash_id: StringHash) -> Option<&Font> {
         self.map.get(&hash_id)
     }
-
-    pub(crate) fn get_font_from_hash(&self, hash_id: StringHash) -> Option<&FaceInfo> {
-        self.get(hash_id).map(|f| self.get_font(f)).flatten()
-    }
-
-    pub(crate) fn get_font(&self, font: &Font) -> Option<&FaceInfo> {
-        self.database.face(font.id)
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -205,110 +194,4 @@ pub struct Font {
     id: cosmic_text::fontdb::ID,
     weight: cosmic_text::Weight,
     family: String,
-}
-
-pub struct TextContext<'a> {
-    buffer: cosmic_text::Buffer,
-    font_system: FontSystem,
-    attribs: Attrs<'a>,
-    alignment: Align,
-}
-impl<'a> TextContext<'a> {
-    pub fn new(metrics: Metrics, font_system: FontSystem) -> Self {
-        Self {
-            buffer: Buffer::new_empty(metrics),
-            attribs: Attrs::new(),
-            alignment: Align::Left,
-            font_system,
-        }
-    }
-
-    /// Set the size of the buffer for text layouting.
-    pub fn set_buffer_size(&mut self, width_opt: Option<f32>, height_opt: Option<f32>) {
-        self.buffer.set_size(width_opt, height_opt);
-    }
-
-    pub fn attributes(&self) -> &Attrs<'a> {
-        &self.attribs
-    }
-
-    pub fn attributes_mut(&mut self) -> &mut Attrs<'a> {
-        &mut self.attribs
-    }
-
-    pub fn set_alignment(&mut self, alignment: crate::ItemAlignment) {
-        self.alignment = match alignment {
-            crate::ItemAlignment::Center | crate::ItemAlignment::Auto => Align::Center,
-            crate::ItemAlignment::Start => Align::Left,
-            crate::ItemAlignment::End => Align::Right,
-        };
-    }
-
-    pub fn set_font(&mut self, font: &'a Font) {
-        self.attribs.family = Family::Name(&font.family);
-    }
-
-    pub fn set_text(&mut self, string: &str) {
-        self.buffer.set_text(
-            string,
-            &self.attribs,
-            Shaping::Advanced,
-            Some(self.alignment),
-        );
-    }
-
-    pub fn layout(&mut self) -> Option<TextLayoutData> {
-        self.buffer.shape_until_scroll(&mut self.font_system, false);
-
-        let lines = self.buffer.layout_runs();
-
-        let data = lines.fold(TextLayoutData::default(), |mut data, line| {
-            data.total_width = data.total_width.max(line.line_w);
-            data.total_height += line.line_height;
-            data.lines_count += 1;
-
-            data.glyphs = line
-                .glyphs
-                .iter()
-                .map(|glyph| GlyphData {
-                    x0: glyph.x,
-                    y0: line.line_top,
-                    x1: glyph.x + glyph.w,
-                    y1: glyph.y,
-                    code: glyph.glyph_id,
-                })
-                .collect();
-
-            data
-        });
-
-        // Some(TextLayoutData {
-        //     top: layout.line_top,
-        //     baseline: layout.line_y,
-        //     total_width: layout.line_w,
-        //     total_height: (),
-        //     line_height: (),
-        //     line_count: layout.line,
-        // })
-
-        None
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Default)]
-pub struct TextLayoutData {
-    y_origin: f32,
-    total_width: f32,
-    total_height: f32,
-    lines_count: u32,
-    glyphs: Vec<GlyphData>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Default)]
-pub struct GlyphData {
-    x0: f32,
-    y0: f32,
-    x1: f32,
-    y1: f32,
-    code: u16,
 }
