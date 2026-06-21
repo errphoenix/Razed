@@ -179,8 +179,12 @@ impl FontLibrary {
         }
     }
 
-    pub fn load_font(&mut self, path: impl AsRef<std::path::Path>) -> Option<(StringHash, Font)> {
-        let (result, path) = Self::load_font_file_impl(&mut self.database, &path);
+    pub fn load_font(
+        &mut self,
+        database: &mut Database,
+        path: impl AsRef<std::path::Path>,
+    ) -> Option<(StringHash, Font)> {
+        let (result, path) = Self::load_font_file_impl(database, &path);
         Self::treat_font_result(result, path)
     }
 
@@ -191,7 +195,7 @@ impl FontLibrary {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Font {
-    id: cosmic_text::fontdb::ID,
-    weight: cosmic_text::Weight,
-    family: String,
+    pub(crate) id: cosmic_text::fontdb::ID,
+    pub(crate) weight: cosmic_text::Weight,
+    pub(crate) family: String,
 }

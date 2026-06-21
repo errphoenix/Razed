@@ -18,7 +18,8 @@ impl<'a> TextContext<'a> {
 
     /// Set the size of the buffer for text layouting.
     pub fn set_buffer_size(&mut self, width_opt: Option<f32>, height_opt: Option<f32>) {
-        self.buffer.set_size(width_opt, height_opt);
+        self.buffer
+            .set_size(&mut self.font_system, width_opt, height_opt);
     }
 
     pub fn attributes(&self) -> &Attrs<'a> {
@@ -43,6 +44,7 @@ impl<'a> TextContext<'a> {
 
     pub fn set_text(&mut self, string: &str) {
         self.buffer.set_text(
+            &mut self.font_system,
             string,
             &self.attribs,
             Shaping::Advanced,

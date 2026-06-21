@@ -10,8 +10,12 @@ glam = "=0.31.0"
 paste = "1.0.15"
 taffy = "0.10.1"
 thiserror = "2.0.18"
-cosmic-text = "0.19.0"
+cosmic-text = "=0.18.0"
 tracing = "0.1.44"
+swash = "0.2.9"
+etagere = "0.3.0"
+lru = "0.18.0"
+rustc-hash = "2.1.2"
 
 [features]
 default = []
