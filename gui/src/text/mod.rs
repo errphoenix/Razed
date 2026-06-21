@@ -1,4 +1,114 @@
+use std::{collections::HashMap, num::NonZeroUsize};
+
+use cosmic_text::{
+    Align, Attrs, Buffer, CacheKey, Family, FontSystem, Metrics, Shaping, SwashCache,
+};
+use etagere::{AllocId, Allocation, AtlasAllocator};
+use lru::LruCache;
+
+use crate::text::font::Font;
+
 pub mod font;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
+pub struct GlyphUv {
+    pub ux: f32,
+    pub uy: f32,
+    pub vx: f32,
+    pub vy: f32,
+}
+
+#[derive(Clone, Debug)]
+pub struct GlyphRaster {
+    pub offset_x: u32,
+    pub offset_y: u32,
+    pub size_x: u32,
+    pub size_y: u32,
+    pub data: Vec<u8>,
+}
+
+const DEFAULT_ATLAS_SIZE: i32 = 1024;
+const DEFAULT_LRU_SIZE: usize = 256;
+
+pub struct GlyphAtlas {
+    packer: AtlasAllocator,
+    swash_cache: SwashCache,
+    uv_cache: HashMap<CacheKey, GlyphUv, rustc_hash::FxBuildHasher>,
+    atlas_lru: LruCache<CacheKey, AllocId>,
+    size: u32,
+}
+impl Default for GlyphAtlas {
+    fn default() -> Self {
+        Self {
+            packer: AtlasAllocator::new(etagere::size2(DEFAULT_ATLAS_SIZE, DEFAULT_ATLAS_SIZE)),
+            swash_cache: SwashCache::new(),
+            uv_cache: Default::default(),
+            atlas_lru: LruCache::new(NonZeroUsize::new(DEFAULT_LRU_SIZE).unwrap()),
+            size: Default::default(),
+        }
+    }
+}
+impl GlyphAtlas {
+    pub fn new(size: u32) -> Self {
+        Self {
+            swash_cache: SwashCache::new(),
+            packer: AtlasAllocator::new(etagere::size2(size as i32, size as i32)),
+            uv_cache: HashMap::default(),
+            atlas_lru: LruCache::new(NonZeroUsize::new(size as usize / 4).unwrap()),
+            size,
+        }
+    }
+
+    fn evict_till_atlas_free(&mut self, key: &CacheKey, width: i32, height: i32) -> Allocation {
+        if let Some(alloc) = self.packer.allocate(etagere::size2(width, height)) {
+            alloc
+        } else {
+            if let Some((evict_key, evict_alloc)) = self.atlas_lru.pop_lru() {
+                self.uv_cache.remove(&evict_key);
+                self.packer.deallocate(evict_alloc);
+                self.evict_till_atlas_free(key, width, height)
+            } else {
+                panic!("glyph LRU is empty: impossible to find empty atlas section");
+            }
+        }
+    }
+
+    pub fn get_or_rasterize(
+        &mut self,
+        font_sys: &mut FontSystem,
+        key: CacheKey,
+    ) -> Option<(GlyphUv, Option<GlyphRaster>)> {
+        if let Some(&uv) = self.uv_cache.get(&key) {
+            return Some((uv, None));
+        }
+
+        let img = self.swash_cache.get_image_uncached(font_sys, key)?;
+        let width = img.placement.width as i32;
+        let height = img.placement.height as i32;
+        if width == 0 || height == 0 {
+            return None;
+        }
+
+        let allocation = self.evict_till_atlas_free(&key, width, height);
+        let rect = allocation.rectangle;
+        let uv_bounds = GlyphUv {
+            ux: rect.min.x as f32 / self.size as f32,
+            uy: rect.min.y as f32 / self.size as f32,
+            vx: rect.max.x as f32 / self.size as f32,
+            vy: rect.max.y as f32 / self.size as f32,
+        };
+        self.uv_cache.insert(key, uv_bounds);
+
+        let raster = GlyphRaster {
+            offset_x: rect.min.x as u32,
+            offset_y: rect.min.y as u32,
+            size_x: rect.width() as u32,
+            size_y: rect.height() as u32,
+            data: img.data,
+        };
+        Some((uv_bounds, Some(raster)))
+    }
+}
 
 pub struct TextContext<'a> {
     buffer: cosmic_text::Buffer,
