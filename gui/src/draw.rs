@@ -138,9 +138,10 @@ impl QuadElement {
 }
 
 #[non_exhaustive]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum InterfaceAttachment {
     Texture(TextureId),
+    TextureSection { texture: TextureId, uv: [f32; 4] },
 }
 impl InterfaceAttachment {
     /// Indicates where the attached object must be drawn in relation to the
@@ -148,6 +149,7 @@ impl InterfaceAttachment {
     pub const fn layer_ordering(&self) -> LayerOrdering {
         match self {
             InterfaceAttachment::Texture(_) => LayerOrdering::Under,
+            InterfaceAttachment::TextureSection { .. } => LayerOrdering::Equal,
         }
     }
 }
@@ -158,4 +160,6 @@ pub enum LayerOrdering {
     Over,
     /// Under the original root element, one layer down.
     Under,
+    /// On the same layer.
+    Equal,
 }

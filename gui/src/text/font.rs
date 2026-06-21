@@ -1,14 +1,8 @@
-use std::{
-    borrow::Cow,
-    collections::HashMap,
-    ffi::OsStr,
-    ops::Deref,
-    sync::{Arc, LazyLock},
-};
+use std::{borrow::Cow, collections::HashMap, ffi::OsStr, sync::Arc};
 
 use cosmic_text::{
-    Align, Attrs, Buffer, Family, FontSystem, Metrics, Shaping, Weight,
-    fontdb::{Database, FaceInfo, Source},
+    Weight,
+    fontdb::{Database, Source},
 };
 use janus::{StringHash, StringMap};
 
