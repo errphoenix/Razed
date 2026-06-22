@@ -1,4 +1,4 @@
-use std::{collections::HashMap, num::NonZeroUsize, vec::Drain};
+use std::{collections::HashMap, vec::Drain};
 
 use cosmic_text::{
     Align, Attrs, Buffer, CacheKey, Family, FontSystem, Metrics, Shaping, SwashCache,
@@ -272,6 +272,7 @@ impl<'a> TextComposer<'a> {
     }
 
     pub fn compose(&mut self, glyph_atlas: &mut GlyphAtlas) {
+        self.buffer.lines.clear();
         self.buffer.shape_until_scroll(&mut self.font_system, false);
         self.buffer.layout_runs().for_each(|run| {
             run.glyphs.iter().for_each(|glyph| {
@@ -284,6 +285,8 @@ impl<'a> TextComposer<'a> {
                     }
 
                     self.element_buffer.push(QuadElement {
+                        position: Default::default(),
+                        size: Default::default(),
                         color: glam::Vec4::ZERO,
                         attachment: Some(InterfaceAttachment::TextureSection {
                             texture: GlyphAtlasTexture::resource_id(),

@@ -41,7 +41,7 @@ impl ElementBatcher<'_> {
         for index in 1..count {
             let archetype = self.commons.archetype[index];
             let element = match archetype {
-                crate::ComponentKind::Null => continue,
+                crate::ComponentKind::Null => QuadElement::default(),
                 crate::ComponentKind::Panel(indirect_index) => {
                     self.gather_panel(index, indirect_index)
                 }
@@ -54,7 +54,7 @@ impl ElementBatcher<'_> {
                 } => self.gather_button(index, handle, text_handle),
                 crate::ComponentKind::Text(_indirect_index) => {
                     // todo
-                    continue;
+                    QuadElement::default()
                 }
             };
             buffer.push(element);
@@ -73,7 +73,11 @@ impl ElementBatcher<'_> {
         let hovered_f = hovered as u32 as f32;
         let color = bg_c * (1.0 - hovered_f) + hovered_f * hover_c;
 
+        let bounds = self.commons.feedback_bounds[common_handle];
+
         QuadElement {
+            position: bounds.min,
+            size: bounds.size(),
             color,
             attachment: None,
         }
@@ -83,14 +87,18 @@ impl ElementBatcher<'_> {
         todo!()
     }
 
-    fn gather_image(&self, _common_handle: usize, image_index: IndirectIndex) -> QuadElement {
+    fn gather_image(&self, common_handle: usize, image_index: IndirectIndex) -> QuadElement {
         let (tint, &opacity, &texture) = self.images.coalesced(image_index);
         let opacity = (tint.w + opacity).min(1.0);
 
         let color = glam::vec4(tint.x, tint.y, tint.z, opacity);
         let attachment = InterfaceAttachment::Texture(texture);
 
+        let bounds = self.commons.feedback_bounds[common_handle];
+
         QuadElement {
+            position: bounds.min,
+            size: bounds.size(),
             color,
             attachment: Some(attachment),
         }
@@ -119,7 +127,11 @@ impl ElementBatcher<'_> {
 
         // todo: text
 
+        let bounds = self.commons.feedback_bounds[common_handle];
+
         QuadElement {
+            position: bounds.min,
+            size: bounds.size(),
             color,
             attachment: None,
         }
@@ -128,12 +140,26 @@ impl ElementBatcher<'_> {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct QuadElement {
+    /// top-left position of quad
+    pub position: glam::Vec2,
+    // size in pixels
+    pub size: glam::Vec2,
     pub color: glam::Vec4,
     pub attachment: Option<InterfaceAttachment>,
 }
 impl QuadElement {
-    pub const fn new(color: glam::Vec4, attachment: Option<InterfaceAttachment>) -> Self {
-        Self { color, attachment }
+    pub const fn new(
+        position: glam::Vec2,
+        size: glam::Vec2,
+        color: glam::Vec4,
+        attachment: Option<InterfaceAttachment>,
+    ) -> Self {
+        Self {
+            position,
+            size,
+            color,
+            attachment,
+        }
     }
 }
 
