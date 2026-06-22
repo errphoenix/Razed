@@ -4,9 +4,14 @@ use cosmic_text::{
     Align, Attrs, Buffer, CacheKey, Family, FontSystem, Metrics, Shaping, SwashCache,
 };
 use etagere::{AllocId, Allocation, AtlasAllocator};
+use ethel::assets::TextureId;
+use janus::texture::{ImageFormat, ImageType, Texture, TextureView};
 use lru::LruCache;
 
-use crate::{draw::QuadElement, text::font::Font};
+use crate::{
+    draw::{InterfaceAttachment, QuadElement},
+    text::font::Font,
+};
 
 pub mod font;
 
@@ -27,15 +32,96 @@ pub struct GlyphRaster {
     pub data: Vec<u8>,
 }
 
+#[derive(Debug)]
+pub struct GlyphAtlasTexture {
+    view: Option<TextureView>,
+}
+impl GlyphAtlasTexture {
+    ethel::hashet! {
+        const TEXTURE_ID_HASHET = "i___GLYPH_ATLAS";
+    }
+
+    pub fn resource_id() -> TextureId {
+        TextureId(*Self::TEXTURE_ID_HASHET)
+    }
+
+    /// Allocate a new texture onto the GPU to be used as the atlas texture.
+    ///
+    /// This function must be called on the OpenGL thread.
+    ///
+    /// The [`GlyphAtlasTexture`] only keeps a [`TextureView`] in order to
+    /// still be able to access the texture resource on the GPU.
+    ///
+    /// Do note that [`TextureView`] is unaware of the actual [`Texture`]
+    /// resource state, which may cause errors when access to the
+    /// [`Texture`] occur after this is no longer available.
+    /// To avoid this, ensure [`Self::invalidate`] is called when the
+    /// [`Texture`] resource is destroyed.
+    ///
+    /// The caller is responsible for the lifecycle of the returned
+    /// [`Texture`].
+    ///
+    /// # Panics
+    /// If no OpenGL context is currently available on the caller thread.
+    pub fn create_atlas_texture(&mut self, size: i32) -> Texture {
+        janus::assert_gl!();
+
+        let bytes = vec![0u8; (size * size) as usize];
+
+        let texture = Texture::from_bytes(
+            size,
+            size,
+            &bytes,
+            ImageType::Bits8,
+            ImageFormat::SingleChannel,
+        );
+        self.view = Some(texture.view());
+        texture
+    }
+
+    pub const fn invalidate(&mut self) {
+        self.view = None;
+    }
+
+    /// Copy a sequence of `glyphs` to the atlas [`Texture`].
+    ///
+    /// The atlas texture must have been initialized previously with
+    /// [`Self::create_atlas_texture`].
+    ///
+    /// This function must be called on the OpenGL thread.
+    ///
+    /// # Panics
+    /// If the atlas texture is not initialized, or if no OpenGL context is
+    /// currently available on the caller thread.
+    pub fn copy_glyphs(&self, glyphs: &[GlyphRaster]) {
+        janus::assert_gl!();
+
+        let texture = self.view.expect("atlas texture uninitialized");
+        for glyph in glyphs {
+            texture.upload_region(
+                glyph.offset_x as i32,
+                glyph.offset_y as i32,
+                glyph.size_x as i32,
+                glyph.size_y as i32,
+                &glyph.data,
+            );
+        }
+    }
+
+    pub const fn texture(&self) -> Option<TextureView> {
+        self.view
+    }
+}
+
 const DEFAULT_ATLAS_SIZE: i32 = 1024;
-const DEFAULT_LRU_SIZE: usize = 256;
 
 pub struct GlyphAtlas {
-    packer: AtlasAllocator,
     swash_cache: SwashCache,
-    uv_cache: HashMap<CacheKey, GlyphUv, rustc_hash::FxBuildHasher>,
-    atlas_lru: LruCache<CacheKey, AllocId>,
+    packer: AtlasAllocator,
     size: u32,
+
+    atlas_lru: LruCache<CacheKey, AllocId, rustc_hash::FxBuildHasher>,
+    uv_cache: HashMap<CacheKey, GlyphUv, rustc_hash::FxBuildHasher>,
 }
 impl Default for GlyphAtlas {
     fn default() -> Self {
@@ -43,7 +129,7 @@ impl Default for GlyphAtlas {
             packer: AtlasAllocator::new(etagere::size2(DEFAULT_ATLAS_SIZE, DEFAULT_ATLAS_SIZE)),
             swash_cache: SwashCache::new(),
             uv_cache: Default::default(),
-            atlas_lru: LruCache::new(NonZeroUsize::new(DEFAULT_LRU_SIZE).unwrap()),
+            atlas_lru: LruCache::unbounded_with_hasher(rustc_hash::FxBuildHasher::default()),
             size: Default::default(),
         }
     }
@@ -65,13 +151,18 @@ impl GlyphAtlas {
             swash_cache: SwashCache::new(),
             packer: AtlasAllocator::new(etagere::size2(size as i32, size as i32)),
             uv_cache: HashMap::default(),
-            atlas_lru: LruCache::new(NonZeroUsize::new(size as usize / 4).unwrap()),
+            atlas_lru: LruCache::unbounded_with_hasher(rustc_hash::FxBuildHasher::default()),
             size,
         }
     }
 
+    pub const fn size(&self) -> u32 {
+        self.size
+    }
+
     fn evict_till_atlas_free(&mut self, key: &CacheKey, width: i32, height: i32) -> Allocation {
         if let Some(alloc) = self.packer.allocate(etagere::size2(width, height)) {
+            self.atlas_lru.push(*key, alloc.id);
             alloc
         } else {
             if let Some((evict_key, evict_alloc)) = self.atlas_lru.pop_lru() {
@@ -125,18 +216,22 @@ impl GlyphAtlas {
 pub struct TextComposer<'a> {
     buffer: cosmic_text::Buffer,
     font_system: FontSystem,
+
     attribs: Attrs<'a>,
     alignment: Align,
-    out_buffer: Vec<QuadElement>,
+
+    element_buffer: Vec<QuadElement>,
+    raster_buffer: Vec<GlyphRaster>,
 }
 impl<'a> TextComposer<'a> {
     pub fn new(metrics: Metrics, font_system: FontSystem) -> Self {
         Self {
             buffer: Buffer::new_empty(metrics),
+            font_system,
             attribs: Attrs::new(),
             alignment: Align::Left,
-            out_buffer: Vec::new(),
-            font_system,
+            element_buffer: Vec::new(),
+            raster_buffer: Vec::new(),
         }
     }
 
@@ -176,13 +271,35 @@ impl<'a> TextComposer<'a> {
         );
     }
 
-    pub fn compose(&mut self, glyph_atlas: &mut GlyphAtlas) -> Drain<'_, QuadElement> {
+    pub fn compose(&mut self, glyph_atlas: &mut GlyphAtlas) {
         self.buffer.shape_until_scroll(&mut self.font_system, false);
         self.buffer.layout_runs().for_each(|run| {
             run.glyphs.iter().for_each(|glyph| {
                 let glyph = glyph.physical((0., 0.), 1.0);
+                if let Some((uv, raster)) =
+                    glyph_atlas.get_or_rasterize(&mut self.font_system, glyph.cache_key)
+                {
+                    if let Some(raster) = raster {
+                        self.raster_buffer.push(raster);
+                    }
+
+                    self.element_buffer.push(QuadElement {
+                        color: glam::Vec4::ZERO,
+                        attachment: Some(InterfaceAttachment::TextureSection {
+                            texture: GlyphAtlasTexture::resource_id(),
+                            uv: [uv.ux, uv.uy, uv.vx, uv.vy],
+                        }),
+                    });
+                }
             });
         });
-        self.out_buffer.drain(..)
+    }
+
+    pub fn elements(&mut self) -> Drain<'_, QuadElement> {
+        self.element_buffer.drain(..)
+    }
+
+    pub fn rasters(&mut self) -> Drain<'_, GlyphRaster> {
+        self.raster_buffer.drain(..)
     }
 }
