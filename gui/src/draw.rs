@@ -1,9 +1,16 @@
-use std::vec::Drain;
+use std::{
+    ops::{Index, IndexMut},
+    vec::Drain,
+};
 
 use ethel::{
-    assets::TextureId,
+    assets::{AssetRegistry, Import, RawTexture, TextureId, Upload},
     render::command::DrawGroups,
     state::data::{IndirectIndex, table::TableView},
+};
+use janus::{
+    GpuResource,
+    texture::{Texture, TextureView},
 };
 
 use crate::{
@@ -167,27 +174,167 @@ impl QuadElement {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum InterfaceAttachment {
     Texture(TextureId),
-    TextureSection { texture: TextureId, uv: [f32; 4] },
+    TextureSection { texture_id: TextureId, uv: [f32; 4] },
 }
-impl InterfaceAttachment {
-    /// Indicates where the attached object must be drawn in relation to the
-    /// root.
-    pub const fn layer_ordering(&self) -> LayerOrdering {
-        match self {
-            InterfaceAttachment::Texture(_) => LayerOrdering::Under,
-            InterfaceAttachment::TextureSection { .. } => LayerOrdering::Equal,
+
+#[derive(Debug, Clone)]
+pub struct InterfaceCompositor<const LAYERS: usize> {
+    layers: [InterfaceLayer; LAYERS],
+}
+impl<const LAYERS: usize> Default for InterfaceCompositor<LAYERS> {
+    fn default() -> Self {
+        Self {
+            layers: std::array::from_fn(|_| InterfaceLayer::default()),
         }
     }
 }
+impl<const LAYERS: usize> IndexMut<usize> for InterfaceCompositor<LAYERS> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        self.layer_mut(index)
+    }
+}
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum LayerOrdering {
-    /// Over the original root element, one layer up.
-    Over,
-    /// Under the original root element, one layer down.
-    Under,
-    /// On the same layer.
-    Equal,
+impl<const LAYERS: usize> Index<usize> for InterfaceCompositor<LAYERS> {
+    type Output = InterfaceLayer;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        self.layer(index)
+    }
+}
+impl<const LAYERS: usize> InterfaceCompositor<LAYERS> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The `capacity` is applied to each layer array.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            layers: std::array::from_fn(|_| InterfaceLayer::with_capacity(capacity)),
+        }
+    }
+
+    const fn assert_layer_index(layer: usize) {
+        assert!(layer < LAYERS, "invalid layer index provided")
+    }
+
+    pub fn insert<T>(&mut self, layer: usize, element: QuadElement, registry: &AssetRegistry<T>)
+    where
+        T: Import + Upload<AsGpu = Texture>,
+    {
+        Self::assert_layer_index(layer);
+        self.layer_mut(layer).insert(element, registry);
+    }
+
+    pub fn layer(&self, index: usize) -> &InterfaceLayer {
+        Self::assert_layer_index(index);
+        &self.layers[index]
+    }
+
+    pub fn layer_mut(&mut self, index: usize) -> &mut InterfaceLayer {
+        Self::assert_layer_index(index);
+        &mut self.layers[index]
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct InterfaceLayer {
+    texture_map: rustc_hash::FxHashMap<TextureKey, QuadArrays>,
+}
+impl InterfaceLayer {
+    pub fn new() -> Self {
+        Self {
+            texture_map: rustc_hash::FxHashMap::default(),
+        }
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            texture_map: rustc_hash::FxHashMap::with_capacity_and_hasher(
+                capacity,
+                Default::default(),
+            ),
+        }
+    }
+
+    pub fn insert<T>(&mut self, element: QuadElement, registry: &AssetRegistry<T>)
+    where
+        T: Import + Upload<AsGpu = Texture>,
+    {
+        let mut quad_uv = [0f32; 4];
+        let key = if let Some(attachment) = element.attachment {
+            let texture = match attachment {
+                InterfaceAttachment::Texture(texture_id) => registry.get_gpu_view(texture_id),
+                InterfaceAttachment::TextureSection { texture_id, uv } => {
+                    quad_uv = uv;
+                    registry.get_gpu_view(texture_id)
+                }
+            };
+
+            texture.map(TextureKey::from).unwrap_or_default()
+        } else {
+            TextureKey::default()
+        };
+
+        let uv = quad_uv;
+        let entry = self.texture_map.entry(key);
+
+        entry
+            .or_default()
+            .push(element.position, element.size, element.color, uv);
+    }
+}
+
+/// A unique OpenGL texture key used for interface elements per-texture
+/// draw-call mapping.
+///
+/// Contains an OpenGL texture object. This can be 0 if the texture is to be
+/// specified.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TextureKey(pub u32);
+impl From<TextureView> for TextureKey {
+    fn from(value: TextureView) -> Self {
+        Self(value.resource_id())
+    }
+}
+impl From<Texture> for TextureKey {
+    fn from(value: Texture) -> Self {
+        Self(value.resource_id())
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct QuadArrays {
+    pub positions: Vec<glam::Vec2>,
+    pub sizes: Vec<glam::Vec2>,
+    pub colors: Vec<glam::Vec4>,
+    pub uvs: Vec<[f32; 4]>,
+}
+impl QuadArrays {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            positions: Vec::with_capacity(capacity),
+            sizes: Vec::with_capacity(capacity),
+            colors: Vec::with_capacity(capacity),
+            uvs: Vec::with_capacity(capacity),
+        }
+    }
+
+    pub fn push(
+        &mut self,
+        position: glam::Vec2,
+        size: glam::Vec2,
+        color: glam::Vec4,
+        uv: [f32; 4],
+    ) {
+        self.positions.push(position);
+        self.sizes.push(size);
+        self.colors.push(color);
+        self.uvs.push(uv);
+    }
 }
 
 #[macro_export]
@@ -197,7 +344,7 @@ macro_rules! layout_interface_buffer {
     };
     ($name:ident; instances: $ic:expr) => {
         layout_buffer! {
-            const $name: 5, {
+            const $name: 4, {
                 enum positions: $ic => {
                     type [f32; 2];
                     bind 0;
@@ -218,18 +365,13 @@ macro_rules! layout_interface_buffer {
                     bind 3;
                     shader 8;
                 };
-                enum tex_id: $ic => {
-                    type u32;
-                    bind 4;
-                    shader 9;
-                };
             }
         }
 
         paste::paste! {
             #[derive(Debug, Default)]
             pub struct InterfaceStorageBuffers(
-                pub ethel::render::buffer::PartitionedTriBuffer<5>
+                pub ethel::render::buffer::PartitionedTriBuffer<4>
             );
 
             impl InterfaceStorageBuffers {

@@ -289,7 +289,7 @@ impl<'a> TextComposer<'a> {
                         size: Default::default(),
                         color: glam::Vec4::ZERO,
                         attachment: Some(InterfaceAttachment::TextureSection {
-                            texture: GlyphAtlasTexture::resource_id(),
+                            texture_id: GlyphAtlasTexture::resource_id(),
                             uv: [uv.ux, uv.uy, uv.vx, uv.vy],
                         }),
                     });
