@@ -189,3 +189,57 @@ pub enum LayerOrdering {
     /// On the same layer.
     Equal,
 }
+
+#[macro_export]
+macro_rules! layout_interface_buffer {
+    (instances: $ic:expr) => {
+        layout_mesh_buffer!(InterfaceStorage; instances: $ic);
+    };
+    ($name:ident; instances: $ic:expr) => {
+        layout_buffer! {
+            const $name: 5, {
+                enum positions: $ic => {
+                    type [f32; 2];
+                    bind 0;
+                    shader 5;
+                };
+                enum sizes: $ic => {
+                    type [f32; 2];
+                    bind 1;
+                    shader 6;
+                };
+                enum colors: $ic => {
+                    type [f32; 4];
+                    bind 2;
+                    shader 7;
+                };
+                enum uv: $ic => {
+                    type [f32; 4];
+                    bind 3;
+                    shader 8;
+                };
+                enum tex_id: $ic => {
+                    type u32;
+                    bind 4;
+                    shader 9;
+                };
+            }
+        }
+
+        paste::paste! {
+            #[derive(Debug, Default)]
+            pub struct InterfaceStorageBuffers(
+                pub ethel::render::buffer::PartitionedTriBuffer<5>
+            );
+
+            impl InterfaceStorageBuffers {
+                pub fn new() -> Self {
+                    let layout = [< Layout $name >]::create();
+                    let buffer = ethel::render::buffer::PartitionedTriBuffer::new(layout);
+                    [< Layout $name >]::initialise_partitions(&buffer);
+                    Self(buffer)
+                }
+            }
+        }
+    };
+}
