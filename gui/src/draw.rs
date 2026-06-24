@@ -4,8 +4,7 @@ use std::{
 };
 
 use ethel::{
-    DrawCommand,
-    assets::{AssetRegistry, Import, RawTexture, TextureId, Upload},
+    assets::{AssetRegistry, Import, TextureId, Upload},
     render::command::DrawGroups,
     state::data::{IndirectIndex, table::TableView},
 };
@@ -24,54 +23,55 @@ pub trait UiDrawGroup: DrawGroups + Sized {
 }
 
 #[derive(Debug, Default)]
-pub struct DrawBatch {
-    elements: Vec<InterfaceObject>,
+pub struct InterfaceObjects {
+    objects: Vec<InterfaceObject>,
 }
-impl DrawBatch {
+impl InterfaceObjects {
     pub fn drain(&mut self) -> Drain<'_, InterfaceObject> {
-        self.elements.drain(..)
+        self.objects.drain(..)
     }
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct ElementBatcher<'t> {
+pub struct InterfaceAggregator<'t> {
     pub commons: InterfaceCommonRowTableView<'t>,
     pub panels: InterfacePanelRowTableView<'t>,
     pub images: InterfaceImageRowTableView<'t>,
     pub buttons: InterfaceButtonRowTableView<'t>,
 }
-impl ElementBatcher<'_> {
-    pub fn fill_quad_elements(&self, mut buffer: Vec<InterfaceObject>) -> DrawBatch {
+impl InterfaceAggregator<'_> {
+    pub fn fill_quad_elements(&self, mut buffer: Vec<InterfaceObject>) -> InterfaceObjects {
         let count = self.commons.len();
         let reserve = count.saturating_sub(buffer.len());
         buffer.reserve(reserve);
 
         for index in 1..count {
             let archetype = self.commons.archetype[index];
-            let element = match archetype {
-                crate::ComponentKind::Null => InterfaceObject::default(),
+            match archetype {
+                crate::ComponentKind::Null => {}
                 crate::ComponentKind::Panel(indirect_index) => {
-                    self.gather_panel(index, indirect_index)
+                    self.gather_panel(index, indirect_index, &mut buffer)
                 }
                 crate::ComponentKind::Image(indirect_index) => {
-                    self.gather_image(index, indirect_index)
+                    self.gather_image(index, indirect_index, &mut buffer)
                 }
                 crate::ComponentKind::Button {
                     handle,
                     text_handle,
-                } => self.gather_button(index, handle, text_handle),
-                crate::ComponentKind::Text(_indirect_index) => {
-                    // todo
-                    InterfaceObject::default()
-                }
+                } => self.gather_button(index, handle, text_handle, &mut buffer),
+                crate::ComponentKind::Text(_indirect_index) => {}
             };
-            buffer.push(element);
         }
 
-        DrawBatch { elements: buffer }
+        InterfaceObjects { objects: buffer }
     }
 
-    fn gather_panel(&self, common_handle: usize, panel_index: IndirectIndex) -> InterfaceObject {
+    fn gather_panel(
+        &self,
+        common_handle: usize,
+        panel_index: IndirectIndex,
+        out: &mut Vec<InterfaceObject>,
+    ) {
         let hovered = self.commons.hovered[common_handle];
         let (bg_c, hover_t, &opacity) = self.panels.coalesced(panel_index);
 
@@ -83,19 +83,28 @@ impl ElementBatcher<'_> {
 
         let bounds = self.commons.feedback_bounds[common_handle];
 
-        InterfaceObject {
+        out.push(InterfaceObject {
             position: bounds.min,
             size: bounds.size(),
             color,
             attachment: None,
-        }
+        });
     }
 
-    fn _gather_text(&self, _common_handle: usize, _text_index: IndirectIndex) -> InterfaceObject {
-        todo!()
+    fn _gather_text(
+        &self,
+        _common_handle: usize,
+        _text_index: IndirectIndex,
+        _out: &mut Vec<InterfaceObject>,
+    ) {
     }
 
-    fn gather_image(&self, common_handle: usize, image_index: IndirectIndex) -> InterfaceObject {
+    fn gather_image(
+        &self,
+        common_handle: usize,
+        image_index: IndirectIndex,
+        out: &mut Vec<InterfaceObject>,
+    ) {
         let (tint, &opacity, &texture) = self.images.coalesced(image_index);
         let opacity = (tint.w + opacity).min(1.0);
 
@@ -104,12 +113,12 @@ impl ElementBatcher<'_> {
 
         let bounds = self.commons.feedback_bounds[common_handle];
 
-        InterfaceObject {
+        out.push(InterfaceObject {
             position: bounds.min,
             size: bounds.size(),
             color,
             attachment: Some(attachment),
-        }
+        });
     }
 
     fn gather_button(
@@ -117,7 +126,8 @@ impl ElementBatcher<'_> {
         common_handle: usize,
         button_index: IndirectIndex,
         _text_index: IndirectIndex,
-    ) -> InterfaceObject {
+        out: &mut Vec<InterfaceObject>,
+    ) {
         let hovered = self.commons.hovered[common_handle];
         let pressed = self.commons.pressed[common_handle];
 
@@ -137,12 +147,12 @@ impl ElementBatcher<'_> {
 
         let bounds = self.commons.feedback_bounds[common_handle];
 
-        InterfaceObject {
+        out.push(InterfaceObject {
             position: bounds.min,
             size: bounds.size(),
             color,
             attachment: None,
-        }
+        });
     }
 }
 
