@@ -4,6 +4,7 @@ use std::{
 };
 
 use ethel::{
+    DrawCommand,
     assets::{AssetRegistry, Import, RawTexture, TextureId, Upload},
     render::command::DrawGroups,
     state::data::{IndirectIndex, table::TableView},
@@ -178,39 +179,66 @@ pub enum InterfaceAttachment {
 }
 
 #[derive(Debug, Clone)]
-pub struct InterfaceCompositor<const LAYERS: usize> {
+pub struct BatchingLayerCompositor<const LAYERS: usize> {
     layers: [BatchingLayer; LAYERS],
+    output: Vec<Batch>,
 }
-impl<const LAYERS: usize> Default for InterfaceCompositor<LAYERS> {
+impl<const LAYERS: usize> Default for BatchingLayerCompositor<LAYERS> {
     fn default() -> Self {
         Self {
             layers: std::array::from_fn(|_| BatchingLayer::default()),
+            output: Vec::default(),
         }
     }
 }
-impl<const LAYERS: usize> IndexMut<usize> for InterfaceCompositor<LAYERS> {
+impl<const LAYERS: usize> IndexMut<usize> for BatchingLayerCompositor<LAYERS> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         self.layer_mut(index)
     }
 }
 
-impl<const LAYERS: usize> Index<usize> for InterfaceCompositor<LAYERS> {
+impl<const LAYERS: usize> Index<usize> for BatchingLayerCompositor<LAYERS> {
     type Output = BatchingLayer;
 
     fn index(&self, index: usize) -> &Self::Output {
         self.layer(index)
     }
 }
-impl<const LAYERS: usize> InterfaceCompositor<LAYERS> {
+impl<const LAYERS: usize> BatchingLayerCompositor<LAYERS> {
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// The `capacity` is applied to each layer array.
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            layers: std::array::from_fn(|_| BatchingLayer::with_capacity(capacity)),
+            output: Vec::with_capacity(capacity),
+            ..Default::default()
         }
+    }
+
+    pub fn drain_batches(&mut self) -> Drain<'_, Batch> {
+        self.output.drain(..)
+    }
+
+    pub fn batches(&self) -> &[Batch] {
+        &self.output
+    }
+
+    /// Consumes all layers and prepares the internal [`Batch`] output buffer.
+    ///
+    /// This can then be accessed with [`Self::batches`] or
+    /// [`Self::drain_batches`].
+    ///
+    /// Since this consumes layers, no [`Self::clear_layers`] is explicitly
+    /// necessary.
+    pub fn pull_batches(&mut self) {
+        self.layers.iter_mut().for_each(|layer| {
+            layer.export_batches(&mut self.output);
+        });
+    }
+
+    pub fn clear_layers(&mut self) {
+        self.layers.iter_mut().for_each(BatchingLayer::clear);
     }
 
     pub fn insert<T>(&mut self, layer: usize, element: InterfaceObject, registry: &AssetRegistry<T>)
@@ -230,55 +258,163 @@ impl<const LAYERS: usize> InterfaceCompositor<LAYERS> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub struct BatchLocation(usize);
+pub struct BatchIndex(usize);
+impl BatchIndex {
+    pub const fn from_index(index: usize) -> Option<Self> {
+        if index < Batch::UNITS {
+            Some(Self(index))
+        } else {
+            None
+        }
+    }
+
+    pub const fn get(self) -> usize {
+        self.0
+    }
+}
+
+/// Represents a single draw-call, on 16 concurrent texture units.
+///
+/// Textures are distributed among `N` amount of texture units, each command
+/// samples from a different unit in order to minimize the total number of draw
+/// calls.
+///
+/// This allows up to `N` draw-calls to be submitted concurrently.
+#[derive(Debug, Default, Clone)]
+pub struct Batch {
+    arrays: [QuadsArray; Self::UNITS],
+    textures: [Option<TextureKey>; Self::UNITS],
+    head: usize,
+}
+impl Batch {
+    pub const UNITS: usize = 16;
+
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Returns `true` if the batch is exhausted.
+    ///
+    /// I.e. if the total amount of texture groups has reached the defined
+    /// [`Self::UNITS`] maximum.
+    pub fn is_exhausted(&self) -> bool {
+        self.head >= Self::UNITS
+    }
+
+    pub fn push(
+        &mut self,
+        texture: TextureKey,
+        array: QuadsArray,
+    ) -> Result<usize, (TextureKey, QuadsArray)> {
+        if self.head >= Self::UNITS {
+            return Err((texture, array));
+        }
+
+        let i = self.head;
+        self.head += 1;
+
+        self.arrays[i] = array;
+        self.textures[i] = Some(texture);
+
+        Ok(i)
+    }
+
+    pub fn array(&self, index: BatchIndex) -> &QuadsArray {
+        &self.arrays[index.get()]
+    }
+
+    pub fn array_mut(&mut self, index: BatchIndex) -> &mut QuadsArray {
+        &mut self.arrays[index.get()]
+    }
+
+    pub fn texture(&self, index: BatchIndex) -> Option<TextureKey> {
+        self.textures[index.get()]
+    }
+
+    pub fn clear(&mut self) {
+        self.arrays.iter_mut().for_each(QuadsArray::clear);
+        self.textures.iter_mut().for_each(|opt| *opt = None);
+        self.head = 0;
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct BatchLayerGroup(usize);
 
 #[derive(Debug, Default, Clone)]
 pub struct BatchingLayer {
     groups: Vec<TextureKey>,
-    batches: Vec<QuadsArray>,
+    arrays: Vec<QuadsArray>,
 }
 impl BatchingLayer {
     pub fn new() -> Self {
         Self {
             groups: Vec::new(),
-            batches: Vec::new(),
+            arrays: Vec::new(),
         }
     }
 
-    pub fn fetch_location_or_create(&mut self, texture: TextureKey) -> BatchLocation {
+    /// Export batches to a preallocated `buffer`.
+    ///
+    /// This also empties the current [`TextureKey`] groups and [`QuadArrays`]
+    /// collections, so no [`Self::clear`] is explicitly necessary.
+    ///
+    /// # Returns
+    /// Returns the total amount of batches created and pushed to `buffer`.
+    pub fn export_batches(&mut self, buffer: &mut Vec<Batch>) -> u32 {
+        let mut groups = self.groups.drain(..);
+        let mut arrays = self.arrays.drain(..groups.len());
+
+        let mut batch = Batch::default();
+        let mut c = 1;
+        while let Some(group) = groups.next()
+            && let Some(array) = arrays.next()
+        {
+            if !batch.is_exhausted() {
+                batch.push(group, array);
+            } else {
+                buffer.push(batch);
+                batch = Batch::default();
+                c += 1;
+            }
+        }
+        c
+    }
+
+    pub fn fetch_location_or_create(&mut self, texture: TextureKey) -> BatchLayerGroup {
         let existing = self.fetch_location(texture);
         if let Some(existing) = existing {
             existing
         } else {
-            let location = BatchLocation(self.groups.len());
+            let location = BatchLayerGroup(self.groups.len());
             self.groups.push(texture);
-            self.batches.push(QuadsArray::new());
+            self.arrays.push(QuadsArray::new());
             location
         }
     }
 
-    pub fn fetch_location(&self, texture: TextureKey) -> Option<BatchLocation> {
+    pub fn fetch_location(&self, texture: TextureKey) -> Option<BatchLayerGroup> {
         self.groups
             .iter()
             .position(|key| *key == texture)
-            .map(BatchLocation)
+            .map(BatchLayerGroup)
     }
 
     pub fn clear(&mut self) {
         self.groups.clear();
-        self.batches.clear();
+        self.arrays.clear();
     }
 
-    pub fn batch_count(&self) -> usize {
-        self.batches.len()
+    pub fn array_count(&self) -> usize {
+        self.arrays.len()
     }
 
-    pub fn get_batch(&self, location: BatchLocation) -> Option<&QuadsArray> {
-        self.batches.get(location.0)
+    pub fn get_array(&self, location: BatchLayerGroup) -> Option<&QuadsArray> {
+        self.arrays.get(location.0)
     }
 
-    pub fn get_batch_mut(&mut self, location: BatchLocation) -> Option<&mut QuadsArray> {
-        self.batches.get_mut(location.0)
+    pub fn get_array_mut(&mut self, location: BatchLayerGroup) -> Option<&mut QuadsArray> {
+        self.arrays.get_mut(location.0)
     }
 
     pub fn insert<T>(&mut self, element: InterfaceObject, registry: &AssetRegistry<T>)
@@ -302,7 +438,7 @@ impl BatchingLayer {
 
         let uv = quad_uv;
         let location = self.fetch_location_or_create(key);
-        self.batches[location.0].push(element.position, element.size, element.color, uv);
+        self.arrays[location.0].push(element.position, element.size, element.color, uv);
     }
 }
 
@@ -364,6 +500,14 @@ impl QuadsArray {
 
     pub fn push_quad(&mut self, quad: Quad) {
         self.array.push(quad);
+    }
+
+    pub fn len(&self) -> usize {
+        self.array.len()
+    }
+
+    pub fn clear(&mut self) {
+        self.array.clear();
     }
 }
 
