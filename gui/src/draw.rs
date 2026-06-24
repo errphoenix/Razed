@@ -229,27 +229,59 @@ impl<const LAYERS: usize> InterfaceCompositor<LAYERS> {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct BatchLocation(usize);
+
 #[derive(Debug, Default, Clone)]
-pub struct InterfaceLayer {
-    texture_map: rustc_hash::FxHashMap<TextureKey, QuadArrays>,
+pub struct BatchingLayer {
+    groups: Vec<TextureKey>,
+    batches: Vec<QuadsArray>,
 }
-impl InterfaceLayer {
+impl BatchingLayer {
     pub fn new() -> Self {
         Self {
-            texture_map: rustc_hash::FxHashMap::default(),
+            groups: Vec::new(),
+            batches: Vec::new(),
         }
     }
 
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            texture_map: rustc_hash::FxHashMap::with_capacity_and_hasher(
-                capacity,
-                Default::default(),
-            ),
+    pub fn fetch_location_or_create(&mut self, texture: TextureKey) -> BatchLocation {
+        let existing = self.fetch_location(texture);
+        if let Some(existing) = existing {
+            existing
+        } else {
+            let location = BatchLocation(self.groups.len());
+            self.groups.push(texture);
+            self.batches.push(QuadsArray::new());
+            location
         }
     }
 
-    pub fn insert<T>(&mut self, element: QuadElement, registry: &AssetRegistry<T>)
+    pub fn fetch_location(&self, texture: TextureKey) -> Option<BatchLocation> {
+        self.groups
+            .iter()
+            .position(|key| *key == texture)
+            .map(BatchLocation)
+    }
+
+    pub fn clear(&mut self) {
+        self.groups.clear();
+        self.batches.clear();
+    }
+
+    pub fn batch_count(&self) -> usize {
+        self.batches.len()
+    }
+
+    pub fn get_batch(&self, location: BatchLocation) -> Option<&QuadsArray> {
+        self.batches.get(location.0)
+    }
+
+    pub fn get_batch_mut(&mut self, location: BatchLocation) -> Option<&mut QuadsArray> {
+        self.batches.get_mut(location.0)
+    }
+
+    pub fn insert<T>(&mut self, element: InterfaceObject, registry: &AssetRegistry<T>)
     where
         T: Import + Upload<AsGpu = Texture>,
     {
@@ -269,11 +301,8 @@ impl InterfaceLayer {
         };
 
         let uv = quad_uv;
-        let entry = self.texture_map.entry(key);
-
-        entry
-            .or_default()
-            .push(element.position, element.size, element.color, uv);
+        let location = self.fetch_location_or_create(key);
+        self.batches[location.0].push(element.position, element.size, element.color, uv);
     }
 }
 
@@ -295,24 +324,26 @@ impl From<Texture> for TextureKey {
     }
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct QuadArrays {
-    pub positions: Vec<glam::Vec2>,
-    pub sizes: Vec<glam::Vec2>,
-    pub colors: Vec<glam::Vec4>,
-    pub uvs: Vec<[f32; 4]>,
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Quad {
+    pub position: glam::Vec2,
+    pub size: glam::Vec2,
+    pub color: glam::Vec4,
+    pub uv: [f32; 4],
 }
-impl QuadArrays {
+
+#[derive(Clone, Debug, Default)]
+pub struct QuadsArray {
+    pub array: Vec<Quad>,
+}
+impl QuadsArray {
     pub fn new() -> Self {
         Self::default()
     }
 
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            positions: Vec::with_capacity(capacity),
-            sizes: Vec::with_capacity(capacity),
-            colors: Vec::with_capacity(capacity),
-            uvs: Vec::with_capacity(capacity),
+            array: Vec::with_capacity(capacity),
         }
     }
 
@@ -323,10 +354,16 @@ impl QuadArrays {
         color: glam::Vec4,
         uv: [f32; 4],
     ) {
-        self.positions.push(position);
-        self.sizes.push(size);
-        self.colors.push(color);
-        self.uvs.push(uv);
+        self.array.push(Quad {
+            position,
+            size,
+            color,
+            uv,
+        });
+    }
+
+    pub fn push_quad(&mut self, quad: Quad) {
+        self.array.push(quad);
     }
 }
 
