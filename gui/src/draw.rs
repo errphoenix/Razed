@@ -24,10 +24,10 @@ pub trait UiDrawGroup: DrawGroups + Sized {
 
 #[derive(Debug, Default)]
 pub struct DrawBatch {
-    elements: Vec<QuadElement>,
+    elements: Vec<InterfaceObject>,
 }
 impl DrawBatch {
-    pub fn drain(&mut self) -> Drain<'_, QuadElement> {
+    pub fn drain(&mut self) -> Drain<'_, InterfaceObject> {
         self.elements.drain(..)
     }
 }
@@ -40,7 +40,7 @@ pub struct ElementBatcher<'t> {
     pub buttons: InterfaceButtonRowTableView<'t>,
 }
 impl ElementBatcher<'_> {
-    pub fn fill_quad_elements(&self, mut buffer: Vec<QuadElement>) -> DrawBatch {
+    pub fn fill_quad_elements(&self, mut buffer: Vec<InterfaceObject>) -> DrawBatch {
         let count = self.commons.len();
         let reserve = count.saturating_sub(buffer.len());
         buffer.reserve(reserve);
@@ -48,7 +48,7 @@ impl ElementBatcher<'_> {
         for index in 1..count {
             let archetype = self.commons.archetype[index];
             let element = match archetype {
-                crate::ComponentKind::Null => QuadElement::default(),
+                crate::ComponentKind::Null => InterfaceObject::default(),
                 crate::ComponentKind::Panel(indirect_index) => {
                     self.gather_panel(index, indirect_index)
                 }
@@ -61,7 +61,7 @@ impl ElementBatcher<'_> {
                 } => self.gather_button(index, handle, text_handle),
                 crate::ComponentKind::Text(_indirect_index) => {
                     // todo
-                    QuadElement::default()
+                    InterfaceObject::default()
                 }
             };
             buffer.push(element);
@@ -70,7 +70,7 @@ impl ElementBatcher<'_> {
         DrawBatch { elements: buffer }
     }
 
-    fn gather_panel(&self, common_handle: usize, panel_index: IndirectIndex) -> QuadElement {
+    fn gather_panel(&self, common_handle: usize, panel_index: IndirectIndex) -> InterfaceObject {
         let hovered = self.commons.hovered[common_handle];
         let (bg_c, hover_t, &opacity) = self.panels.coalesced(panel_index);
 
@@ -82,7 +82,7 @@ impl ElementBatcher<'_> {
 
         let bounds = self.commons.feedback_bounds[common_handle];
 
-        QuadElement {
+        InterfaceObject {
             position: bounds.min,
             size: bounds.size(),
             color,
@@ -90,11 +90,11 @@ impl ElementBatcher<'_> {
         }
     }
 
-    fn _gather_text(&self, _common_handle: usize, _text_index: IndirectIndex) -> QuadElement {
+    fn _gather_text(&self, _common_handle: usize, _text_index: IndirectIndex) -> InterfaceObject {
         todo!()
     }
 
-    fn gather_image(&self, common_handle: usize, image_index: IndirectIndex) -> QuadElement {
+    fn gather_image(&self, common_handle: usize, image_index: IndirectIndex) -> InterfaceObject {
         let (tint, &opacity, &texture) = self.images.coalesced(image_index);
         let opacity = (tint.w + opacity).min(1.0);
 
@@ -103,7 +103,7 @@ impl ElementBatcher<'_> {
 
         let bounds = self.commons.feedback_bounds[common_handle];
 
-        QuadElement {
+        InterfaceObject {
             position: bounds.min,
             size: bounds.size(),
             color,
@@ -116,7 +116,7 @@ impl ElementBatcher<'_> {
         common_handle: usize,
         button_index: IndirectIndex,
         _text_index: IndirectIndex,
-    ) -> QuadElement {
+    ) -> InterfaceObject {
         let hovered = self.commons.hovered[common_handle];
         let pressed = self.commons.pressed[common_handle];
 
@@ -136,7 +136,7 @@ impl ElementBatcher<'_> {
 
         let bounds = self.commons.feedback_bounds[common_handle];
 
-        QuadElement {
+        InterfaceObject {
             position: bounds.min,
             size: bounds.size(),
             color,
@@ -146,7 +146,7 @@ impl ElementBatcher<'_> {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct QuadElement {
+pub struct InterfaceObject {
     /// top-left position of quad
     pub position: glam::Vec2,
     // size in pixels
@@ -154,7 +154,7 @@ pub struct QuadElement {
     pub color: glam::Vec4,
     pub attachment: Option<InterfaceAttachment>,
 }
-impl QuadElement {
+impl InterfaceObject {
     pub const fn new(
         position: glam::Vec2,
         size: glam::Vec2,
@@ -179,12 +179,12 @@ pub enum InterfaceAttachment {
 
 #[derive(Debug, Clone)]
 pub struct InterfaceCompositor<const LAYERS: usize> {
-    layers: [InterfaceLayer; LAYERS],
+    layers: [BatchingLayer; LAYERS],
 }
 impl<const LAYERS: usize> Default for InterfaceCompositor<LAYERS> {
     fn default() -> Self {
         Self {
-            layers: std::array::from_fn(|_| InterfaceLayer::default()),
+            layers: std::array::from_fn(|_| BatchingLayer::default()),
         }
     }
 }
@@ -195,7 +195,7 @@ impl<const LAYERS: usize> IndexMut<usize> for InterfaceCompositor<LAYERS> {
 }
 
 impl<const LAYERS: usize> Index<usize> for InterfaceCompositor<LAYERS> {
-    type Output = InterfaceLayer;
+    type Output = BatchingLayer;
 
     fn index(&self, index: usize) -> &Self::Output {
         self.layer(index)
@@ -209,29 +209,22 @@ impl<const LAYERS: usize> InterfaceCompositor<LAYERS> {
     /// The `capacity` is applied to each layer array.
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            layers: std::array::from_fn(|_| InterfaceLayer::with_capacity(capacity)),
+            layers: std::array::from_fn(|_| BatchingLayer::with_capacity(capacity)),
         }
     }
 
-    const fn assert_layer_index(layer: usize) {
-        assert!(layer < LAYERS, "invalid layer index provided")
-    }
-
-    pub fn insert<T>(&mut self, layer: usize, element: QuadElement, registry: &AssetRegistry<T>)
+    pub fn insert<T>(&mut self, layer: usize, element: InterfaceObject, registry: &AssetRegistry<T>)
     where
         T: Import + Upload<AsGpu = Texture>,
     {
-        Self::assert_layer_index(layer);
         self.layer_mut(layer).insert(element, registry);
     }
 
-    pub fn layer(&self, index: usize) -> &InterfaceLayer {
-        Self::assert_layer_index(index);
+    pub fn layer(&self, index: usize) -> &BatchingLayer {
         &self.layers[index]
     }
 
-    pub fn layer_mut(&mut self, index: usize) -> &mut InterfaceLayer {
-        Self::assert_layer_index(index);
+    pub fn layer_mut(&mut self, index: usize) -> &mut BatchingLayer {
         &mut self.layers[index]
     }
 }

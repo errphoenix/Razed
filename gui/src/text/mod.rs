@@ -9,7 +9,7 @@ use janus::texture::{ImageFormat, ImageType, Texture, TextureView};
 use lru::LruCache;
 
 use crate::{
-    draw::{InterfaceAttachment, QuadElement},
+    draw::{InterfaceAttachment, InterfaceObject},
     text::font::Font,
 };
 
@@ -220,7 +220,7 @@ pub struct TextComposer<'a> {
     attribs: Attrs<'a>,
     alignment: Align,
 
-    element_buffer: Vec<QuadElement>,
+    element_buffer: Vec<InterfaceObject>,
     raster_buffer: Vec<GlyphRaster>,
 }
 impl<'a> TextComposer<'a> {
@@ -284,7 +284,7 @@ impl<'a> TextComposer<'a> {
                         self.raster_buffer.push(raster);
                     }
 
-                    self.element_buffer.push(QuadElement {
+                    self.element_buffer.push(InterfaceObject {
                         position: Default::default(),
                         size: Default::default(),
                         color: glam::Vec4::ZERO,
@@ -298,7 +298,7 @@ impl<'a> TextComposer<'a> {
         });
     }
 
-    pub fn elements(&mut self) -> Drain<'_, QuadElement> {
+    pub fn elements(&mut self) -> Drain<'_, InterfaceObject> {
         self.element_buffer.drain(..)
     }
 
