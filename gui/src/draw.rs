@@ -518,26 +518,11 @@ macro_rules! layout_interface_buffer {
     };
     ($name:ident; instances: $ic:expr) => {
         layout_buffer! {
-            const $name: 4, {
-                enum positions: $ic => {
-                    type [f32; 2];
+            const $name: 1, {
+                enum quads: $ic => {
+                    type Quad;
                     bind 0;
                     shader 5;
-                };
-                enum sizes: $ic => {
-                    type [f32; 2];
-                    bind 1;
-                    shader 6;
-                };
-                enum colors: $ic => {
-                    type [f32; 4];
-                    bind 2;
-                    shader 7;
-                };
-                enum uv: $ic => {
-                    type [f32; 4];
-                    bind 3;
-                    shader 8;
                 };
             }
         }
@@ -545,7 +530,7 @@ macro_rules! layout_interface_buffer {
         paste::paste! {
             #[derive(Debug, Default)]
             pub struct InterfaceStorageBuffers(
-                pub ethel::render::buffer::PartitionedTriBuffer<4>
+                pub ethel::render::buffer::PartitionedTriBuffer<1>
             );
 
             impl InterfaceStorageBuffers {

@@ -41,6 +41,8 @@ ethel::table_spec! {
         taffy_id: TaffyNodeId;
         layout_style: LayoutStyle;
 
+        layer: u32;
+
         // feedback values from taffy tree after evaluation
         feedback_anchor: glam::Vec2; // top left corner
         feedback_bounds: Box2d;
@@ -603,6 +605,7 @@ impl InterfaceSystem {
         parent: Option<WidgetId>,
         children: Option<&[WidgetId]>,
         layout_style: LayoutStyle,
+        layer: u32,
     ) -> Result<WidgetId, WidgetError> {
         let taffy_style = layout_style.into_taffy_style();
         let node_id = self
@@ -648,6 +651,7 @@ impl InterfaceSystem {
             children,
             TaffyNodeId(node_id),
             layout_style,
+            layer,
             // init default feedback values
             glam::Vec2::ZERO,
             Box2d::NULL,
