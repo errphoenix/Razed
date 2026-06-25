@@ -1,5 +1,5 @@
 use ethel::{
-    assets::TextureId,
+    assets::{AssetRegistry, Import, TextureId, Upload},
     render::Resolution,
     state::data::{Column, DirectIndex, IndirectIndex},
 };
@@ -8,6 +8,7 @@ use janus::{
     StringHash,
     context::DeltaTime,
     input::{KeyEvent, Keys, MouseButton},
+    texture::Texture,
 };
 
 pub mod draw;
@@ -18,7 +19,7 @@ pub use style::*;
 
 use taffy::prelude::*;
 
-use crate::draw::InterfaceObject;
+use crate::draw::{Batch, BatchingLayerCompositor, InterfaceAggregator, InterfaceObject};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct TaffyNodeId(pub(crate) NodeId);
@@ -266,7 +267,7 @@ pub enum WidgetError {
 }
 
 #[derive(Debug)]
-pub struct InterfaceSystem {
+pub struct InterfaceSystem<const LAYERS: usize = 10> {
     layout: TaffyTree<WidgetId>,
     root_node: NodeJointId,
 
@@ -279,8 +280,9 @@ pub struct InterfaceSystem {
     buttons: InterfaceButtonRowTable,
 
     intermediate_buffer: Vec<InterfaceObject>,
+    compositor: BatchingLayerCompositor<LAYERS>,
 }
-impl InterfaceSystem {
+impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     pub fn new(resolution: Resolution) -> Self {
         let mut layout = TaffyTree::with_capacity(1);
         const ROOT_ID: WidgetId = WidgetId(IndirectIndex::null(0));
@@ -305,6 +307,7 @@ impl InterfaceSystem {
             images: InterfaceImageRowTable::new(),
             buttons: InterfaceButtonRowTable::new(),
             intermediate_buffer: Vec::new(),
+            compositor: BatchingLayerCompositor::new(),
         }
     }
 
@@ -332,6 +335,7 @@ impl InterfaceSystem {
             images: InterfaceImageRowTable::with_capacity(capacity),
             buttons: InterfaceButtonRowTable::with_capacity(capacity),
             intermediate_buffer: Vec::with_capacity(capacity),
+            compositor: BatchingLayerCompositor::new(),
         }
     }
 
@@ -366,6 +370,46 @@ impl InterfaceSystem {
 
     pub fn has_parent(&self, widget: WidgetId) -> Option<bool> {
         self.parent_of(widget).map(|id| !id.is_null())
+    }
+
+    pub fn prepare_elements(&mut self) {
+        let aggregator = InterfaceAggregator {
+            commons: InterfaceCommonRowTableView::from(&self.commons),
+            panels: InterfacePanelRowTableView::from(&self.panels),
+            texts: InterfaceTextRowTableView::from(&self.texts),
+            images: InterfaceImageRowTableView::from(&self.images),
+            buttons: InterfaceButtonRowTableView::from(&self.buttons),
+        };
+        aggregator.gather_quad_elements(&mut self.intermediate_buffer);
+    }
+
+    pub fn composite_layers<T>(&mut self, registry: &AssetRegistry<T>)
+    where
+        T: Import + Upload<AsGpu = Texture>,
+    {
+        self.intermediate_buffer
+            .drain(..)
+            .for_each(|object| self.compositor.insert(object, registry));
+    }
+
+    pub fn finalize_batches(&mut self) {
+        self.compositor.pull_batches();
+    }
+
+    pub fn batches(&self) -> &[Batch] {
+        self.compositor.batches()
+    }
+
+    pub fn clear_batches(&mut self) {
+        self.compositor.clear_batches();
+    }
+
+    pub fn compositor(&self) -> &BatchingLayerCompositor<LAYERS> {
+        &self.compositor
+    }
+
+    pub fn compositor_mut(&mut self) -> &mut BatchingLayerCompositor<LAYERS> {
+        &mut self.compositor
     }
 
     pub fn process_hover_events(&mut self, x: f32, y: f32, delta: DeltaTime) {
@@ -657,7 +701,7 @@ impl InterfaceSystem {
             children,
             TaffyNodeId(node_id),
             layout_style,
-            layer,
+            layer.min(LAYERS as u32),
             // init default feedback values
             glam::Vec2::ZERO,
             Box2d::NULL,

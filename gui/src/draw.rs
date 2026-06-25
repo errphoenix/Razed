@@ -31,7 +31,7 @@ pub struct InterfaceAggregator<'t> {
     pub buttons: InterfaceButtonRowTableView<'t>,
 }
 impl InterfaceAggregator<'_> {
-    pub fn fill_quad_elements(&self, buffer: &mut Vec<InterfaceObject>) {
+    pub fn gather_quad_elements(&self, buffer: &mut Vec<InterfaceObject>) {
         let count = self.commons.len();
         let reserve = count.saturating_sub(buffer.len());
         buffer.reserve(reserve);
@@ -224,8 +224,8 @@ impl<const LAYERS: usize> BatchingLayerCompositor<LAYERS> {
         }
     }
 
-    pub fn drain_batches(&mut self) -> Drain<'_, Batch> {
-        self.output.drain(..)
+    pub fn clear_batches(&mut self) {
+        self.output.clear();
     }
 
     pub fn batches(&self) -> &[Batch] {
