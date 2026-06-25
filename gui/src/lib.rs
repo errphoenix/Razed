@@ -18,6 +18,8 @@ pub use style::*;
 
 use taffy::prelude::*;
 
+use crate::draw::InterfaceObject;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct TaffyNodeId(pub(crate) NodeId);
 
@@ -275,6 +277,8 @@ pub struct InterfaceSystem {
     texts: InterfaceTextRowTable,
     images: InterfaceImageRowTable,
     buttons: InterfaceButtonRowTable,
+
+    intermediate_buffer: Vec<InterfaceObject>,
 }
 impl InterfaceSystem {
     pub fn new(resolution: Resolution) -> Self {
@@ -300,6 +304,7 @@ impl InterfaceSystem {
             texts: InterfaceTextRowTable::new(),
             images: InterfaceImageRowTable::new(),
             buttons: InterfaceButtonRowTable::new(),
+            intermediate_buffer: Vec::new(),
         }
     }
 
@@ -326,6 +331,7 @@ impl InterfaceSystem {
             texts: InterfaceTextRowTable::with_capacity(capacity),
             images: InterfaceImageRowTable::with_capacity(capacity),
             buttons: InterfaceButtonRowTable::with_capacity(capacity),
+            intermediate_buffer: Vec::with_capacity(capacity),
         }
     }
 

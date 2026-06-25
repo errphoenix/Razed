@@ -271,7 +271,7 @@ impl<'a> TextComposer<'a> {
         );
     }
 
-    pub fn compose(&mut self, glyph_atlas: &mut GlyphAtlas) {
+    pub fn compose(&mut self, layer: u32, glyph_atlas: &mut GlyphAtlas) {
         self.buffer.lines.clear();
         self.buffer.shape_until_scroll(&mut self.font_system, false);
         self.buffer.layout_runs().for_each(|run| {
@@ -292,6 +292,7 @@ impl<'a> TextComposer<'a> {
                             texture_id: GlyphAtlasTexture::resource_id(),
                             uv: [uv.ux, uv.uy, uv.vx, uv.vy],
                         }),
+                        layer,
                     });
                 }
             });

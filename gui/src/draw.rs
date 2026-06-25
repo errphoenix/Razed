@@ -15,32 +15,23 @@ use janus::{
 
 use crate::{
     InterfaceButtonRowTableView, InterfaceCommonRowTableView, InterfaceImageRowTableView,
-    InterfacePanelRowTableView,
+    InterfacePanelRowTableView, InterfaceTextRowTableView,
 };
 
 pub trait UiDrawGroup: DrawGroups + Sized {
     fn ui_draw_group() -> Self;
 }
 
-#[derive(Debug, Default)]
-pub struct InterfaceObjects {
-    objects: Vec<InterfaceObject>,
-}
-impl InterfaceObjects {
-    pub fn drain(&mut self) -> Drain<'_, InterfaceObject> {
-        self.objects.drain(..)
-    }
-}
-
 #[derive(Clone, Copy, Debug)]
 pub struct InterfaceAggregator<'t> {
     pub commons: InterfaceCommonRowTableView<'t>,
     pub panels: InterfacePanelRowTableView<'t>,
+    pub texts: InterfaceTextRowTableView<'t>,
     pub images: InterfaceImageRowTableView<'t>,
     pub buttons: InterfaceButtonRowTableView<'t>,
 }
 impl InterfaceAggregator<'_> {
-    pub fn fill_quad_elements(&self, mut buffer: Vec<InterfaceObject>) -> InterfaceObjects {
+    pub fn fill_quad_elements(&self, buffer: &mut Vec<InterfaceObject>) {
         let count = self.commons.len();
         let reserve = count.saturating_sub(buffer.len());
         buffer.reserve(reserve);
@@ -50,20 +41,18 @@ impl InterfaceAggregator<'_> {
             match archetype {
                 crate::ComponentKind::Null => {}
                 crate::ComponentKind::Panel(indirect_index) => {
-                    self.gather_panel(index, indirect_index, &mut buffer)
+                    self.gather_panel(index, indirect_index, buffer)
                 }
                 crate::ComponentKind::Image(indirect_index) => {
-                    self.gather_image(index, indirect_index, &mut buffer)
+                    self.gather_image(index, indirect_index, buffer)
                 }
                 crate::ComponentKind::Button {
                     handle,
                     text_handle,
-                } => self.gather_button(index, handle, text_handle, &mut buffer),
+                } => self.gather_button(index, handle, text_handle, buffer),
                 crate::ComponentKind::Text(_indirect_index) => {}
             };
         }
-
-        InterfaceObjects { objects: buffer }
     }
 
     fn gather_panel(
@@ -82,12 +71,14 @@ impl InterfaceAggregator<'_> {
         let color = bg_c * (1.0 - hovered_f) + hovered_f * hover_c;
 
         let bounds = self.commons.feedback_bounds[common_handle];
+        let layer = self.commons.layer[common_handle];
 
         out.push(InterfaceObject {
             position: bounds.min,
             size: bounds.size(),
             color,
             attachment: None,
+            layer,
         });
     }
 
@@ -112,12 +103,14 @@ impl InterfaceAggregator<'_> {
         let attachment = InterfaceAttachment::Texture(texture);
 
         let bounds = self.commons.feedback_bounds[common_handle];
+        let layer = self.commons.layer[common_handle];
 
         out.push(InterfaceObject {
             position: bounds.min,
             size: bounds.size(),
             color,
             attachment: Some(attachment),
+            layer,
         });
     }
 
@@ -146,12 +139,14 @@ impl InterfaceAggregator<'_> {
         // todo: text
 
         let bounds = self.commons.feedback_bounds[common_handle];
+        let layer = self.commons.layer[common_handle];
 
         out.push(InterfaceObject {
             position: bounds.min,
             size: bounds.size(),
             color,
             attachment: None,
+            layer,
         });
     }
 }
@@ -164,6 +159,7 @@ pub struct InterfaceObject {
     pub size: glam::Vec2,
     pub color: glam::Vec4,
     pub attachment: Option<InterfaceAttachment>,
+    pub layer: u32,
 }
 impl InterfaceObject {
     pub const fn new(
@@ -171,12 +167,14 @@ impl InterfaceObject {
         size: glam::Vec2,
         color: glam::Vec4,
         attachment: Option<InterfaceAttachment>,
+        layer: u32,
     ) -> Self {
         Self {
             position,
             size,
             color,
             attachment,
+            layer,
         }
     }
 }
@@ -251,11 +249,12 @@ impl<const LAYERS: usize> BatchingLayerCompositor<LAYERS> {
         self.layers.iter_mut().for_each(BatchingLayer::clear);
     }
 
-    pub fn insert<T>(&mut self, layer: usize, element: InterfaceObject, registry: &AssetRegistry<T>)
+    pub fn insert<T>(&mut self, element: InterfaceObject, registry: &AssetRegistry<T>)
     where
         T: Import + Upload<AsGpu = Texture>,
     {
-        self.layer_mut(layer).insert(element, registry);
+        self.layer_mut(element.layer as usize)
+            .insert(element, registry);
     }
 
     pub fn layer(&self, index: usize) -> &BatchingLayer {
