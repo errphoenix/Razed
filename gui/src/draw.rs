@@ -292,7 +292,7 @@ impl BatchIndex {
 /// This allows up to `N` draw-calls to be submitted concurrently.
 #[derive(Debug, Default, Clone)]
 pub struct Batch {
-    arrays: [QuadsArray; Self::UNITS],
+    array: QuadsArray,
     textures: [Option<TextureKey>; Self::UNITS],
     head: usize,
 }
@@ -311,30 +311,26 @@ impl Batch {
         self.head >= Self::UNITS
     }
 
-    pub fn push(
-        &mut self,
-        texture: TextureKey,
-        array: QuadsArray,
-    ) -> Result<usize, (TextureKey, QuadsArray)> {
+    pub fn push(&mut self, texture: TextureKey, array: &QuadsArray) -> Option<usize> {
         if self.head >= Self::UNITS {
-            return Err((texture, array));
+            return None;
         }
 
         let i = self.head;
         self.head += 1;
 
-        self.arrays[i] = array;
+        self.array.inner.extend_from_slice(&array.inner);
         self.textures[i] = Some(texture);
 
-        Ok(i)
+        Some(i)
     }
 
-    pub fn array(&self, index: BatchIndex) -> &QuadsArray {
-        &self.arrays[index.get()]
+    pub fn array(&self) -> &QuadsArray {
+        &self.array
     }
 
-    pub fn array_mut(&mut self, index: BatchIndex) -> &mut QuadsArray {
-        &mut self.arrays[index.get()]
+    pub fn array_mut(&mut self) -> &mut QuadsArray {
+        &mut self.array
     }
 
     pub fn texture(&self, index: BatchIndex) -> Option<TextureKey> {
@@ -342,8 +338,8 @@ impl Batch {
     }
 
     pub fn clear(&mut self) {
-        self.arrays.iter_mut().for_each(QuadsArray::clear);
         self.textures.iter_mut().for_each(|opt| *opt = None);
+        self.array.clear();
         self.head = 0;
     }
 }
@@ -353,13 +349,13 @@ pub struct BatchLayerGroup(usize);
 
 #[derive(Debug, Default, Clone)]
 pub struct BatchingLayer {
-    groups: Vec<TextureKey>,
+    units: Vec<TextureKey>,
     arrays: Vec<QuadsArray>,
 }
 impl BatchingLayer {
     pub fn new() -> Self {
         Self {
-            groups: Vec::new(),
+            units: Vec::new(),
             arrays: Vec::new(),
         }
     }
@@ -372,21 +368,19 @@ impl BatchingLayer {
     /// # Returns
     /// Returns the total amount of batches created and pushed to `buffer`.
     pub fn export_batches(&mut self, buffer: &mut Vec<Batch>) -> u32 {
-        let mut groups = self.groups.drain(..);
-        let mut arrays = self.arrays.drain(..groups.len());
+        let groups = self.units.drain(..);
+        let arrays = self.arrays.drain(..groups.len());
 
         let mut batch = Batch::default();
         let mut c = 1;
-        while let Some(group) = groups.next()
-            && let Some(array) = arrays.next()
-        {
-            if !batch.is_exhausted() {
-                batch.push(group, array);
-            } else {
+
+        for (group, array) in groups.zip(arrays) {
+            if batch.is_exhausted() {
                 buffer.push(batch);
                 batch = Batch::default();
                 c += 1;
             }
+            batch.push(group, &array);
         }
         c
     }
@@ -396,22 +390,22 @@ impl BatchingLayer {
         if let Some(existing) = existing {
             existing
         } else {
-            let location = BatchLayerGroup(self.groups.len());
-            self.groups.push(texture);
+            let location = BatchLayerGroup(self.units.len());
+            self.units.push(texture);
             self.arrays.push(QuadsArray::new());
             location
         }
     }
 
     pub fn fetch_location(&self, texture: TextureKey) -> Option<BatchLayerGroup> {
-        self.groups
+        self.units
             .iter()
             .position(|key| *key == texture)
             .map(BatchLayerGroup)
     }
 
     pub fn clear(&mut self) {
-        self.groups.clear();
+        self.units.clear();
         self.arrays.clear();
     }
 
@@ -446,9 +440,15 @@ impl BatchingLayer {
             TextureKey::default()
         };
 
-        let uv = quad_uv;
+        let quad_uv = quad_uv;
         let location = self.fetch_location_or_create(key);
-        self.arrays[location.0].push(element.position, element.size, element.color, uv);
+        self.arrays[location.0].push(
+            element.position,
+            element.size,
+            element.color,
+            quad_uv,
+            location.0 as u32,
+        );
     }
 }
 
@@ -476,11 +476,12 @@ pub struct Quad {
     pub size: glam::Vec2,
     pub color: glam::Vec4,
     pub uv: [f32; 4],
+    pub texture_unit: u32,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct QuadsArray {
-    pub array: Vec<Quad>,
+    pub inner: Vec<Quad>,
 }
 impl QuadsArray {
     pub fn new() -> Self {
@@ -489,7 +490,7 @@ impl QuadsArray {
 
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            array: Vec::with_capacity(capacity),
+            inner: Vec::with_capacity(capacity),
         }
     }
 
@@ -499,25 +500,27 @@ impl QuadsArray {
         size: glam::Vec2,
         color: glam::Vec4,
         uv: [f32; 4],
+        texture_unit: u32,
     ) {
-        self.array.push(Quad {
+        self.inner.push(Quad {
             position,
             size,
             color,
             uv,
+            texture_unit,
         });
     }
 
     pub fn push_quad(&mut self, quad: Quad) {
-        self.array.push(quad);
+        self.inner.push(quad);
     }
 
     pub fn len(&self) -> usize {
-        self.array.len()
+        self.inner.len()
     }
 
     pub fn clear(&mut self) {
-        self.array.clear();
+        self.inner.clear();
     }
 }
 
