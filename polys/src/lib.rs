@@ -133,7 +133,6 @@ impl Face for QuadFace {
     }
 
     fn into_alloc(self) -> Vec<u32> {
-        let a = [0u32; 4];
         vec![self.a, self.b, self.c, self.d]
     }
 
