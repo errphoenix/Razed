@@ -424,7 +424,7 @@ impl BatchingLayer {
     where
         T: Import + Upload<AsGpu = Texture>,
     {
-        let mut quad_uv = [0f32; 4];
+        let mut quad_uv = [0., 0., 1., 1.];
         let key = if let Some(attachment) = element.attachment {
             let texture = match attachment {
                 InterfaceAttachment::Texture(texture_id) => registry.get_gpu_view(texture_id),
