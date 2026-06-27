@@ -12,6 +12,7 @@ use janus::{
 };
 
 pub mod draw;
+pub mod shaders;
 pub mod style;
 pub mod text;
 
