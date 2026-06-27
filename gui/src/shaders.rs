@@ -60,8 +60,12 @@ ethel::shader_glsl! {
 
                 vec4 vertex = projection * vec4(p.x, p.y, 0.0, 1.0);
 
+                vec4 atlas_section = element.uv;
+                float u = atlas_section.x + atlas_section.z * x;
+                float v = atlas_section.y + atlas_section.w * y;
+
+                quad_uv = vec2(u, v);
                 fs_color = element.color;
-                quad_uv = element.uv;
                 texture_index = element.tex_unit;
                 screen_point = vertex.xy;
 
@@ -84,6 +88,19 @@ ethel::shader_glsl! {
             };
 
             src() "
+                vec4 color = fs_color;
+                vec2 uv = tex_coord;
+                uint tex_index = texture_index;
+
+                sampler2D tex = texture_map[tex_index];
+                float tex_filter = float(min(tex_index, 1));
+                vec4 tex = texture(tex, uv) * tex_filter;
+
+                float tmf = max(0.0, tex_filter - (color.a * 0.5));
+                vec3 rgb = mix(color.rgb, tex.rgb, tmf);
+                float alpha = max(color.a, tex.a);
+
+                outColor = vec4(rgb, alpha);
             "
         ];
     }
