@@ -10,7 +10,7 @@ use ethel::{
 };
 use janus::{
     GpuResource,
-    texture::{Texture, TextureView},
+    texture::{Texture, TextureKey, TextureTarget, TextureView},
 };
 
 use crate::{
@@ -302,6 +302,14 @@ impl Batch {
         Self::default()
     }
 
+    pub fn bind_textures(&self) {
+        for (i, texture) in self.textures.iter().enumerate() {
+            let texture = texture.unwrap_or_default();
+            let unit = i as u32;
+            janus::texture::bind_without_meta(TextureTarget::Flat, texture, unit);
+        }
+    }
+
     /// Returns `true` if the batch is exhausted.
     ///
     /// I.e. if the total amount of texture groups has reached the defined
@@ -448,24 +456,6 @@ impl BatchingLayer {
             quad_uv,
             location.0 as u32,
         );
-    }
-}
-
-/// A unique OpenGL texture key used for interface elements per-texture
-/// draw-call mapping.
-///
-/// Contains an OpenGL texture object. This can be 0 if the texture is to be
-/// specified.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct TextureKey(pub u32);
-impl From<TextureView> for TextureKey {
-    fn from(value: TextureView) -> Self {
-        Self(value.resource_id())
-    }
-}
-impl From<Texture> for TextureKey {
-    fn from(value: Texture) -> Self {
-        Self(value.resource_id())
     }
 }
 

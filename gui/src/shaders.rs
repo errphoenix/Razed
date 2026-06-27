@@ -27,7 +27,7 @@ ethel::shader_glsl! {
             attribs {
                 ethel::shader_glsl_attribs! {
                     output fs_color: vec4;
-                    output quad_uv: vec4;
+                    output tex_coord: vec2;
                     output screen_point: vec2;
                     output texture_index: uint;
                 }
@@ -73,7 +73,7 @@ ethel::shader_glsl! {
             attribs {
                 ethel::shader_glsl_attribs! {
                     input fs_color: vec4;
-                    input quad_uv: vec4;
+                    input tex_coord: vec2;
                     input screen_point: vec2;
                     input texture_index: uint;
                     output outColor: vec4;
