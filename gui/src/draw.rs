@@ -379,16 +379,25 @@ impl BatchingLayer {
         let arrays = self.arrays.drain(..groups.len());
 
         let mut batch = Batch::default();
-        let mut c = 1;
+        let mut c = 1u32;
 
-        for (group, array) in groups.zip(arrays) {
+        for (group, mut array) in groups.zip(arrays) {
             if batch.is_exhausted() {
                 buffer.push(batch);
                 batch = Batch::default();
                 c += 1;
             }
+
+            // offset texture unit index to batch-local index, which
+            // is capped to 16
+            let offset = (c - 1) * Batch::UNITS as u32;
+            array
+                .inner
+                .iter_mut()
+                .for_each(|quad| quad.texture_unit -= offset);
             batch.push(group, &array);
         }
+
         c
     }
 
