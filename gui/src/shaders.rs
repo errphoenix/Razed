@@ -29,7 +29,9 @@ ethel::shader_glsl! {
                     output fs_color: vec4;
                     output tex_coord: vec2;
                     output screen_point: vec2;
-                    output texture_index: uint;
+                }
+                ethel::shader_glsl_attribs! {
+                    output texture_index: uint flat: true;
                 }
             };
             uniform {
@@ -61,10 +63,10 @@ ethel::shader_glsl! {
                 vec4 vertex = projection * vec4(p.x, p.y, 0.0, 1.0);
 
                 vec4 atlas_section = element.uv;
-                float u = atlas_section.x + atlas_section.z * x;
-                float v = atlas_section.y + atlas_section.w * y;
+                float u = mix(atlas_section.x, atlas_section.z, x);
+                float v = mix(atlas_section.y, atlas_section.w, y);
 
-                quad_uv = vec2(u, v);
+                tex_coord = vec2(u, v);
                 fs_color = element.color;
                 texture_index = element.tex_unit;
                 screen_point = vertex.xy;
@@ -79,8 +81,10 @@ ethel::shader_glsl! {
                     input fs_color: vec4;
                     input tex_coord: vec2;
                     input screen_point: vec2;
-                    input texture_index: uint;
                     output outColor: vec4;
+                }
+                ethel::shader_glsl_attribs! {
+                    input texture_index: uint flat: true;
                 }
             };
             sampler {
@@ -92,13 +96,13 @@ ethel::shader_glsl! {
                 vec2 uv = tex_coord;
                 uint tex_index = texture_index;
 
-                sampler2D tex = texture_map[tex_index];
+                sampler2D tex_sample = texture_map[tex_index];
                 float tex_filter = float(min(tex_index, 1));
-                vec4 tex = texture(tex, uv) * tex_filter;
+                vec4 tex_color = texture(tex_sample, uv) * tex_filter;
 
                 float tmf = max(0.0, tex_filter - (color.a * 0.5));
-                vec3 rgb = mix(color.rgb, tex.rgb, tmf);
-                float alpha = max(color.a, tex.a);
+                vec3 rgb = mix(color.rgb, tex_color.rgb, tmf);
+                float alpha = max(color.a, tex_color.a);
 
                 outColor = vec4(rgb, alpha);
             "
