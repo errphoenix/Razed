@@ -181,6 +181,7 @@ impl GlyphAtlas {
         key: CacheKey,
     ) -> Option<(GlyphUv, Option<GlyphRaster>)> {
         if let Some(&uv) = self.uv_cache.get(&key) {
+            self.atlas_lru.promote(&key);
             return Some((uv, None));
         }
 
