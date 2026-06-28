@@ -422,7 +422,7 @@ impl LayoutStyle {
                     taffy::style_helpers::evenly_sized_tracks(*template_columns);
 
                 Style {
-                    display: taffy::Display::Flex,
+                    display: taffy::Display::Grid,
                     position: taffy::Position::Relative,
 
                     grid_template_rows,

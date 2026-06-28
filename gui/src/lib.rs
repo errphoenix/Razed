@@ -513,7 +513,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             let position = node.location;
             let size = node.size;
             let min = glam::vec2(position.x, position.y - size.height);
-            let max = glam::vec2(position.x + size.height, position.y);
+            let max = glam::vec2(position.x + size.width, position.y);
 
             *fb_anchor = glam::vec2(position.x, position.y);
             *fb_bounds = Box2d { min, max };
