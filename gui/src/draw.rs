@@ -1,17 +1,11 @@
-use std::{
-    ops::{Index, IndexMut},
-    vec::Drain,
-};
+use std::ops::{Index, IndexMut};
 
 use ethel::{
     assets::{AssetRegistry, Import, TextureId, Upload},
     render::command::DrawGroups,
     state::data::{IndirectIndex, table::TableView},
 };
-use janus::{
-    GpuResource,
-    texture::{Texture, TextureKey, TextureTarget, TextureView},
-};
+use janus::texture::{Texture, TextureKey, TextureTarget};
 
 use crate::{
     InterfaceButtonRowTableView, InterfaceCommonRowTableView, InterfaceImageRowTableView,
