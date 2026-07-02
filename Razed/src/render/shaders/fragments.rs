@@ -77,7 +77,7 @@ ethel::shader_glsl! {
 
             float light_factor = LIGHT_AMBIENT + diffuse;
 
-            outColor = vec4(fs_color.rgb * light_factor, 0.2);
+            outColor = vec4(fs_color.rgb * light_factor, 1.0);
             "
         ];
 
@@ -193,47 +193,102 @@ ethel::shader_glsl! {
 
             vec3 w_rest = bind_pose + model;
 
-            float d0 = distance(w_rest, b0) + 0.000001;
-            float d1 = distance(w_rest, b1) + 0.000001;
-            float d2 = distance(w_rest, b2) + 0.000001;
-            float d3 = distance(w_rest, b3) + 0.000001;
-            float d4 = distance(w_rest, b4) + 0.000001;
-            float d5 = distance(w_rest, b5) + 0.000001;
-            float d6 = distance(w_rest, b6) + 0.000001;
-            float d7 = distance(w_rest, b7) + 0.000001;
+            const float M = 1000000.0;
 
-            float vw0 = 1.0 / d0;
-            float vw1 = 1.0 / d1;
-            float vw2 = 1.0 / d2;
-            float vw3 = 1.0 / d3;
-            float vw4 = 1.0 / d4;
-            float vw5 = 1.0 / d5;
-            float vw6 = 1.0 / d6;
-            float vw7 = 1.0 / d7;
+            // locate cage bounds (bind-time)
+            vec3 cage_min = vec3(M);
+            vec3 cage_max = -vec3(M);
+            for (int i = 0; i < 8; i++) {
+                uint anchor_i = anchors[i].index;
+                uint cage_imap = imap_deforms[anchor_i].index;
+                vec3 point = pod_deforms_pose[cage_imap].xyz;
 
-            float vwt = vw0 + vw1 + vw2 + vw3 + vw4 + vw5 + vw6 + vw7;
-            vw0 /= vwt;
-            vw1 /= vwt;
-            vw2 /= vwt;
-            vw3 /= vwt;
-            vw4 /= vwt;
-            vw5 /= vwt;
-            vw6 /= vwt;
-            vw7 /= vwt;
+                cage_min.x = min(cage_min.x, point.x);
+                cage_min.y = min(cage_min.y, point.y);
+                cage_min.z = min(cage_min.z, point.z);
+                cage_max.x = max(cage_max.x, point.x);
+                cage_max.y = max(cage_max.y, point.y);
+                cage_max.z = max(cage_max.z, point.z);
+            }
 
-            vec3 deform = vec3(0.0);
-            if (i0 != 0) deform += vw0 * (p0 - b0);
-            if (i1 != 0) deform += vw1 * (p1 - b1);
-            if (i2 != 0) deform += vw2 * (p2 - b2);
-            if (i3 != 0) deform += vw3 * (p3 - b3);
-            if (i4 != 0) deform += vw4 * (p4 - b4);
-            if (i5 != 0) deform += vw5 * (p5 - b5);
-            if (i6 != 0) deform += vw6 * (p6 - b6);
-            if (i7 != 0) deform += vw7 * (p7 - b7);
+            float cdx = cage_max.x - cage_min.x;
+            float cdy = cage_max.y - cage_min.y;
+            float cdz = cage_max.z - cage_min.z;
+            float vdx = w_rest.x - cage_min.x;
+            float vdy = w_rest.y - cage_min.y;
+            float vdz = w_rest.z - cage_min.z;
 
-            vec4 world = vec4(deform + w_rest, 1.0);
+            float ifx = vdx / cdx;
+            float ify = vdy / cdy;
+            float ifz = vdz / cdz;
+
+            // locate cage bounds (real-time)
+            cage_min = vec3(M);
+            cage_max = -vec3(M);
+            for (int i = 0; i < 8; i++) {
+                uint anchor_i = anchors[i].index;
+                uint cage_imap = imap_deforms[anchor_i].index;
+                vec3 point = pod_deforms_positions[cage_imap].xyz;
+
+                cage_min.x = min(cage_min.x, point.x);
+                cage_min.y = min(cage_min.y, point.y);
+                cage_min.z = min(cage_min.z, point.z);
+                cage_max.x = max(cage_max.x, point.x);
+                cage_max.y = max(cage_max.y, point.y);
+                cage_max.z = max(cage_max.z, point.z);
+            }
+
+            float x = mix(cage_min.x, cage_max.x, ifx);
+            float y = mix(cage_min.y, cage_max.y, ify);
+            float z = mix(cage_min.z, cage_max.z, ifz);
+
+            vec4 world = vec4(x, y, z, 1.0);
+
+            // float d0 = distance(w_rest, b0) + 0.000001;
+            // float d1 = distance(w_rest, b1) + 0.000001;
+            // float d2 = distance(w_rest, b2) + 0.000001;
+            // float d3 = distance(w_rest, b3) + 0.000001;
+            // float d4 = distance(w_rest, b4) + 0.000001;
+            // float d5 = distance(w_rest, b5) + 0.000001;
+            // float d6 = distance(w_rest, b6) + 0.000001;
+            // float d7 = distance(w_rest, b7) + 0.000001;
+
+            // float vw0 = 1.0 / d0;
+            // float vw1 = 1.0 / d1;
+            // float vw2 = 1.0 / d2;
+            // float vw3 = 1.0 / d3;
+            // float vw4 = 1.0 / d4;
+            // float vw5 = 1.0 / d5;
+            // float vw6 = 1.0 / d6;
+            // float vw7 = 1.0 / d7;
+
+            // float vwt = vw0 + vw1 + vw2 + vw3 + vw4 + vw5 + vw6 + vw7;
+            // vw0 /= vwt;
+            // vw1 /= vwt;
+            // vw2 /= vwt;
+            // vw3 /= vwt;
+            // vw4 /= vwt;
+            // vw5 /= vwt;
+            // vw6 /= vwt;
+            // vw7 /= vwt;
+
+            // vec3 deform = vec3(0.0);
+            // if (i0 != 0) deform += vw0 * (p0 - b0);
+            // if (i1 != 0) deform += vw1 * (p1 - b1);
+            // if (i2 != 0) deform += vw2 * (p2 - b2);
+            // if (i3 != 0) deform += vw3 * (p3 - b3);
+            // if (i4 != 0) deform += vw4 * (p4 - b4);
+            // if (i5 != 0) deform += vw5 * (p5 - b5);
+            // if (i6 != 0) deform += vw6 * (p6 - b6);
+            // if (i7 != 0) deform += vw7 * (p7 - b7);
+
+            // vec4 world = vec4(deform + w_rest, 1.0);
+            // fs_world = world.xyz;
+            // //fs_normal = mix(normal, normalize(abs(world.xyz)), 0.35);
+            // fs_normal = normal;
+            // fs_color = vec4(vec3(0.8), 1.0);
+
             fs_world = world.xyz;
-            //fs_normal = mix(normal, normalize(abs(world.xyz)), 0.35);
             fs_normal = normal;
             fs_color = vec4(vec3(0.8), 1.0);
 
