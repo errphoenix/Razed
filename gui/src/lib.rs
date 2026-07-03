@@ -1,3 +1,5 @@
+use std::sync::RwLock;
+
 use ethel::{
     assets::{AssetRegistry, Import, TextureId, Upload},
     render::Resolution,
@@ -777,5 +779,180 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
 
     pub fn button_data_mut(&mut self) -> &mut InterfaceButtonRowTable {
         &mut self.buttons
+    }
+
+    pub fn create_element(
+        &mut self,
+        parameters: ElementParams,
+    ) -> Result<(WidgetId, IndirectIndex), WidgetError> {
+        let root_id = {
+            let core = parameters.core();
+            self.add_new(
+                core.parent,
+                core.children,
+                core.layout_style.clone(),
+                core.layer,
+            )?
+        };
+
+        let special_id = match parameters {
+            ElementParams::Panel(_, panel_params) => self.make_panel(
+                root_id,
+                panel_params.color,
+                panel_params.hover_tint,
+                panel_params.opacity,
+            ),
+            ElementParams::Button(_, button_params) => {
+                let text = &button_params.text;
+                let text_id = self.create_text(text.string, text.font_name, text.color, text.size);
+                self.make_button(
+                    root_id,
+                    text_id,
+                    button_params.bg_color,
+                    button_params.bg_hover_tint,
+                    button_params.bg_press_tint,
+                    button_params.callback,
+                )
+            }
+            ElementParams::Text(_, text_params) => self.make_text(
+                root_id,
+                text_params.string,
+                text_params.font_name,
+                text_params.color,
+                text_params.size,
+            ),
+            ElementParams::Image(_, image_params) => self.make_image(
+                root_id,
+                image_params.tint,
+                image_params.opacity,
+                image_params.texture,
+            ),
+        }?;
+
+        Ok((root_id, special_id))
+    }
+}
+
+static FALLBACK_TEXTURE: RwLock<Option<TextureId>> = RwLock::new(None);
+
+pub fn set_fallback_texture(fallback: TextureId) {
+    *FALLBACK_TEXTURE.write().unwrap() = Some(fallback);
+}
+
+pub fn get_fallback_texture() -> Option<TextureId> {
+    *FALLBACK_TEXTURE.read().unwrap()
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct CoreElementParams<'children> {
+    pub parent: Option<WidgetId>,
+    pub children: Option<&'children [WidgetId]>,
+    pub layout_style: LayoutStyle,
+    pub layer: u32,
+}
+
+pub const DEFAULT_GENERIC_COLOR: glam::Vec3 = glam::Vec3::ZERO;
+pub const DEFAULT_GENERIC_HOVER_TINT: glam::Vec4 = glam::vec4(0.3, 0.3, 0.3, 0.2);
+pub const DEFAULT_GENERIC_PRESS_TINT: glam::Vec4 = glam::vec4(0.45, 0.45, 0.45, 0.37);
+pub const DEFAULT_GENERIC_OPACITY: f32 = 0.4;
+
+#[derive(Clone, Debug)]
+pub struct PanelParams {
+    pub color: glam::Vec3,
+    pub hover_tint: glam::Vec4,
+    pub opacity: f32,
+}
+impl Default for PanelParams {
+    fn default() -> Self {
+        Self {
+            color: DEFAULT_GENERIC_COLOR,
+            hover_tint: DEFAULT_GENERIC_HOVER_TINT,
+            opacity: DEFAULT_GENERIC_OPACITY,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ButtonParams {
+    pub text: TextParams,
+    pub bg_color: glam::Vec3,
+    pub bg_hover_tint: glam::Vec4,
+    pub bg_press_tint: glam::Vec4,
+    pub callback: ButtonCallback,
+}
+impl Default for ButtonParams {
+    fn default() -> Self {
+        Self {
+            text: TextParams::default(),
+            bg_color: DEFAULT_GENERIC_COLOR,
+            bg_hover_tint: DEFAULT_GENERIC_HOVER_TINT,
+            bg_press_tint: DEFAULT_GENERIC_PRESS_TINT,
+            callback: ButtonCallback::default(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct TextParams {
+    pub string: StringHash,
+    pub font_name: StringHash,
+    pub color: glam::Vec4,
+    pub size: u32,
+}
+impl TextParams {
+    pub const DEFAULT_TEXT: StringHash = janus::hash_string("Lorem Ipsum Blah Blah");
+    pub const DEFAULT_FONT: StringHash = janus::hash_string("Arial");
+    pub const DEFAULT_COLOR: glam::Vec4 = glam::Vec4::ONE;
+    pub const DEFAULT_SIZE: u32 = 11;
+}
+impl Default for TextParams {
+    fn default() -> Self {
+        Self {
+            string: Self::DEFAULT_TEXT,
+            font_name: Self::DEFAULT_FONT,
+            color: Self::DEFAULT_COLOR,
+            size: Self::DEFAULT_SIZE,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ImageParams {
+    pub tint: glam::Vec4,
+    pub opacity: f32,
+    pub texture: TextureId,
+}
+impl ImageParams {
+    pub const DEFAULT_TINT: glam::Vec4 = glam::Vec4::ZERO;
+    pub const DEFAULT_OPACITY: f32 = 1.0;
+}
+impl Default for ImageParams {
+    fn default() -> Self {
+        Self {
+            tint: Self::DEFAULT_TINT,
+            opacity: Self::DEFAULT_OPACITY,
+            texture: FALLBACK_TEXTURE
+                .read()
+                .unwrap()
+                .expect("fallback texture must be st"),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum ElementParams<'children> {
+    Panel(CoreElementParams<'children>, PanelParams),
+    Button(CoreElementParams<'children>, ButtonParams),
+    Text(CoreElementParams<'children>, TextParams),
+    Image(CoreElementParams<'children>, ImageParams),
+}
+impl ElementParams<'_> {
+    pub fn core(&'_ self) -> &CoreElementParams<'_> {
+        match self {
+            ElementParams::Panel(core_element_params, _) => core_element_params,
+            ElementParams::Button(core_element_params, _) => core_element_params,
+            ElementParams::Text(core_element_params, _) => core_element_params,
+            ElementParams::Image(core_element_params, _) => core_element_params,
+        }
     }
 }

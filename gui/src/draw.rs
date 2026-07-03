@@ -2,7 +2,6 @@ use std::ops::{Index, IndexMut};
 
 use ethel::{
     assets::{AssetRegistry, Import, TextureId, Upload},
-    render::command::DrawGroups,
     state::data::{IndirectIndex, table::TableView},
 };
 use janus::texture::{Texture, TextureKey, TextureTarget};
@@ -11,10 +10,6 @@ use crate::{
     InterfaceButtonRowTableView, InterfaceCommonRowTableView, InterfaceImageRowTableView,
     InterfacePanelRowTableView, InterfaceTextRowTableView,
 };
-
-pub trait UiDrawGroup: DrawGroups + Sized {
-    fn ui_draw_group() -> Self;
-}
 
 #[derive(Clone, Copy, Debug)]
 pub struct InterfaceAggregator<'t> {
