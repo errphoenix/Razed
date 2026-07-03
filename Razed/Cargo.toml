@@ -23,6 +23,7 @@ rustc-hash = "2.1.1"
 chrono = "0.4.44"
 indoc = "2.0.7"
 rayon = "1.12.0"
+gui = { path = "../gui", features = ["taffy"] }
 
 [features]
 default = []

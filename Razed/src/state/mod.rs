@@ -16,8 +16,9 @@ use crate::{
 };
 use ::physics::xpbd::{RawXpbdLattice, XpbdOptions, XpbdSolver};
 use ethel::{
+    assets::{AssetRegistry, Import, Upload},
     render::{
-        ScreenSpace,
+        Resolution, ScreenSpace,
         command::{DrawArraysIndirectCommand, GpuCommandQueue},
     },
     state::{
@@ -29,7 +30,12 @@ use ethel::{
         },
     },
 };
-use janus::context::DeltaTime;
+use gui::InterfaceSystem;
+use janus::{
+    context::DeltaTime,
+    input::{Cursor, KeyEvent},
+    texture::Texture,
+};
 use physics::rigid::RbVelocity;
 use tracing::{Level, event};
 
@@ -46,6 +52,7 @@ const GROUND_LEVEL: f32 = 0.0;
 
 #[derive(Debug)]
 pub struct State {
+    ui_system: InterfaceSystem,
     profiler: ethel::profile::Profiler,
 
     camera: camera::Orbital,
@@ -78,6 +85,7 @@ const CAMERA_PITCH_CLAMP: std::ops::Range<f32> =
 impl Default for State {
     fn default() -> Self {
         Self {
+            ui_system: InterfaceSystem::new(Resolution::default()),
             lattice: LatticeSystem::new(XpbdSolver::new(
                 XpbdOptions::default().with_ground_level(Some(GROUND_LEVEL)),
             )),
@@ -489,6 +497,35 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 }
 
 impl State {
+    pub fn ui_system(&self) -> &InterfaceSystem {
+        &self.ui_system
+    }
+
+    pub fn ui_system_mut(&mut self) -> &mut InterfaceSystem {
+        &mut self.ui_system
+    }
+
+    pub fn ui_update_layout(&mut self) {
+        self.ui_system.evaluate_layout();
+        self.ui_system.synchronise_layout();
+    }
+
+    pub fn ui_process_input(&mut self, cursor: Cursor, key_events: &[KeyEvent], delta: DeltaTime) {
+        let x = cursor.x_f32();
+        let y = cursor.y_f32();
+        self.ui_system.process_hover_events(x, y, delta);
+        self.ui_system.feed_key_events(key_events, delta);
+    }
+
+    pub fn ui_composite_batches<T>(&mut self, texture_registry: &AssetRegistry<T>)
+    where
+        T: Import + Upload<AsGpu = Texture>,
+    {
+        self.ui_system.prepare_elements();
+        self.ui_system.composite_layers(texture_registry);
+        self.ui_system.finalize_batches();
+    }
+
     pub fn create_generic_object(
         &mut self,
         mesh: ethel::mesh::Id,

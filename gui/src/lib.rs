@@ -283,6 +283,16 @@ pub struct InterfaceSystem<const LAYERS: usize = 10> {
     intermediate_buffer: Vec<InterfaceObject>,
     compositor: BatchingLayerCompositor<LAYERS>,
 }
+/// Safety:
+/// TaffyTree is !Send due to internal implementation details related to raw
+/// const* function pointers. This implementation is required for ethel's
+/// threads initialization.
+unsafe impl<const LAYERS: usize> Send for InterfaceSystem<LAYERS> {}
+/// Safety:
+/// TaffyTree is !Sync due to internal implementation details related to raw
+/// const* function pointers. This implementation is required for ethel's
+/// threads initialization.
+unsafe impl<const LAYERS: usize> Sync for InterfaceSystem<LAYERS> {}
 impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     pub fn new(resolution: Resolution) -> Self {
         let mut layout = TaffyTree::with_capacity(1);
