@@ -55,8 +55,6 @@ pub struct State {
     ui_system: InterfaceSystem,
     profiler: ethel::profile::Profiler,
 
-    frame_begin: Instant,
-
     camera: camera::Orbital,
     mesh_ids: Vec<ethel::mesh::Id>,
 
@@ -87,7 +85,6 @@ const CAMERA_PITCH_CLAMP: std::ops::Range<f32> =
 impl Default for State {
     fn default() -> Self {
         Self {
-            frame_begin: Instant::now(),
             ui_system: InterfaceSystem::new(Resolution::default()),
             lattice: LatticeSystem::new(XpbdSolver::new(
                 XpbdOptions::default().with_ground_level(Some(GROUND_LEVEL)),
@@ -119,6 +116,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         frame_boundary: &Cross<Producer, FrameDataBuffers>,
         command_queue: &mut GpuCommandQueue<ethel::DrawCommand, RenderGroup>,
     ) {
+        let t0 = Instant::now();
+
         // populate command buffers
         {
             command_queue.clear();
@@ -372,9 +371,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             );
         });
 
-        let frame_end = Instant::now();
-        self.profiler
-            .log_explicit("total_frame", self.frame_begin, frame_end);
+        let t1 = Instant::now();
+        self.profiler.log_explicit("upload_gpu", t0, t1);
     }
 
     fn step(
@@ -386,19 +384,23 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
     ) {
         self.lattice.clear_damage_buffers();
 
-        let fragments = FragmentsRowTableView::from(self.fragments.data());
-        self.lattice.pull_integrity_mass(&fragments);
-        self.lattice.sync_constraint_attributes();
+        self.profiler.capture_duration("lattice_sync_integ", || {
+            let fragments = FragmentsRowTableView::from(self.fragments.data());
+            self.lattice.pull_integrity_mass(&fragments);
+            self.lattice.sync_constraint_attributes();
+        });
 
-        const WIND_FORCE: f32 = 0.0;
-        self.lattice
-            .apply_forces_batched(glam::vec3(WIND_FORCE, -9.81, WIND_FORCE));
+        self.profiler.capture_duration("lattice_trivialities", || {
+            const WIND_FORCE: f32 = 0.0;
+            self.lattice
+                .apply_forces_batched(glam::vec3(WIND_FORCE, -9.81, WIND_FORCE));
 
-        let deforms = DeformsRowTableView::from(self.deforms.data());
-        self.fragments.compute_world_positions(&deforms);
+            let deforms = DeformsRowTableView::from(self.deforms.data());
+            self.fragments.compute_world_positions(&deforms);
 
-        // synchronizes lattice damage from xpbd-lattice solver
-        self.lattice.register_dead_nodes();
+            // synchronizes lattice damage from xpbd-lattice solver
+            self.lattice.register_dead_nodes();
+        });
 
         //self.process_cage_damage();
 
@@ -423,7 +425,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         delta: janus::context::DeltaTime,
     ) {
         self.profiler.page();
-        self.frame_begin = Instant::now();
 
         let vp_prev = view_point.get();
 
@@ -666,8 +667,10 @@ impl State {
         // let deforms = DeformsRowTableView::from(self.deforms.data());
         let damaged_nodes = self.lattice.unique_damaged_nodes_frame();
 
-        self.fragments.clear_damage_buffer();
-        self.fragments.sync_lattice_damage(damaged_nodes);
+        self.profiler.capture_duration("lattice_damage", || {
+            self.fragments.clear_damage_buffer();
+            self.fragments.sync_lattice_damage(damaged_nodes);
+        });
 
         // self.profiler
         //     .capture_duration("fragment_damage_sync_cage", || {
@@ -684,16 +687,27 @@ impl State {
     }
 
     fn update_debris(&mut self, delta: DeltaTime) {
-        self.debris.hash_debris();
-        self.debris.simulate_bodies(delta);
-        self.debris.accumulate_motion();
-        self.debris.freeze_old_debris(delta);
+        self.profiler.capture_duration("debris_hash", || {
+            self.debris.hash_debris();
+        });
+        self.profiler.capture_duration("debris_simulate", || {
+            self.debris.simulate_bodies(delta);
+        });
+        self.profiler.capture_duration("debris_sleep", || {
+            self.debris.accumulate_motion();
+            self.debris.freeze_old_debris(delta);
+        });
     }
 
     fn update_subsystems(&mut self, delta: DeltaTime) {
-        self.lattice.update(delta);
-        let lattice = NodesRowTableView::from(self.lattice.nodes());
-        self.deforms.deform(&lattice)
+        self.profiler.capture_duration("lattice_update", || {
+            self.lattice.update(delta);
+        });
+
+        self.profiler.capture_duration("cage_update", || {
+            let lattice = NodesRowTableView::from(self.lattice.nodes());
+            self.deforms.deform(&lattice)
+        });
     }
 
     fn spawn_debug_structure(&mut self, view_point: &ViewPoint) {
