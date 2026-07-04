@@ -391,6 +391,7 @@ impl BatchingLayer {
                 .for_each(|quad| quad.texture_unit -= offset);
             batch.push(group, &array);
         }
+        buffer.push(batch);
 
         c
     }
