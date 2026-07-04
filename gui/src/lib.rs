@@ -509,11 +509,14 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         }
     }
 
+    pub fn is_root(&self, id: WidgetId) -> bool {
+        self.root_id().table_id == id
+    }
+
     pub fn synchronise_layout(&mut self) {
         let count = self.commons.len();
-        let feedback_anchor = &mut self.commons.feedback_anchor;
-        let feedback_bounds = &mut self.commons.feedback_bounds;
         let taffy_ids = &self.commons.taffy_id;
+        let parents = &self.commons.parent;
 
         for i in 1..count {
             let taffy_id = taffy_ids[i];
@@ -521,17 +524,28 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 continue;
             }
 
+            let parent = parents[i];
+            let (offset_x, offset_y) = if !self.is_root(parent) {
+                let direct = unsafe { self.commons.solve_indirect_unchecked(parent.0) };
+                let position = self.commons.feedback_anchor[direct.as_index()];
+                (position.x, position.y)
+            } else {
+                (0.0, 0.0)
+            };
+
+            let fb_anchor = &mut self.commons.feedback_anchor[i];
+            let fb_bounds = &mut self.commons.feedback_bounds[i];
             let taffy_id = taffy_id.0;
-            let fb_anchor = &mut feedback_anchor[i];
-            let fb_bounds = &mut feedback_bounds[i];
 
             let node = self.layout.get_final_layout(taffy_id);
             let position = node.location;
             let size = node.size;
-            let min = glam::vec2(position.x, position.y);
-            let max = glam::vec2(position.x + size.width, position.y + size.height);
+            let position_x = position.x + offset_x;
+            let position_y = position.y + offset_y;
+            let min = glam::vec2(position_x, position_y);
+            let max = glam::vec2(position_x + size.width, position_y + size.height);
 
-            *fb_anchor = glam::vec2(position.x, position.y);
+            *fb_anchor = glam::vec2(position_x, position_y);
             *fb_bounds = Box2d { min, max };
         }
     }
