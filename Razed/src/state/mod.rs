@@ -16,7 +16,11 @@ use crate::{
 };
 use ::physics::xpbd::{RawXpbdLattice, XpbdOptions, XpbdSolver};
 use ethel::{
-    assets::{AssetRegistry, Import, Upload},
+    assets::{
+        AssetMetadataRegistry, AssetRegistry, Import, TextureMetadata, Upload,
+        pipe::{AssetMessage, RegistryPipe},
+    },
+    profile::Profiler,
     render::{
         Resolution, ScreenSpace,
         command::{DrawArraysIndirectCommand, GpuCommandQueue},
@@ -52,8 +56,14 @@ const GROUND_LEVEL: f32 = 0.0;
 
 #[derive(Debug)]
 pub struct State {
-    ui_system: InterfaceSystem,
+    init: bool,
+    local_keyev_buf: Vec<KeyEvent>,
+
     profiler: ethel::profile::Profiler,
+    ui_system: InterfaceSystem,
+
+    pub textures_metadata_registry: AssetMetadataRegistry<TextureMetadata>,
+    pub texture_registry_pipe: RegistryPipe,
 
     camera: camera::Orbital,
     mesh_ids: Vec<ethel::mesh::Id>,
@@ -85,6 +95,7 @@ const CAMERA_PITCH_CLAMP: std::ops::Range<f32> =
 impl Default for State {
     fn default() -> Self {
         Self {
+            init: false,
             ui_system: InterfaceSystem::new(Resolution::default()),
             lattice: LatticeSystem::new(XpbdSolver::new(
                 XpbdOptions::default().with_ground_level(Some(GROUND_LEVEL)),
@@ -94,8 +105,7 @@ impl Default for State {
                 Default::default(),
                 camera::RotationLimits::new(CAMERA_YAW_CLAMP, CAMERA_PITCH_CLAMP),
             ),
-
-            profiler: Default::default(),
+            profiler: Profiler::default(),
             lattice_bind_pose: Default::default(),
             deforms: Default::default(),
             fragments: Default::default(),
@@ -106,6 +116,9 @@ impl Default for State {
             selection: Default::default(),
             dead_fragments: Default::default(),
             frag_meshmap: Default::default(),
+            local_keyev_buf: Default::default(),
+            textures_metadata_registry: AssetMetadataRegistry::new(),
+            texture_registry_pipe: Default::default(),
         }
     }
 }
@@ -417,6 +430,10 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         self.update_debris(delta);
     }
 
+    fn on_key_event(&mut self, event: KeyEvent) {
+        self.local_keyev_buf.push(event);
+    }
+
     fn on_new_frame(
         &mut self,
         input: &mut ethel::InputSystem,
@@ -424,7 +441,15 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         view_point: &janus::sync::TriCell<ViewPoint>,
         delta: janus::context::DeltaTime,
     ) {
+        if !self.init {
+            self.init = true;
+            self.ui_system = crate::ui::initialize_default(screen.resolution());
+        }
+
         self.profiler.page();
+
+        self.ui_update_layout();
+        self.ui_process_input(input.cursor(), delta);
 
         let vp_prev = view_point.get();
 
@@ -482,6 +507,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         if input.keys().key_released(CAMERA_KEY) {
             input.cursor_options().set_grabbed(false);
         }
+
+        self.local_keyev_buf.clear();
     }
 }
 
@@ -499,19 +526,17 @@ impl State {
         self.ui_system.synchronise_layout();
     }
 
-    pub fn ui_process_input(&mut self, cursor: Cursor, key_events: &[KeyEvent], delta: DeltaTime) {
+    pub fn ui_process_input(&mut self, cursor: &Cursor, delta: DeltaTime) {
         let x = cursor.x_f32();
         let y = cursor.y_f32();
         self.ui_system.process_hover_events(x, y, delta);
-        self.ui_system.feed_key_events(key_events, delta);
+        self.ui_system.feed_key_events(&self.local_keyev_buf, delta);
     }
 
-    pub fn ui_composite_batches<T>(&mut self, texture_registry: &AssetRegistry<T>)
-    where
-        T: Import + Upload<AsGpu = Texture>,
-    {
+    pub fn ui_composite_batches(&mut self) {
         self.ui_system.prepare_elements();
-        self.ui_system.composite_layers(texture_registry);
+        let texture_metadata = &self.textures_metadata_registry;
+        self.ui_system.composite_layers(texture_metadata);
         self.ui_system.finalize_batches();
     }
 

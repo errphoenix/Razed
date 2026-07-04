@@ -2,11 +2,17 @@ pub mod shaders;
 
 use std::sync::atomic::Ordering;
 
-use ethel::render::command::{DrawGroups, GpuCommandDispatch};
+use ethel::{
+    assets::AssetRegistry,
+    render::command::{DrawGroups, GpuCommandDispatch},
+};
 
-use crate::data::{FrameDataBuffers, LayoutDebrisData, LayoutFragmentData};
 #[cfg(feature = "devmode")]
 use crate::render::shaders::lines::DebugLinesData;
+use crate::{
+    assets,
+    data::{FrameDataBuffers, LayoutDebrisData, LayoutFragmentData},
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RenderGroup {
@@ -44,6 +50,8 @@ pub struct Renderer {
 
     #[cfg(feature = "devmode")]
     lines_debug_buffer: DebugLinesData,
+
+    pub textures_master_registry: assets::TextureRegistry,
 }
 
 impl ethel::RenderHandler<FrameDataBuffers> for Renderer {

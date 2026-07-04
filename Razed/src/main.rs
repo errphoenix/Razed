@@ -29,6 +29,10 @@ fn main() {
     let (input_system, input_dispatch) = janus::input::stream();
     let mut start_handler = StartupHandler::new(input_system, || FrameDataBuffers::new());
 
+    let mut textures_master_registry = assets::TextureRegistryBuilder::build();
+    let textures_metadata_registry = textures_master_registry.create_metadata_registry();
+    let texture_pipe = textures_master_registry.command_pipe();
+
     let fragment_mesh_mapping = {
         let mut mesh_stage = ethel::mesh::MeshStaging::new();
         //let _debug_cube = mesh_stage.stage(&MESH_UNIT_CUBE);
@@ -54,8 +58,13 @@ fn main() {
 
     let ctx = janus::context::Context::new(
         |state: &mut State, renderer: &mut Renderer| {
+            renderer.handler_init_callback(|handle| {
+                handle.textures_master_registry = textures_master_registry;
+            });
             state.handler_init_callback(|handle| {
                 handle.frag_meshmap = fragment_mesh_mapping;
+                handle.textures_metadata_registry = textures_metadata_registry;
+                handle.texture_registry_pipe.set_pipe(texture_pipe);
             });
             start_handler.init(state, renderer)
         },
