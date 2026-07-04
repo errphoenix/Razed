@@ -44,7 +44,7 @@ ethel::table_spec! {
         parent: WidgetId;
         children: Vec<WidgetId>;
         taffy_id: TaffyNodeId;
-        layout_style: LayoutStyle;
+        layout_options: LayoutOptions;
 
         layer: u32;
 
@@ -671,10 +671,10 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         &mut self,
         parent: Option<WidgetId>,
         children: Option<&[WidgetId]>,
-        layout_style: LayoutStyle,
+        layout_options: LayoutOptions,
         layer: u32,
     ) -> Result<WidgetId, WidgetError> {
-        let taffy_style = layout_style.into_taffy_style();
+        let taffy_style = layout_options.into_taffy_style();
         let node_id = self
             .layout
             .new_leaf(taffy_style)
@@ -717,7 +717,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             parent,
             children,
             TaffyNodeId(node_id),
-            layout_style,
+            layout_options,
             layer.min(LAYERS as u32),
             // init default feedback values
             glam::Vec2::ZERO,
@@ -794,7 +794,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             self.add_new(
                 core.parent,
                 core.children,
-                core.layout_style.clone(),
+                core.layout_options.clone(),
                 core.layer,
             )?
         };
@@ -855,7 +855,7 @@ pub fn expect_fallback_texture() -> TextureId {
 pub struct CoreElementParams<'children> {
     pub parent: Option<WidgetId>,
     pub children: Option<&'children [WidgetId]>,
-    pub layout_style: LayoutStyle,
+    pub layout_options: LayoutOptions,
     pub layer: u32,
 }
 

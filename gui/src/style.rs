@@ -1,4 +1,4 @@
-use taffy::{Dimension, GridPlacement, LengthPercentage, LengthPercentageAuto, Rect, Size, Style};
+use taffy::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum ItemAlignment {
@@ -57,6 +57,15 @@ pub enum Wrap {
     DontWrap,
     Wrap,
     Reverse,
+}
+impl From<Wrap> for FlexWrap {
+    fn from(value: Wrap) -> Self {
+        match value {
+            Wrap::DontWrap => Self::NoWrap,
+            Wrap::Wrap => Self::Wrap,
+            Wrap::Reverse => Self::WrapReverse,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
@@ -218,6 +227,15 @@ impl Rectangle {
     pub const MAX: Self = Self::new(Value::MAX, Value::MAX, Value::MAX, Value::MAX);
     pub const HALF: Self = Self::new(Value::HALF, Value::HALF, Value::HALF, Value::HALF);
 
+    pub const fn splat(value: Value) -> Self {
+        Self {
+            left: value,
+            top: value,
+            right: value,
+            bottom: value,
+        }
+    }
+
     pub const fn new(left: Value, top: Value, right: Value, bottom: Value) -> Self {
         Self {
             left,
@@ -238,8 +256,48 @@ impl<T: From<Value>> From<Rectangle> for Rect<T> {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub enum ContainerLayout {
+    Flexbox {
+        direction: FlexDirection,
+        wrap: Wrap,
+        justify_content: ContentAlignment,
+        align_content: ContentAlignment,
+        align_items: ItemAlignment,
+    },
+    Grid {
+        template_rows: u16,
+        template_columns: u16,
+        gap: Point,
+        flow: GridFlow,
+        justify_content: ContentAlignment,
+        align_content: ContentAlignment,
+        align_items: ItemAlignment,
+        justify_items: ItemAlignment,
+    },
+    #[default]
+    Block,
+    None,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub enum LayoutPosition {
+    #[default]
+    Relative,
+    Absolute {
+        x: Option<Value>,
+        y: Option<Value>,
+    },
+}
+
 #[derive(Clone, Debug, Default)]
-pub struct CommonLayoutOptions {
+pub struct LayoutOptions {
+    pub container: ContainerLayout,
+
+    pub align_self: ItemAlignment,
+    pub justify_self: ItemAlignment,
+
+    pub layout_position: LayoutPosition,
     pub size: Option<Point>,
     pub min_size: Option<Point>,
     pub max_size: Option<Point>,
@@ -250,207 +308,121 @@ pub struct CommonLayoutOptions {
 
     pub margin: Option<Rectangle>,
     pub padding: Option<Rectangle>,
+
+    pub grid_row: GridLine,
+    pub grid_column: GridLine,
 }
-
-#[derive(Clone, Debug, Default)]
-pub enum LayoutStyle {
-    #[default]
-    Null,
-
-    Block {
-        inset: Option<Rectangle>,
-        position: Option<Point>,
-        common: CommonLayoutOptions,
-    },
-
-    Flexbox {
-        direction: FlexDirection,
-        justify_content: ContentAlignment,
-        align_content: ContentAlignment,
-        justify_self: ItemAlignment,
-        align_self: ItemAlignment,
-
-        common: CommonLayoutOptions,
-    },
-
-    Grid {
-        template_rows: u16,
-        template_columns: u16,
-        item_row: GridLine,
-        item_column: GridLine,
-        flow: GridFlow,
-
-        justify_content: ContentAlignment,
-        align_content: ContentAlignment,
-        justify_self: ItemAlignment,
-        align_self: ItemAlignment,
-
-        common: CommonLayoutOptions,
-    },
-}
-
-impl LayoutStyle {
+impl LayoutOptions {
     pub(crate) fn into_taffy_style(&self) -> Style {
-        match self {
-            LayoutStyle::Null => Style {
-                display: taffy::Display::None,
-                ..Default::default()
-            },
-            LayoutStyle::Block {
-                // todo
-                #[allow(unused)]
-                position,
-                inset,
-                common:
-                    CommonLayoutOptions {
-                        size,
-                        min_size,
-                        max_size,
-                        aspect_ratio,
-                        overflow_x,
-                        overflow_y,
-                        margin,
-                        padding,
-                    },
+        let size = self.size.map_or(Size::auto(), |size| size.into());
+        let min_size = self.min_size.map_or(Size::auto(), |size| size.into());
+        let max_size = self.max_size.map_or(Size::auto(), |size| size.into());
+        let aspect_ratio = self.aspect_ratio;
+        let margin = self.margin.map_or(taffy::Rect::zero(), |mrg| mrg.into());
+        let padding = self.padding.map_or(taffy::Rect::zero(), |pag| pag.into());
+        let overflow = taffy::Point {
+            x: self.overflow_x.into(),
+            y: self.overflow_y.into(),
+        };
+        let (position, inset) = match self.layout_position {
+            LayoutPosition::Relative => (Position::Relative, Rect::auto()),
+            LayoutPosition::Absolute { x, y } => (
+                Position::Absolute,
+                Rect {
+                    left: x.map_or(LengthPercentageAuto::auto(), Value::into),
+                    top: y.map_or(LengthPercentageAuto::auto(), Value::into),
+                    right: auto(),
+                    bottom: auto(),
+                },
+            ),
+        };
+        let grid_row = self.grid_row.into();
+        let grid_column = self.grid_column.into();
+        let justify_self = self.justify_self.try_into().ok();
+        let align_self = self.align_self.try_into().ok();
+
+        let mut display = Display::Block;
+        let mut flex_direction = Default::default();
+        let mut flex_wrap = Default::default();
+        let mut justify_content = Default::default();
+        let mut align_content = Default::default();
+        let mut justify_items = Default::default();
+        let mut align_items = Default::default();
+        let mut template_rows = Default::default();
+        let mut template_columns = Default::default();
+        let mut gap = Size::zero();
+        let mut grid_flow = Default::default();
+
+        match self.container {
+            ContainerLayout::Flexbox {
+                direction: f_direction,
+                wrap: f_wrap,
+                justify_content: f_justify_content,
+                align_content: f_align_content,
+                align_items: f_align_items,
             } => {
-                let size = size.map_or(Size::auto(), |size| size.into());
-                let min_size = min_size.map_or(Size::auto(), |size| size.into());
-                let max_size = max_size.map_or(Size::auto(), |size| size.into());
-                let margin = margin.map_or(taffy::Rect::auto(), |margin| margin.into());
-                let padding = padding.map_or(taffy::Rect::zero(), |padding| padding.into());
-                let inset = inset.map_or(taffy::Rect::auto(), |inset| inset.into());
-
-                Style {
-                    display: taffy::Display::Block,
-                    position: taffy::Position::Absolute,
-
-                    inset,
-                    size,
-                    min_size,
-                    max_size,
-                    margin,
-                    padding,
-
-                    aspect_ratio: *aspect_ratio,
-                    overflow: taffy::Point {
-                        x: (*overflow_x).into(),
-                        y: (*overflow_y).into(),
-                    },
-
-                    ..Default::default()
-                }
+                display = Display::Flex;
+                flex_direction = f_direction.into();
+                flex_wrap = f_wrap.into();
+                justify_content = f_justify_content.try_into().ok();
+                align_content = f_align_content.try_into().ok();
+                align_items = f_align_items.try_into().ok();
             }
-            LayoutStyle::Flexbox {
-                direction,
-                justify_content,
-                justify_self,
-                align_content,
-                align_self,
-                common:
-                    CommonLayoutOptions {
-                        size,
-                        min_size,
-                        max_size,
-                        aspect_ratio,
-                        overflow_x,
-                        overflow_y,
-                        margin,
-                        padding,
-                    },
+            ContainerLayout::Grid {
+                template_rows: g_template_rows,
+                template_columns: g_template_columns,
+                gap: g_gap,
+                flow: g_flow,
+                justify_content: g_justify_content,
+                align_content: g_align_content,
+                align_items: g_align_items,
+                justify_items: g_justify_items,
             } => {
-                let size = size.map_or(Size::auto(), |size| size.into());
-                let min_size = min_size.map_or(Size::auto(), |size| size.into());
-                let max_size = max_size.map_or(Size::auto(), |size| size.into());
-                let margin = margin.map_or(taffy::Rect::auto(), |margin| margin.into());
-                let padding = padding.map_or(taffy::Rect::zero(), |padding| padding.into());
-
-                Style {
-                    display: taffy::Display::Flex,
-                    position: taffy::Position::Relative,
-
-                    flex_direction: (*direction).into(),
-                    justify_content: (*justify_content).try_into().ok(),
-                    align_content: (*align_content).try_into().ok(),
-                    justify_self: (*justify_self).try_into().ok(),
-                    align_self: (*align_self).try_into().ok(),
-
-                    size,
-                    min_size,
-                    max_size,
-                    margin,
-                    padding,
-
-                    aspect_ratio: *aspect_ratio,
-                    overflow: taffy::Point {
-                        x: (*overflow_x).into(),
-                        y: (*overflow_y).into(),
-                    },
-
-                    ..Default::default()
-                }
+                display = Display::Grid;
+                template_rows = taffy::style_helpers::evenly_sized_tracks(g_template_rows);
+                template_columns = taffy::style_helpers::evenly_sized_tracks(g_template_columns);
+                gap = g_gap.into();
+                grid_flow = g_flow.into();
+                justify_content = g_justify_content.try_into().ok();
+                align_content = g_align_content.try_into().ok();
+                align_items = g_align_items.try_into().ok();
+                justify_items = g_justify_items.try_into().ok();
             }
-            LayoutStyle::Grid {
-                template_rows,
-                template_columns,
-                item_row,
-                item_column,
-                flow,
-                justify_content,
-                align_content,
-                justify_self,
-                align_self,
-                common:
-                    CommonLayoutOptions {
-                        size,
-                        min_size,
-                        max_size,
-                        aspect_ratio,
-                        overflow_x,
-                        overflow_y,
-                        margin,
-                        padding,
-                    },
-            } => {
-                let size = size.map_or(Size::auto(), |size| size.into());
-                let min_size = min_size.map_or(Size::auto(), |size| size.into());
-                let max_size = max_size.map_or(Size::auto(), |size| size.into());
-                let margin = margin.map_or(taffy::Rect::auto(), |margin| margin.into());
-                let padding = padding.map_or(taffy::Rect::zero(), |padding| padding.into());
-
-                let grid_template_rows = taffy::style_helpers::evenly_sized_tracks(*template_rows);
-                let grid_template_columns =
-                    taffy::style_helpers::evenly_sized_tracks(*template_columns);
-
-                Style {
-                    display: taffy::Display::Grid,
-                    position: taffy::Position::Relative,
-
-                    grid_template_rows,
-                    grid_template_columns,
-                    grid_row: (*item_row).into(),
-                    grid_column: (*item_column).into(),
-                    grid_auto_flow: (*flow).into(),
-
-                    justify_content: (*justify_content).try_into().ok(),
-                    align_content: (*align_content).try_into().ok(),
-                    justify_self: (*justify_self).try_into().ok(),
-                    align_self: (*align_self).try_into().ok(),
-
-                    size,
-                    min_size,
-                    max_size,
-                    margin,
-                    padding,
-
-                    aspect_ratio: *aspect_ratio,
-                    overflow: taffy::Point {
-                        x: (*overflow_x).into(),
-                        y: (*overflow_y).into(),
-                    },
-
-                    ..Default::default()
-                }
+            ContainerLayout::None => {
+                display = Display::None;
             }
+            ContainerLayout::Block => {
+                // already set
+            }
+        };
+
+        Style {
+            display,
+            overflow,
+            // todo: scrollbar_width: (),
+            position,
+            inset,
+            size,
+            min_size,
+            max_size,
+            aspect_ratio,
+            margin,
+            padding,
+            align_items,
+            align_self,
+            justify_items,
+            justify_self,
+            align_content,
+            justify_content,
+            gap,
+            flex_direction,
+            flex_wrap,
+            grid_row,
+            grid_column,
+            grid_template_rows: template_rows,
+            grid_template_columns: template_columns,
+            grid_auto_flow: grid_flow,
+            ..Default::default()
         }
     }
 }
