@@ -2,10 +2,7 @@ pub mod shaders;
 
 use std::sync::atomic::Ordering;
 
-use ethel::{
-    assets::AssetRegistry,
-    render::command::{DrawGroups, GpuCommandDispatch},
-};
+use ethel::render::command::{DrawGroups, GpuCommandDispatch};
 
 #[cfg(feature = "devmode")]
 use crate::render::shaders::lines::DebugLinesData;
@@ -45,6 +42,7 @@ pub struct Renderer {
     frags_shader: shaders::ShaderFragment,
     debris_shader: shaders::ShaderDebris,
     lines_shader: shaders::ShaderDebugLines,
+    interface_shader: gui::shaders::ShaderUiBasic,
 
     command_process_compute: shaders::compute::ComputeShaderProcessCommand,
 
@@ -65,6 +63,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         let view_mat = view.into_mat4().inverse();
         let proj = screen.projection();
+        let ortho_proj = screen.orto_projection();
         let cam_forward = view.forward();
 
         // world axis indicator
@@ -135,6 +134,12 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
             self.lines_debug_buffer.set_color_fallback(COLOR);
         }
+
+        self.interface_shader.bind();
+        self.interface_shader.uniform_projection_mat4(*ortho_proj);
+        let sampler_uniforms = std::array::from_fn(|i| i as u32);
+        self.interface_shader
+            .uniform_texture_map_sampler2Dv(sampler_uniforms);
 
         self.lattice_shader.bind();
         self.lattice_shader.uniform_projection_mat4(*proj);
@@ -235,6 +240,44 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             }
         }
 
+        unsafe {
+            janus::gl::Disable(janus::gl::DEPTH_TEST);
+        }
+
+        // draw dispatch - interface
+        {
+            self.interface_shader.bind();
+
+            const QUAD_SSBO_INDEX: u32 = gui::shaders::SSBO_INDEX_POD_ELEMENTS;
+
+            let quads = &frame_data.interface_storage;
+            let commands = &frame_data.interface_commands.view_section(buf_idx);
+
+            quads.bind_shader_storage(buf_idx, QUAD_SSBO_INDEX as usize, 0);
+
+            for command in commands.iter() {
+                if command.instance_count == 0 {
+                    continue;
+                }
+
+                command.bind_texture_units();
+                let offset = command.instance_offset;
+
+                self.interface_shader.uniform_instance_offset_uint(offset);
+
+                let count = command.vertex_count;
+                let instance_count = command.instance_count;
+                unsafe {
+                    janus::gl::DrawArraysInstanced(
+                        janus::gl::TRIANGLE_STRIP,
+                        0,
+                        count as i32,
+                        instance_count as i32,
+                    );
+                }
+            }
+        }
+
         // draw dispatch - lattice (debug)
         {
             self.lattice_shader.bind();
@@ -281,6 +324,10 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 janus::gl::DrawArrays(janus::gl::LINES, 0, count as i32);
             }
         }
+
+        unsafe {
+            janus::gl::Enable(janus::gl::DEPTH_TEST);
+        }
     }
 
     fn init_resources(&mut self, _resolution: ethel::render::Resolution) {
@@ -288,6 +335,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         self.frags_shader = shaders::ShaderFragment::new_compiled();
         self.debris_shader = shaders::ShaderDebris::new_compiled();
         self.lines_shader = shaders::ShaderDebugLines::new_compiled();
+        self.interface_shader = gui::shaders::ShaderUiBasic::new_compiled();
 
         self.command_process_compute =
             shaders::compute::ComputeShaderProcessCommand::new_compiled();

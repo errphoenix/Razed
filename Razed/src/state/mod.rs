@@ -13,13 +13,11 @@ use crate::{
         debris::MotionAccumulator,
         lattice::{LatticeSystem, NodesRowTableView},
     },
+    ui::UiRenderCommandBasic,
 };
 use ::physics::xpbd::{RawXpbdLattice, XpbdOptions, XpbdSolver};
 use ethel::{
-    assets::{
-        AssetMetadataRegistry, AssetRegistry, Import, TextureMetadata, Upload,
-        pipe::{AssetMessage, RegistryPipe},
-    },
+    assets::{AssetMetadataRegistry, TextureMetadata, pipe::RegistryPipe},
     profile::Profiler,
     render::{
         Resolution, ScreenSpace,
@@ -38,7 +36,6 @@ use gui::InterfaceSystem;
 use janus::{
     context::DeltaTime,
     input::{Cursor, KeyEvent},
-    texture::Texture,
 };
 use physics::rigid::RbVelocity;
 use tracing::{Level, event};
@@ -56,10 +53,10 @@ const GROUND_LEVEL: f32 = 0.0;
 
 #[derive(Debug)]
 pub struct State {
-    init: bool,
     local_keyev_buf: Vec<KeyEvent>,
 
     profiler: ethel::profile::Profiler,
+
     ui_system: InterfaceSystem,
 
     pub textures_metadata_registry: AssetMetadataRegistry<TextureMetadata>,
@@ -95,8 +92,7 @@ const CAMERA_PITCH_CLAMP: std::ops::Range<f32> =
 impl Default for State {
     fn default() -> Self {
         Self {
-            init: false,
-            ui_system: InterfaceSystem::new(Resolution::default()),
+            ui_system: crate::ui::initialize_default(Resolution::default()),
             lattice: LatticeSystem::new(XpbdSolver::new(
                 XpbdOptions::default().with_ground_level(Some(GROUND_LEVEL)),
             )),
@@ -131,6 +127,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
     ) {
         let t0 = Instant::now();
 
+        self.ui_composite_batches();
+
         // populate command buffers
         {
             command_queue.clear();
@@ -164,6 +162,33 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 
         frame_boundary.cross(|section, storage| {
             let buf_idx = section.as_index();
+
+            // interface quads & commands upload
+            {
+                // with TRIANGLE_STRIP draw mode
+                const QUAD_VERTEX_COUNT: u32 = 4;
+
+                let quads = &storage.interface_storage;
+                let commands = &storage.interface_commands;
+
+                let batches = self.ui_system.batches();
+
+                let mut quad_offset = 0;
+                for (i, batch) in batches.iter().enumerate() {
+                    quads.blit_section(buf_idx, &batch.array().inner, quad_offset as usize);
+                    let count = batch.array().len() as u32;
+
+                    let command = UiRenderCommandBasic {
+                        vertex_count: QUAD_VERTEX_COUNT,
+                        instance_count: count,
+                        instance_offset: quad_offset,
+                        texture_units: batch.textures(),
+                    };
+
+                    commands.blit_section(buf_idx, &[command], i);
+                    quad_offset += count;
+                }
+            }
 
             const VEC3_VEC4_PADDING: usize = 4;
 
@@ -441,13 +466,13 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         view_point: &janus::sync::TriCell<ViewPoint>,
         delta: janus::context::DeltaTime,
     ) {
-        if !self.init {
-            self.init = true;
-            self.ui_system = crate::ui::initialize_default(screen.resolution());
+        if screen.resolution().is_changed() {
+            self.ui_system.set_resolution(screen.resolution());
         }
 
         self.profiler.page();
 
+        self.ui_system.clear_batches();
         self.ui_update_layout();
         self.ui_process_input(input.cursor(), delta);
 

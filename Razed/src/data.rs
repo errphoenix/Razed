@@ -1,16 +1,18 @@
 use std::sync::{Arc, atomic::AtomicU32};
 
-use crate::render::shaders;
+use crate::{render::shaders, ui::UiRenderCommandBasic};
 use ethel::{
     DrawCommand, layout_buffer, layout_mesh_buffer,
     render::buffer::{PartitionedTriBuffer, TriBuffer},
     state::data::{DirectIndex, IndirectIndex},
 };
+use gui::draw::Quad;
 
 use crate::structure::fragment::ANCHORS_COUNT as FRAGMENT_ANCHORS_COUNT;
 
 pub const FRAGMENT_COMMANDS_ALLOC: usize = 131072;
 pub const DEBRIS_COMMANDS_ALLOC: usize = 131072;
+pub const INTERFACE_COMMANDS_ALLOC: usize = 2048;
 
 /// Temporarily forced to 1 to save memory as generic objects are currently
 /// unused
@@ -35,6 +37,8 @@ pub const MESH_BUFFER_SIZE: usize = 65536;
 
 #[cfg(feature = "devmode")]
 pub const DEBUG_LINES_ALLOC: usize = 16384;
+
+pub const INTERFACE_INSTANCES_ALLOC: usize = 8192;
 
 layout_mesh_buffer!(count: MESH_BUFFER_LEN; vertices: MESH_BUFFER_SIZE);
 
@@ -172,6 +176,7 @@ pub struct FrameDataBuffers {
     pub fragment_commands: TriBuffer<DrawCommand>,
     pub debris_commands: TriBuffer<DrawCommand>,
     pub generic_commands: TriBuffer<DrawCommand>,
+    pub interface_commands: TriBuffer<UiRenderCommandBasic>,
 
     pub generic_objects: PartitionedTriBuffer<RENDERABLE_STORAGE_PARTS>,
     pub fragments: PartitionedTriBuffer<FRAGMENTS_STORAGE_PARTS>,
@@ -183,6 +188,8 @@ pub struct FrameDataBuffers {
 
     #[cfg(feature = "devmode")]
     pub lines_debug: PartitionedTriBuffer<2>,
+
+    pub interface_storage: TriBuffer<Quad>,
 }
 
 impl FrameDataBuffers {
@@ -208,6 +215,7 @@ impl FrameDataBuffers {
             fragment_commands: TriBuffer::zeroed(FRAGMENT_COMMANDS_ALLOC),
             debris_commands: TriBuffer::zeroed(DEBRIS_COMMANDS_ALLOC),
             generic_commands: TriBuffer::zeroed(GENERIC_COMMANDS_ALLOC),
+            interface_commands: TriBuffer::zeroed(INTERFACE_COMMANDS_ALLOC),
 
             generic_objects: generic_objects_buffer,
             fragments: fragment_data,
@@ -219,6 +227,8 @@ impl FrameDataBuffers {
 
             #[cfg(feature = "devmode")]
             lines_debug,
+
+            interface_storage: TriBuffer::zeroed(INTERFACE_INSTANCES_ALLOC),
         }
     }
 }
