@@ -334,6 +334,10 @@ impl Batch {
         self.textures[index.get()]
     }
 
+    pub fn textures(&self) -> [Option<TextureKey>; Self::UNITS] {
+        self.textures
+    }
+
     pub fn clear(&mut self) {
         self.textures.iter_mut().for_each(|opt| *opt = None);
         self.array.clear();
@@ -459,6 +463,7 @@ impl BatchingLayer {
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Quad {
     pub position: glam::Vec2,
@@ -511,38 +516,4 @@ impl QuadsArray {
     pub fn clear(&mut self) {
         self.inner.clear();
     }
-}
-
-#[macro_export]
-macro_rules! layout_interface_buffer {
-    (instances: $ic:expr) => {
-        layout_mesh_buffer!(InterfaceStorage; instances: $ic);
-    };
-    ($name:ident; instances: $ic:expr) => {
-        layout_buffer! {
-            const $name: 1, {
-                enum quads: $ic => {
-                    type Quad;
-                    bind 0;
-                    shader 5;
-                };
-            }
-        }
-
-        paste::paste! {
-            #[derive(Debug, Default)]
-            pub struct InterfaceStorageBuffers(
-                pub ethel::render::buffer::PartitionedTriBuffer<1>
-            );
-
-            impl InterfaceStorageBuffers {
-                pub fn new() -> Self {
-                    let layout = [< Layout $name >]::create();
-                    let buffer = ethel::render::buffer::PartitionedTriBuffer::new(layout);
-                    [< Layout $name >]::initialise_partitions(&buffer);
-                    Self(buffer)
-                }
-            }
-        }
-    };
 }
