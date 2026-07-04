@@ -309,11 +309,15 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             tree_id,
         };
 
+        // initialise root taffy id in data table
+        let mut commons = InterfaceCommonRowTable::new();
+        commons.taffy_id[ROOT_ID.0.as_index()] = TaffyNodeId(tree_id);
+
         Self {
             layout,
             root_node,
             resolution,
-            commons: InterfaceCommonRowTable::new(),
+            commons,
             panels: InterfacePanelRowTable::new(),
             texts: InterfaceTextRowTable::new(),
             images: InterfaceImageRowTable::new(),
@@ -337,11 +341,15 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             tree_id,
         };
 
+        // initialise root taffy id in data table
+        let mut commons = InterfaceCommonRowTable::new();
+        commons.taffy_id[ROOT_ID.0.as_index()] = TaffyNodeId(tree_id);
+
         Self {
             layout,
             root_node,
             resolution,
-            commons: InterfaceCommonRowTable::with_capacity(capacity),
+            commons,
             panels: InterfacePanelRowTable::with_capacity(capacity),
             texts: InterfaceTextRowTable::with_capacity(capacity),
             images: InterfaceImageRowTable::with_capacity(capacity),
