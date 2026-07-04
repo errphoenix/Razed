@@ -36,6 +36,7 @@ ethel::shader_glsl! {
             };
             uniform {
                 projection: mat4 => glam::Mat4;
+                instance_offset: uint => u32;
             };
             type {
                 TYPE_QUAD_ELEMENT
@@ -50,7 +51,7 @@ ethel::shader_glsl! {
 
             src() "
                 uint v_id = gl_VertexID;
-                uint instance = gl_InstanceID;
+                uint instance = gl_InstanceID + instance_offset;
 
                 float x = float(floor(v_id / 2));
                 float y = float(v_id % 2);
@@ -61,6 +62,7 @@ ethel::shader_glsl! {
                 p += element.position;
 
                 vec4 vertex = projection * vec4(p.x, p.y, 0.0, 1.0);
+                vertex.z = 0.0;
 
                 vec4 atlas_section = element.uv;
                 float u = mix(atlas_section.x, atlas_section.z, x);
@@ -96,9 +98,8 @@ ethel::shader_glsl! {
                 vec2 uv = tex_coord;
                 uint tex_index = texture_index;
 
-                sampler2D tex_sample = texture_map[tex_index];
                 float tex_filter = float(min(tex_index, 1));
-                vec4 tex_color = texture(tex_sample, uv) * tex_filter;
+                vec4 tex_color = texture(texture_map[tex_index], uv) * tex_filter;
 
                 float tmf = max(0.0, tex_filter - (color.a * 0.5));
                 vec3 rgb = mix(color.rgb, tex_color.rgb, tmf);

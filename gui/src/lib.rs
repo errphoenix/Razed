@@ -528,8 +528,8 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             let node = self.layout.get_final_layout(taffy_id);
             let position = node.location;
             let size = node.size;
-            let min = glam::vec2(position.x, position.y - size.height);
-            let max = glam::vec2(position.x + size.width, position.y);
+            let min = glam::vec2(position.x, position.y);
+            let max = glam::vec2(position.x + size.width, position.y + size.height);
 
             *fb_anchor = glam::vec2(position.x, position.y);
             *fb_bounds = Box2d { min, max };
