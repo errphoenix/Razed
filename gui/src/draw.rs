@@ -1,10 +1,10 @@
 use std::ops::{Index, IndexMut};
 
 use ethel::{
-    assets::{AssetRegistry, Import, TextureId, Upload},
+    assets::{AssetMetadataRegistry, TextureId, TextureMetadata},
     state::data::{IndirectIndex, table::TableView},
 };
-use janus::texture::{Texture, TextureKey, TextureTarget};
+use janus::texture::{TextureKey, TextureTarget};
 
 use crate::{
     InterfaceButtonRowTableView, InterfaceCommonRowTableView, InterfaceImageRowTableView,
@@ -238,10 +238,11 @@ impl<const LAYERS: usize> BatchingLayerCompositor<LAYERS> {
         self.layers.iter_mut().for_each(BatchingLayer::clear);
     }
 
-    pub fn insert<T>(&mut self, element: InterfaceObject, registry: &AssetRegistry<T>)
-    where
-        T: Import + Upload<AsGpu = Texture>,
-    {
+    pub fn insert(
+        &mut self,
+        element: InterfaceObject,
+        registry: &AssetMetadataRegistry<TextureMetadata>,
+    ) {
         self.layer_mut(element.layer as usize)
             .insert(element, registry);
     }
@@ -426,21 +427,22 @@ impl BatchingLayer {
         self.arrays.get_mut(location.0)
     }
 
-    pub fn insert<T>(&mut self, element: InterfaceObject, registry: &AssetRegistry<T>)
-    where
-        T: Import + Upload<AsGpu = Texture>,
-    {
+    pub fn insert(
+        &mut self,
+        element: InterfaceObject,
+        registry: &AssetMetadataRegistry<TextureMetadata>,
+    ) {
         let mut quad_uv = [0., 0., 1., 1.];
         let key = if let Some(attachment) = element.attachment {
             let texture = match attachment {
-                InterfaceAttachment::Texture(texture_id) => registry.get_gpu_view(texture_id),
+                InterfaceAttachment::Texture(texture_id) => registry.get(texture_id),
                 InterfaceAttachment::TextureSection { texture_id, uv } => {
                     quad_uv = uv;
-                    registry.get_gpu_view(texture_id)
+                    registry.get(texture_id)
                 }
             };
 
-            texture.map(TextureKey::from).unwrap_or_default()
+            texture.and_then(|tex| tex.gl_object).unwrap_or_default()
         } else {
             TextureKey::default()
         };

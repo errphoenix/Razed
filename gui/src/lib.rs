@@ -1,7 +1,7 @@
 use std::sync::RwLock;
 
 use ethel::{
-    assets::{AssetRegistry, Import, TextureId, Upload},
+    assets::{AssetMetadataRegistry, TextureId, TextureMetadata},
     render::Resolution,
     state::data::{Column, DirectIndex, IndirectIndex},
 };
@@ -10,7 +10,6 @@ use janus::{
     StringHash,
     context::DeltaTime,
     input::{KeyEvent, Keys, MouseButton},
-    texture::Texture,
 };
 
 pub mod draw;
@@ -396,10 +395,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         aggregator.gather_quad_elements(&mut self.intermediate_buffer);
     }
 
-    pub fn composite_layers<T>(&mut self, registry: &AssetRegistry<T>)
-    where
-        T: Import + Upload<AsGpu = Texture>,
-    {
+    pub fn composite_layers(&mut self, registry: &AssetMetadataRegistry<TextureMetadata>) {
         self.intermediate_buffer
             .drain(..)
             .for_each(|object| self.compositor.insert(object, registry));
@@ -841,6 +837,10 @@ pub fn set_fallback_texture(fallback: TextureId) {
 
 pub fn get_fallback_texture() -> Option<TextureId> {
     *FALLBACK_TEXTURE.read().unwrap()
+}
+
+pub fn expect_fallback_texture() -> TextureId {
+    get_fallback_texture().expect("global fallback texture is not set")
 }
 
 #[derive(Clone, Debug, Default)]
