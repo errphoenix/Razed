@@ -1,8 +1,8 @@
 use ethel::render::Resolution;
 use gui::{
-    ContainerLayout, ContentAlignment, CoreElementParams, ElementParams, InterfaceSystem,
-    ItemAlignment, LayoutOptions, LayoutPosition, PanelParams, Point, Rectangle, Value, Wrap,
-    draw::Batch, style::FlexDirection,
+    ButtonCallback, ButtonParams, ContainerLayout, ContentAlignment, CoreElementParams,
+    ElementParams, InterfaceSystem, ItemAlignment, LayoutOptions, LayoutPosition, PanelParams,
+    Point, Rectangle, TextParams, Value, Wrap, draw::Batch, style::FlexDirection,
 };
 use janus::texture::TextureKey;
 
@@ -28,6 +28,12 @@ impl UiRenderCommandBasic {
             });
     }
 }
+
+pub const GENERIC_PANEL_PARAMS: PanelParams = PanelParams {
+    color: glam::Vec3::ZERO,
+    hover_tint: glam::Vec4::ZERO,
+    opacity: 0.6,
+};
 
 pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
     let mut system = InterfaceSystem::new(resolution);
@@ -59,16 +65,12 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
                 },
                 layer: 5,
             },
-            PanelParams {
-                color: glam::Vec3::X,
-                hover_tint: glam::Vec4::ONE,
-                opacity: 1.0,
-            },
+            GENERIC_PANEL_PARAMS,
         ))
         .unwrap()
         .0;
 
-    system
+    let subpanel = system
         .create_element(ElementParams::Panel(
             CoreElementParams {
                 parent: Some(root),
@@ -77,7 +79,7 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
                     container: ContainerLayout::Block,
                     layout_position: LayoutPosition::Relative,
                     size: Some(Point {
-                        x: Value::Absolute(128.0),
+                        x: Value::Absolute(256.0),
                         y: Value::Absolute(128.0),
                     }),
                     align_self: ItemAlignment::Center,
@@ -87,10 +89,32 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
                 },
                 layer: 6,
             },
-            PanelParams {
-                color: glam::Vec3::Y,
-                hover_tint: glam::vec4(0.0, 1.0, 0.0, 1.0),
-                opacity: 1.0,
+            GENERIC_PANEL_PARAMS,
+        ))
+        .unwrap()
+        .0;
+
+    system
+        .create_element(ElementParams::Button(
+            CoreElementParams {
+                parent: Some(subpanel),
+                children: None,
+                layout_options: LayoutOptions {
+                    container: ContainerLayout::Block,
+                    size: Some(Point {
+                        x: Value::Absolute(160.0),
+                        y: Value::Absolute(72.0),
+                    }),
+                    ..Default::default()
+                },
+                layer: 6,
+            },
+            ButtonParams {
+                text: TextParams::default(),
+                bg_color: glam::Vec3::splat(0.5),
+                bg_hover_tint: glam::vec4(0.4, 0.4, 0.4, 0.25),
+                bg_press_tint: glam::vec4(0.3, 0.3, 0.3, 0.4),
+                callback: ButtonCallback(|| println!("boop!")),
             },
         ))
         .unwrap();

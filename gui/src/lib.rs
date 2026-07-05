@@ -429,6 +429,35 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         &mut self.compositor
     }
 
+    pub fn process_widget_states(&mut self) {
+        let count = self.commons.len();
+
+        let archetypes = &self.commons.archetype;
+        let _hovered = &self.commons.hovered;
+        let _hover_time = &self.commons.hover_time;
+        let pressed = &self.commons.pressed;
+        let _press_time = &self.commons.press_time;
+
+        let button_callbacks = &self.buttons.callback;
+
+        for i in 1..count {
+            let archetype = archetypes[i];
+
+            match archetype {
+                ComponentKind::Button { handle, .. } => {
+                    let pressed = pressed[i];
+                    if pressed {
+                        let direct = self.buttons.solve_indirect(handle).unwrap();
+                        let callback = button_callbacks[direct.as_index()];
+                        (callback.0)();
+                    }
+                }
+
+                _ => {}
+            }
+        }
+    }
+
     pub fn process_hover_events(&mut self, x: f32, y: f32, delta: DeltaTime) {
         let delta = delta.as_f32();
 
