@@ -475,7 +475,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         self.ui_system.clear_batches();
         self.ui_update_layout();
         self.ui_process_input(input.cursor(), delta);
-        self.ui_system.process_widget_states();
+        self.ui_system.process_widget_states(delta);
 
         let vp_prev = view_point.get();
 

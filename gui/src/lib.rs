@@ -38,6 +38,12 @@ impl Default for TaffyNodeId {
     }
 }
 
+#[derive(Clone, Copy, Default, Debug)]
+pub struct InteractionTime {
+    pub seconds: f32,
+    pub frames: u32,
+}
+
 ethel::table_spec! {
     struct InterfaceCommon {
         archetype: ComponentKind;
@@ -54,8 +60,8 @@ ethel::table_spec! {
 
         hovered: bool;
         pressed: bool;
-        hover_time: f32;
-        press_time: f32;
+        hover_time: InteractionTime;
+        press_time: InteractionTime;
     }
 }
 
@@ -96,26 +102,12 @@ ethel::table_spec! {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct ButtonCallback(pub fn());
-impl ButtonCallback {
-    pub const fn new(callback: fn()) -> Self {
-        Self(callback)
-    }
-
-    pub const fn null() -> Self {
-        Self(|| ())
-    }
-}
-impl From<ButtonCallback> for fn() {
-    fn from(value: ButtonCallback) -> Self {
-        value.0
-    }
-}
-impl Default for ButtonCallback {
-    fn default() -> Self {
-        Self::null()
-    }
+#[derive(Clone, Copy, Debug, Default)]
+pub enum ButtonCallback {
+    #[default]
+    None,
+    Once(fn()),
+    Repeating(fn()),
 }
 
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -429,14 +421,15 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         &mut self.compositor
     }
 
-    pub fn process_widget_states(&mut self) {
+    pub fn process_widget_states(&mut self, delta: DeltaTime) {
+        let delta = delta.as_f32();
         let count = self.commons.len();
 
         let archetypes = &self.commons.archetype;
-        let _hovered = &self.commons.hovered;
-        let _hover_time = &self.commons.hover_time;
-        let pressed = &self.commons.pressed;
-        let _press_time = &self.commons.press_time;
+        let hovered = &self.commons.hovered;
+        let hover_time = &mut self.commons.hover_time;
+        let pressed = &mut self.commons.pressed;
+        let press_time = &mut self.commons.press_time;
 
         let button_callbacks = &self.buttons.callback;
 
@@ -449,12 +442,32 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                     if pressed {
                         let direct = self.buttons.solve_indirect(handle).unwrap();
                         let callback = button_callbacks[direct.as_index()];
-                        (callback.0)();
+                        match callback {
+                            ButtonCallback::None => {}
+                            ButtonCallback::Once(cb) => {
+                                if press_time[i].frames == 1 {
+                                    cb()
+                                }
+                            }
+                            ButtonCallback::Repeating(cb) => cb(),
+                        }
                     }
                 }
 
                 _ => {}
             }
+
+            // advance hover/press durations
+            let ht = &mut hover_time[i];
+            let hovered = hovered[i];
+            ht.frames = (ht.frames + 1) * hovered as u32;
+            ht.seconds = (ht.seconds + delta) * hovered as u32 as f32;
+
+            pressed[i] &= hovered;
+            let pt = &mut press_time[i];
+            let pf = pressed[i] as u32;
+            pt.frames = (pt.frames + 1) * pf;
+            pt.seconds = (pt.seconds + delta) * pf as f32;
         }
     }
 
@@ -470,10 +483,14 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             let bounds = bounds[i];
             if bounds.contains(x, y) {
                 hovered[i] = true;
-                hover_time[i] += delta;
+                let ht = &mut hover_time[i];
+                ht.seconds += delta;
+                ht.frames += 1;
             } else {
                 hovered[i] = false;
-                hover_time[i] = 0f32;
+                let ht = &mut hover_time[i];
+                ht.seconds = 0.0;
+                ht.frames = 0;
             }
         }
     }
@@ -486,12 +503,19 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
 
         // mouse press, hold, release
         {
-            let click = event.is_mouse() && !event.is_released();
+            const PRESS_KEY: u16 = janus::input::KeyCode::Space as u16;
+            let click = matches!(
+                event,
+                KeyEvent::Keyboard {
+                    code: PRESS_KEY,
+                    release: false
+                }
+            );
             let press = hovered[table_index] & click;
-            let pt0 = press_time[table_index];
-            let pt1 = (pt0 + delta) * press as u32 as f32;
             pressed[table_index] = press;
-            press_time[table_index] = pt1;
+            let pt = &mut press_time[table_index];
+            pt.seconds = (pt.seconds + delta) * press as u32 as f32;
+            pt.frames = (pt.frames + 1) * press as u32;
         }
 
         // keyboard (todo)
@@ -504,37 +528,6 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             for event in events {
                 self.process_key_event(i, *event, delta);
             }
-        }
-    }
-
-    pub fn process_key_events(&mut self, keys: &Keys, delta: DeltaTime) {
-        let click = keys.mouse_down(MouseButton::Left) | keys.mouse_down(MouseButton::Right);
-        let delta = delta.as_f32();
-
-        let count = self.commons.len();
-        let hovered = &self.commons.hovered;
-        let pressed = &mut self.commons.pressed;
-        let press_time = &mut self.commons.press_time;
-
-        for i in 1..count {
-            let press = hovered[i] & click;
-            let pt0 = press_time[i];
-            let pt1 = (pt0 + delta) * press as u32 as f32;
-
-            pressed[i] = press;
-            press_time[i] = pt1;
-
-            // if hovered[i] {
-            //     pressed[i] = click;
-            //     if click {
-            //         press_time[i] += delta;
-            //     } else {
-            //         press_time[i] = 0f32;
-            //     }
-            // } else {
-            //     pressed[i] = false;
-            //     press_time[i] = 0f32;
-            // }
         }
     }
 
@@ -767,8 +760,8 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             Box2d::NULL,
             false,
             false,
-            0f32,
-            0f32,
+            InteractionTime::default(),
+            InteractionTime::default(),
         ))))
     }
 

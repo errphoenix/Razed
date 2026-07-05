@@ -114,7 +114,7 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
                 bg_color: glam::Vec3::splat(0.5),
                 bg_hover_tint: glam::vec4(0.4, 0.4, 0.4, 0.25),
                 bg_press_tint: glam::vec4(0.3, 0.3, 0.3, 0.4),
-                callback: ButtonCallback(|| println!("boop!")),
+                callback: ButtonCallback::Once(|| println!("boop!")),
             },
         ))
         .unwrap();
