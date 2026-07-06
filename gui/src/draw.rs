@@ -193,7 +193,6 @@ impl<const LAYERS: usize> IndexMut<usize> for BatchingLayerCompositor<LAYERS> {
         self.layer_mut(index)
     }
 }
-
 impl<const LAYERS: usize> Index<usize> for BatchingLayerCompositor<LAYERS> {
     type Output = BatchingLayer;
 

@@ -1,5 +1,6 @@
 use std::sync::RwLock;
 
+use cosmic_text::Metrics;
 use ethel::{
     assets::{AssetMetadataRegistry, TextureId, TextureMetadata},
     render::Resolution,
@@ -21,7 +22,10 @@ pub use style::*;
 
 use taffy::prelude::*;
 
-use crate::draw::{Batch, BatchingLayerCompositor, InterfaceAggregator, InterfaceObject};
+use crate::{
+    draw::{Batch, BatchingLayerCompositor, InterfaceAggregator, InterfaceObject},
+    text::TextComposer,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct TaffyNodeId(pub(crate) NodeId);
@@ -275,6 +279,8 @@ pub struct InterfaceSystem<const LAYERS: usize = 10> {
 
     intermediate_buffer: Vec<InterfaceObject>,
     compositor: BatchingLayerCompositor<LAYERS>,
+
+    text_composer: TextComposer<'static>,
 }
 /// Safety:
 /// TaffyTree is !Send due to internal implementation details related to raw
@@ -316,6 +322,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             buttons: InterfaceButtonRowTable::new(),
             intermediate_buffer: Vec::new(),
             compositor: BatchingLayerCompositor::new(),
+            text_composer: TextComposer::new(),
         }
     }
 
@@ -348,6 +355,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             buttons: InterfaceButtonRowTable::with_capacity(capacity),
             intermediate_buffer: Vec::with_capacity(capacity),
             compositor: BatchingLayerCompositor::new(),
+            text_composer: TextComposer::new(),
         }
     }
 
@@ -508,7 +516,8 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 event,
                 KeyEvent::Keyboard {
                     code: PRESS_KEY,
-                    release: false
+                    release: false,
+                    press_time: 1
                 }
             );
             let press = hovered[table_index] & click;

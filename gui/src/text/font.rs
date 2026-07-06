@@ -1,5 +1,7 @@
 use std::{borrow::Cow, collections::HashMap, ffi::OsStr, sync::Arc};
 
+// todo: static font library with include_dir! macro (from a crate)
+
 use cosmic_text::{
     Weight,
     fontdb::{Database, Source},

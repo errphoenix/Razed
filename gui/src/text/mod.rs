@@ -16,6 +16,20 @@ use crate::{
 pub mod font;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
+pub struct TextMeasurement {
+    pub width: f32,
+    pub height: f32,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
+pub struct GlyphInfo {
+    pub uv: GlyphUv,
+    pub width: u32,
+    pub height: u32,
+    pub left: i32,
+    pub top: i32,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
 pub struct GlyphUv {
     pub ux: f32,
     pub uy: f32,
@@ -121,7 +135,7 @@ pub struct GlyphAtlas {
     size: u32,
 
     atlas_lru: LruCache<CacheKey, AllocId, rustc_hash::FxBuildHasher>,
-    uv_cache: HashMap<CacheKey, GlyphUv, rustc_hash::FxBuildHasher>,
+    uv_cache: HashMap<CacheKey, GlyphInfo, rustc_hash::FxBuildHasher>,
 }
 impl Default for GlyphAtlas {
     fn default() -> Self {
@@ -179,28 +193,37 @@ impl GlyphAtlas {
         &mut self,
         font_sys: &mut FontSystem,
         key: CacheKey,
-    ) -> Option<(GlyphUv, Option<GlyphRaster>)> {
+    ) -> Option<(GlyphInfo, Option<GlyphRaster>)> {
         if let Some(&uv) = self.uv_cache.get(&key) {
             self.atlas_lru.promote(&key);
             return Some((uv, None));
         }
 
         let img = self.swash_cache.get_image_uncached(font_sys, key)?;
-        let width = img.placement.width as i32;
-        let height = img.placement.height as i32;
+        let width = img.placement.width;
+        let height = img.placement.height;
         if width == 0 || height == 0 {
             return None;
         }
+        let left = img.placement.left;
+        let top = img.placement.top;
 
-        let allocation = self.evict_till_atlas_free(&key, width, height);
+        let allocation = self.evict_till_atlas_free(&key, width as i32, height as i32);
         let rect = allocation.rectangle;
-        let uv_bounds = GlyphUv {
-            ux: rect.min.x as f32 / self.size as f32,
-            uy: rect.min.y as f32 / self.size as f32,
-            vx: rect.max.x as f32 / self.size as f32,
-            vy: rect.max.y as f32 / self.size as f32,
+
+        let glyph_info = GlyphInfo {
+            uv: GlyphUv {
+                ux: rect.min.x as f32 / self.size as f32,
+                uy: rect.min.y as f32 / self.size as f32,
+                vx: rect.max.x as f32 / self.size as f32,
+                vy: rect.max.y as f32 / self.size as f32,
+            },
+            width,
+            height,
+            left,
+            top,
         };
-        self.uv_cache.insert(key, uv_bounds);
+        self.uv_cache.insert(key, glyph_info);
 
         let raster = GlyphRaster {
             offset_x: rect.min.x as u32,
@@ -209,14 +232,14 @@ impl GlyphAtlas {
             size_y: rect.height() as u32,
             data: img.data,
         };
-        Some((uv_bounds, Some(raster)))
+        Some((glyph_info, Some(raster)))
     }
 }
 
 #[derive(Debug)]
 pub struct TextComposer<'a> {
     buffer: cosmic_text::Buffer,
-    font_system: FontSystem,
+    font_system: Option<FontSystem>,
 
     attribs: Attrs<'a>,
     alignment: Align,
@@ -225,10 +248,11 @@ pub struct TextComposer<'a> {
     raster_buffer: Vec<GlyphRaster>,
 }
 impl<'a> TextComposer<'a> {
-    pub fn new(metrics: Metrics, font_system: FontSystem) -> Self {
+    pub fn new() -> Self {
+        const METRICS: Metrics = Metrics::new(1.0, 1.0);
         Self {
-            buffer: Buffer::new_empty(metrics),
-            font_system,
+            buffer: Buffer::new_empty(METRICS),
+            font_system: None,
             attribs: Attrs::new(),
             alignment: Align::Left,
             element_buffer: Vec::new(),
@@ -236,10 +260,25 @@ impl<'a> TextComposer<'a> {
         }
     }
 
+    pub fn set_font_metrics(&mut self, font_size: f32, line_height: f32) {
+        let font_sys = self.font_system.as_mut().expect("font_system is not set");
+        self.buffer.set_metrics(
+            font_sys,
+            Metrics {
+                font_size,
+                line_height,
+            },
+        );
+    }
+
+    pub fn set_font_system(&mut self, font_system: FontSystem) {
+        self.font_system = Some(font_system);
+    }
+
     /// Set the size of the buffer for text layouting.
     pub fn set_buffer_size(&mut self, width_opt: Option<f32>, height_opt: Option<f32>) {
-        self.buffer
-            .set_size(&mut self.font_system, width_opt, height_opt);
+        let font_sys = self.font_system.as_mut().expect("font_system is not set");
+        self.buffer.set_size(font_sys, width_opt, height_opt);
     }
 
     pub fn attributes(&self) -> &Attrs<'a> {
@@ -263,8 +302,9 @@ impl<'a> TextComposer<'a> {
     }
 
     pub fn set_text(&mut self, string: &str) {
+        let font_sys = self.font_system.as_mut().expect("font_system is not set");
         self.buffer.set_text(
-            &mut self.font_system,
+            font_sys,
             string,
             &self.attribs,
             Shaping::Advanced,
@@ -272,22 +312,57 @@ impl<'a> TextComposer<'a> {
         );
     }
 
-    pub fn compose(&mut self, layer: u32, glyph_atlas: &mut GlyphAtlas) {
+    pub fn measure(&mut self) -> TextMeasurement {
+        let font_sys = self.font_system.as_mut().expect("font_system is not set");
         self.buffer.lines.clear();
-        self.buffer.shape_until_scroll(&mut self.font_system, false);
+        self.buffer.shape_until_scroll(font_sys, false);
+
+        let width = self
+            .buffer
+            .layout_runs()
+            .fold(0.0f32, |v, run| v.max(run.line_w));
+
+        let mut height = 0.0f32;
+        if let Some(last) = self.buffer.layout_runs().last() {
+            height = last.line_top + last.line_height;
+        }
+
+        TextMeasurement { width, height }
+    }
+
+    pub fn compose(
+        &mut self,
+        x_offset: f32,
+        y_offset: f32,
+        layer: u32,
+        glyph_atlas: &mut GlyphAtlas,
+    ) {
+        let font_sys = self.font_system.as_mut().expect("font_system is not set");
+        self.buffer.lines.clear();
+        self.buffer.shape_until_scroll(font_sys, false);
         self.buffer.layout_runs().for_each(|run| {
+            let baseline_y = y_offset + run.line_y;
             run.glyphs.iter().for_each(|glyph| {
-                let glyph = glyph.physical((0., 0.), 1.0);
-                if let Some((uv, raster)) =
-                    glyph_atlas.get_or_rasterize(&mut self.font_system, glyph.cache_key)
+                let glyph = glyph.physical((x_offset, baseline_y), 1.0);
+                if let Some((info, raster)) =
+                    glyph_atlas.get_or_rasterize(font_sys, glyph.cache_key)
                 {
                     if let Some(raster) = raster {
                         self.raster_buffer.push(raster);
                     }
+                    if info.width == 0 || info.height == 0 {
+                        return;
+                    }
+
+                    let x = glyph.x as f32 + info.left as f32;
+                    let y = glyph.y as f32 - info.top as f32;
+                    let width = info.width as f32;
+                    let height = info.height as f32;
+                    let uv = info.uv;
 
                     self.element_buffer.push(InterfaceObject {
-                        position: Default::default(),
-                        size: Default::default(),
+                        position: glam::vec2(x, y),
+                        size: glam::vec2(width, height),
                         color: glam::Vec4::ZERO,
                         attachment: Some(InterfaceAttachment::TextureSection {
                             texture_id: GlyphAtlasTexture::resource_id(),
