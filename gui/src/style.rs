@@ -313,6 +313,25 @@ pub struct LayoutOptions {
     pub grid_column: GridLine,
 }
 impl LayoutOptions {
+    pub const fn new() -> Self {
+        Self {
+            container: ContainerLayout::Block,
+            align_self: ItemAlignment::Center,
+            justify_self: ItemAlignment::Center,
+            layout_position: LayoutPosition::Relative,
+            size: None,
+            min_size: None,
+            max_size: None,
+            aspect_ratio: None,
+            overflow_x: Overflow::Clip,
+            overflow_y: Overflow::Clip,
+            margin: None,
+            padding: None,
+            grid_row: GridLine::Single(0),
+            grid_column: GridLine::Single(0),
+        }
+    }
+
     pub(crate) fn into_taffy_style(&self) -> Style {
         let size = self.size.map_or(Size::auto(), |size| size.into());
         let min_size = self.min_size.map_or(Size::auto(), |size| size.into());

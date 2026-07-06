@@ -1,17 +1,12 @@
 use std::sync::RwLock;
 
-use cosmic_text::Metrics;
 use ethel::{
     assets::{AssetMetadataRegistry, TextureId, TextureMetadata},
     render::Resolution,
     state::data::{Column, DirectIndex, IndirectIndex},
 };
 
-use janus::{
-    StringHash,
-    context::DeltaTime,
-    input::{KeyEvent, Keys, MouseButton},
-};
+use janus::{StringHash, context::DeltaTime, input::KeyEvent};
 
 pub mod draw;
 pub mod shaders;
@@ -24,7 +19,7 @@ use taffy::prelude::*;
 
 use crate::{
     draw::{Batch, BatchingLayerCompositor, InterfaceAggregator, InterfaceObject},
-    text::TextComposer,
+    text::{FontMetrics, GlyphAtlas, TextComposer, TextMeasurement, font::FontLibrary},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -82,7 +77,8 @@ ethel::table_spec! {
         string: StringHash;
         font_name: StringHash;
         color: glam::Vec4;
-        size: u32;
+        metrics: FontMetrics;
+        measure: TextMeasurement;
     }
 }
 
@@ -96,6 +92,7 @@ ethel::table_spec! {
 
 ethel::table_spec! {
     struct InterfaceButton {
+        // handle in text table
         text_id: IndirectIndex;
 
         base_color: glam::Vec3;
@@ -140,7 +137,8 @@ pub enum ComponentKind {
     Image(IndirectIndex),
     Button {
         handle: IndirectIndex,
-        text_handle: IndirectIndex,
+        /// text root id
+        text_handle: WidgetId,
     },
 }
 impl std::fmt::Display for ComponentKind {
@@ -280,7 +278,8 @@ pub struct InterfaceSystem<const LAYERS: usize = 10> {
     intermediate_buffer: Vec<InterfaceObject>,
     compositor: BatchingLayerCompositor<LAYERS>,
 
-    text_composer: TextComposer<'static>,
+    text_composer: TextComposer,
+    font_library: FontLibrary,
 }
 /// Safety:
 /// TaffyTree is !Send due to internal implementation details related to raw
@@ -323,6 +322,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             intermediate_buffer: Vec::new(),
             compositor: BatchingLayerCompositor::new(),
             text_composer: TextComposer::new(),
+            font_library: FontLibrary::new(),
         }
     }
 
@@ -356,7 +356,12 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             intermediate_buffer: Vec::with_capacity(capacity),
             compositor: BatchingLayerCompositor::new(),
             text_composer: TextComposer::new(),
+            font_library: FontLibrary::new(),
         }
+    }
+
+    pub const fn font_library(&mut self) -> &mut FontLibrary {
+        &mut self.font_library
     }
 
     pub const fn resolution(&self) -> Resolution {
@@ -392,7 +397,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         self.parent_of(widget).map(|id| !id.is_null())
     }
 
-    pub fn prepare_elements(&mut self) {
+    pub fn prepare_elements(&mut self, glyph_atlas: &mut GlyphAtlas) {
         let aggregator = InterfaceAggregator {
             commons: InterfaceCommonRowTableView::from(&self.commons),
             panels: InterfacePanelRowTableView::from(&self.panels),
@@ -400,7 +405,11 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             images: InterfaceImageRowTableView::from(&self.images),
             buttons: InterfaceButtonRowTableView::from(&self.buttons),
         };
-        aggregator.gather_quad_elements(&mut self.intermediate_buffer);
+        aggregator.gather_quad_elements(
+            &mut self.text_composer,
+            glyph_atlas,
+            &mut self.intermediate_buffer,
+        );
     }
 
     pub fn composite_layers(&mut self, registry: &AssetMetadataRegistry<TextureMetadata>) {
@@ -588,7 +597,47 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         };
 
         self.layout
-            .compute_layout(self.root_node.tree_id, available)
+            .compute_layout_with_measure(
+                self.root_node.tree_id,
+                available,
+                |known_size, available, _id, ctx, _style| {
+                    let id = ctx.expect("node has no associated widget with it");
+                    let did = unsafe { self.commons.solve_indirect_unchecked(id.0) };
+                    let archetype = self.commons.archetype[did.as_index()];
+                    if let ComponentKind::Text(text_id) = archetype {
+                        let width = known_size.width.or(available.width.into_option());
+                        let height = known_size.height.or(available.height.into_option());
+                        let tdid = self
+                            .texts
+                            .solve_indirect(text_id)
+                            .expect("text id must be valid")
+                            .as_index();
+
+                        let text = self.texts.string[tdid];
+                        let metrics = self.texts.metrics[tdid];
+                        let font = self.texts.font_name[tdid];
+
+                        let text_string = ethel::assets::strings::fetch(&text)
+                            .expect("text element content string hash must be valid");
+                        let font_string = ethel::assets::strings::fetch(&font)
+                            .expect("text element font family string hash must be valid");
+
+                        self.text_composer.set_buffer_size(width, height);
+                        self.text_composer.set_font_metrics(metrics);
+                        self.text_composer.set_text(text_string);
+                        self.text_composer.set_font(font_string);
+                        let measurement = self.text_composer.measure();
+
+                        self.texts.measure[tdid] = measurement;
+
+                        return Size {
+                            width: measurement.width,
+                            height: measurement.height,
+                        };
+                    }
+                    Size::zero()
+                },
+            )
             .expect("failed to evaluate taffy layout");
     }
 
@@ -639,11 +688,18 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         string: StringHash,
         font_name: StringHash,
         color: glam::Vec4,
-        size: u32,
+        metrics: FontMetrics,
     ) -> Result<IndirectIndex, WidgetError> {
         if let Some(commons_id) = self.commons.solve_indirect(id.0) {
             self.assert_null_archetype(commons_id)?;
-            let text_id = self.create_text(string, font_name, color, size);
+            let text_element = (
+                string,
+                font_name,
+                color,
+                metrics,
+                TextMeasurement::default(),
+            );
+            let text_id = self.texts.insert(text_element);
             self.commons.archetype[commons_id.as_index()] = ComponentKind::Text(text_id);
             Ok(text_id)
         } else {
@@ -687,6 +743,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     pub fn make_button(
         &mut self,
         root_id: WidgetId,
+        text_root_id: WidgetId,
         text_id: IndirectIndex,
         base_color: glam::Vec3,
         hover_tint: glam::Vec4,
@@ -699,7 +756,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             let button_id = self.buttons.insert(button_element);
             self.commons.archetype[commons_id.as_index()] = ComponentKind::Button {
                 handle: button_id,
-                text_handle: text_id,
+                text_handle: text_root_id,
             };
             Ok(button_id)
         } else {
@@ -757,7 +814,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             Vec::new()
         };
 
-        Ok(WidgetId(self.commons.insert((
+        let id = WidgetId(self.commons.insert((
             ComponentKind::Null,
             parent,
             children,
@@ -771,23 +828,13 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             false,
             InteractionTime::default(),
             InteractionTime::default(),
-        ))))
-    }
+        )));
 
-    /// Create a new text element without direct associations to the widget
-    /// tree.
-    ///
-    /// This text element can then be used for a button element with
-    /// [`Self::make_button`].
-    pub fn create_text(
-        &mut self,
-        string: StringHash,
-        font_name: StringHash,
-        color: glam::Vec4,
-        size: u32,
-    ) -> IndirectIndex {
-        let text_element = (string, font_name, color, size);
-        self.texts.insert(text_element)
+        self.layout
+            .set_node_context(node_id, Some(id))
+            .map_err(WidgetError::TaffyLayoutError)?;
+
+        Ok(id)
     }
 
     pub fn core_data(&self) -> &InterfaceCommonRowTable {
@@ -851,11 +898,30 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 panel_params.hover_tint,
                 panel_params.opacity,
             ),
-            ElementParams::Button(_, button_params) => {
+            ElementParams::Button(core, button_params) => {
                 let text = &button_params.text;
-                let text_id = self.create_text(text.string, text.font_name, text.color, text.size);
+
+                let (text_root_id, text_id) = {
+                    const BUTTON_LABEL_LAYOUT: LayoutOptions = LayoutOptions::new();
+
+                    let root_text_id =
+                        self.add_new(Some(root_id), None, BUTTON_LABEL_LAYOUT, core.layer)?;
+                    let special_text_id = self.make_text(
+                        root_text_id,
+                        text.string,
+                        text.font_name,
+                        text.color,
+                        FontMetrics {
+                            font_size: text.font_size,
+                            line_height: text.line_height,
+                        },
+                    )?;
+                    (root_text_id, special_text_id)
+                };
+
                 self.make_button(
                     root_id,
+                    text_root_id,
                     text_id,
                     button_params.bg_color,
                     button_params.bg_hover_tint,
@@ -868,7 +934,10 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 text_params.string,
                 text_params.font_name,
                 text_params.color,
-                text_params.size,
+                FontMetrics {
+                    font_size: text_params.font_size,
+                    line_height: text_params.line_height,
+                },
             ),
             ElementParams::Image(_, image_params) => self.make_image(
                 root_id,
@@ -950,21 +1019,27 @@ pub struct TextParams {
     pub string: StringHash,
     pub font_name: StringHash,
     pub color: glam::Vec4,
-    pub size: u32,
+    pub font_size: f32,
+    pub line_height: f32,
 }
 impl TextParams {
-    pub const DEFAULT_TEXT: StringHash = janus::hash_string("Lorem Ipsum Blah Blah");
-    pub const DEFAULT_FONT: StringHash = janus::hash_string("Arial");
+    ethel::lazy_hash_str! {
+        pub DEFAULT_TEXT = "Lorem Ipsum Blah Blah";
+        pub DEFAULT_FONT = "Arial";
+    }
+
     pub const DEFAULT_COLOR: glam::Vec4 = glam::Vec4::ONE;
-    pub const DEFAULT_SIZE: u32 = 11;
+    pub const DEFAULT_FONT_SIZE: f32 = 11.0;
+    pub const DEFAULT_LINE_HEIGHT: f32 = 11.0;
 }
 impl Default for TextParams {
     fn default() -> Self {
         Self {
-            string: Self::DEFAULT_TEXT,
-            font_name: Self::DEFAULT_FONT,
+            string: *Self::DEFAULT_TEXT,
+            font_name: *Self::DEFAULT_FONT,
             color: Self::DEFAULT_COLOR,
-            size: Self::DEFAULT_SIZE,
+            font_size: Self::DEFAULT_FONT_SIZE,
+            line_height: Self::DEFAULT_LINE_HEIGHT,
         }
     }
 }

@@ -8,7 +8,8 @@ use janus::texture::{TextureKey, TextureTarget};
 
 use crate::{
     InterfaceButtonRowTableView, InterfaceCommonRowTableView, InterfaceImageRowTableView,
-    InterfacePanelRowTableView, InterfaceTextRowTableView,
+    InterfacePanelRowTableView, InterfaceTextRowTableView, WidgetId,
+    text::{GlyphAtlas, TextComposer},
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -20,7 +21,12 @@ pub struct InterfaceAggregator<'t> {
     pub buttons: InterfaceButtonRowTableView<'t>,
 }
 impl InterfaceAggregator<'_> {
-    pub fn gather_quad_elements(&self, buffer: &mut Vec<InterfaceObject>) {
+    pub fn gather_quad_elements(
+        &self,
+        text_composer: &mut TextComposer,
+        glyph_atlas: &mut GlyphAtlas,
+        buffer: &mut Vec<InterfaceObject>,
+    ) {
         let count = self.commons.len();
         let reserve = count.saturating_sub(buffer.len());
         buffer.reserve(reserve);
@@ -39,7 +45,9 @@ impl InterfaceAggregator<'_> {
                     handle,
                     text_handle,
                 } => self.gather_button(index, handle, text_handle, buffer),
-                crate::ComponentKind::Text(_indirect_index) => {}
+                crate::ComponentKind::Text(indirect_index) => {
+                    self.gather_text(index, indirect_index, text_composer, glyph_atlas, buffer);
+                }
             };
         }
     }
@@ -71,12 +79,35 @@ impl InterfaceAggregator<'_> {
         });
     }
 
-    fn _gather_text(
+    fn gather_text(
         &self,
-        _common_handle: usize,
-        _text_index: IndirectIndex,
-        _out: &mut Vec<InterfaceObject>,
+        common_handle: usize,
+        text_index: IndirectIndex,
+        text_composer: &mut TextComposer,
+        glyph_atlas: &mut GlyphAtlas,
+        out: &mut Vec<InterfaceObject>,
     ) {
+        let tdid = self.texts.solve(text_index).as_index();
+        let text = self.texts.string[tdid];
+        let metrics = self.texts.metrics[tdid];
+        let font = self.texts.font_name[tdid];
+        let measurement = self.texts.measure[tdid];
+
+        let text_string = ethel::assets::strings::fetch(&text)
+            .expect("text element content string hash must be valid");
+        let font_string = ethel::assets::strings::fetch(&font)
+            .expect("text element font family string hash must be valid");
+
+        text_composer.set_buffer_size(Some(measurement.width), Some(measurement.height));
+        text_composer.set_font_metrics(metrics);
+        text_composer.set_text(text_string);
+        text_composer.set_font(font_string);
+
+        let anchor = self.commons.feedback_anchor[common_handle];
+        let layer = self.commons.layer[common_handle];
+        text_composer.compose(anchor.x, anchor.y, layer, glyph_atlas);
+
+        out.extend(text_composer.elements());
     }
 
     fn gather_image(
@@ -107,7 +138,7 @@ impl InterfaceAggregator<'_> {
         &self,
         common_handle: usize,
         button_index: IndirectIndex,
-        _text_index: IndirectIndex,
+        _text_root_id: WidgetId,
         out: &mut Vec<InterfaceObject>,
     ) {
         let hovered = self.commons.hovered[common_handle];

@@ -8,12 +8,15 @@ use ethel::assets::TextureId;
 use janus::texture::{ImageFormat, ImageType, Texture, TextureView};
 use lru::LruCache;
 
-use crate::{
-    draw::{InterfaceAttachment, InterfaceObject},
-    text::font::Font,
-};
+use crate::draw::{InterfaceAttachment, InterfaceObject};
 
 pub mod font;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
+pub struct FontMetrics {
+    pub font_size: f32,
+    pub line_height: f32,
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
 pub struct TextMeasurement {
@@ -237,17 +240,17 @@ impl GlyphAtlas {
 }
 
 #[derive(Debug)]
-pub struct TextComposer<'a> {
+pub struct TextComposer {
     buffer: cosmic_text::Buffer,
     font_system: Option<FontSystem>,
 
-    attribs: Attrs<'a>,
+    attribs: Attrs<'static>,
     alignment: Align,
 
     element_buffer: Vec<InterfaceObject>,
     raster_buffer: Vec<GlyphRaster>,
 }
-impl<'a> TextComposer<'a> {
+impl TextComposer {
     pub fn new() -> Self {
         const METRICS: Metrics = Metrics::new(1.0, 1.0);
         Self {
@@ -260,13 +263,13 @@ impl<'a> TextComposer<'a> {
         }
     }
 
-    pub fn set_font_metrics(&mut self, font_size: f32, line_height: f32) {
+    pub fn set_font_metrics(&mut self, metrics: FontMetrics) {
         let font_sys = self.font_system.as_mut().expect("font_system is not set");
         self.buffer.set_metrics(
             font_sys,
             Metrics {
-                font_size,
-                line_height,
+                font_size: metrics.font_size,
+                line_height: metrics.line_height,
             },
         );
     }
@@ -281,11 +284,11 @@ impl<'a> TextComposer<'a> {
         self.buffer.set_size(font_sys, width_opt, height_opt);
     }
 
-    pub fn attributes(&self) -> &Attrs<'a> {
+    pub fn attributes(&self) -> &Attrs<'static> {
         &self.attribs
     }
 
-    pub fn attributes_mut(&mut self) -> &mut Attrs<'a> {
+    pub fn attributes_mut(&mut self) -> &mut Attrs<'static> {
         &mut self.attribs
     }
 
@@ -297,8 +300,8 @@ impl<'a> TextComposer<'a> {
         };
     }
 
-    pub fn set_font(&mut self, font: &'a Font) {
-        self.attribs.family = Family::Name(&font.family);
+    pub fn set_font(&mut self, font_family: &'static str) {
+        self.attribs.family = Family::Name(font_family);
     }
 
     pub fn set_text(&mut self, string: &str) {
