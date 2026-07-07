@@ -208,12 +208,14 @@ impl GlyphAtlas {
         let allocation = self.evict_till_atlas_free(&key, width as i32, height as i32);
         let rect = allocation.rectangle;
 
+        let min_x = rect.min.x as f32;
+        let min_y = rect.min.y as f32;
         let glyph_info = GlyphInfo {
             uv: GlyphUv {
-                ux: rect.min.x as f32 / self.size as f32,
-                uy: rect.min.y as f32 / self.size as f32,
-                vx: rect.max.x as f32 / self.size as f32,
-                vy: rect.max.y as f32 / self.size as f32,
+                ux: min_x / self.size as f32,
+                uy: min_y / self.size as f32,
+                vx: (min_x + width as f32) / self.size as f32,
+                vy: (min_y + height as f32) / self.size as f32,
             },
             width,
             height,
@@ -243,8 +245,8 @@ impl GlyphAtlas {
         let raster = GlyphRaster {
             offset_x: rect.min.x as u32,
             offset_y: rect.min.y as u32,
-            size_x: rect.width() as u32,
-            size_y: rect.height() as u32,
+            size_x: width as u32,
+            size_y: height as u32,
             data,
         };
         Some((glyph_info, Some(raster)))
