@@ -98,14 +98,8 @@ ethel::shader_glsl! {
                 vec2 uv = tex_coord;
                 uint tex_index = texture_index;
 
-                float tex_filter = float(min(tex_index, 1));
-                vec4 tex_color = texture(texture_map[tex_index], uv) * tex_filter;
-
-                float tmf = max(0.0, tex_filter - (color.a * 0.5));
-                vec3 rgb = mix(color.rgb, tex_color.rgb, tmf);
-                float alpha = max(color.a, tex_color.a);
-
-                outColor = vec4(rgb, alpha);
+                vec4 tex_color = texture(texture_map[tex_index], uv);
+                outColor = color * tex_color;
             "
         ];
     }
