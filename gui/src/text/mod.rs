@@ -100,7 +100,7 @@ impl GlyphAtlasTexture {
         self.view = None;
     }
 
-    /// Copy a sequence of `glyphs` to the atlas [`Texture`].
+    /// Copy a rasterized `glyph` to the atlas [`Texture`].
     ///
     /// The atlas texture must have been initialized previously with
     /// [`Self::create_atlas_texture`].
@@ -110,19 +110,17 @@ impl GlyphAtlasTexture {
     /// # Panics
     /// If the atlas texture is not initialized, or if no OpenGL context is
     /// currently available on the caller thread.
-    pub fn copy_glyphs(&self, glyphs: &[GlyphRaster]) {
+    pub fn copy_glyph(&self, glyph: GlyphRaster) {
         janus::assert_gl!();
 
         let texture = self.view.expect("atlas texture uninitialized");
-        for glyph in glyphs {
-            texture.upload_region(
-                glyph.offset_x as i32,
-                glyph.offset_y as i32,
-                glyph.size_x as i32,
-                glyph.size_y as i32,
-                &glyph.data,
-            );
-        }
+        texture.upload_region(
+            glyph.offset_x as i32,
+            glyph.offset_y as i32,
+            glyph.size_x as i32,
+            glyph.size_y as i32,
+            &glyph.data,
+        );
     }
 
     pub const fn texture(&self) -> Option<TextureView> {
@@ -317,7 +315,6 @@ impl TextComposer {
 
     pub fn measure(&mut self) -> TextMeasurement {
         let font_sys = self.font_system.as_mut().expect("font_system is not set");
-        self.buffer.lines.clear();
         self.buffer.shape_until_scroll(font_sys, false);
 
         let width = self
@@ -341,7 +338,6 @@ impl TextComposer {
         glyph_atlas: &mut GlyphAtlas,
     ) {
         let font_sys = self.font_system.as_mut().expect("font_system is not set");
-        self.buffer.lines.clear();
         self.buffer.shape_until_scroll(font_sys, false);
         self.buffer.layout_runs().for_each(|run| {
             let baseline_y = y_offset + run.line_y;
