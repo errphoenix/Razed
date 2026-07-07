@@ -50,6 +50,8 @@ fn main() {
     };
 
     start_handler.with_gl_state(|| unsafe {
+        janus::gl::PixelStorei(janus::gl::UNPACK_ALIGNMENT, 1);
+
         janus::gl::ClipControl(janus::gl::LOWER_LEFT, janus::gl::ZERO_TO_ONE);
         janus::gl::DepthFunc(janus::gl::GREATER);
         janus::gl::ClearDepth(0.0);
