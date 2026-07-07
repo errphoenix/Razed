@@ -483,11 +483,13 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         view_point: &janus::sync::TriCell<ViewPoint>,
         delta: janus::context::DeltaTime,
     ) {
+        self.profiler.page();
+
+        self.textures_metadata_registry.pipe_sync_commands();
+
         if screen.resolution().is_changed() {
             self.ui_system.set_resolution(screen.resolution());
         }
-
-        self.profiler.page();
 
         self.ui_system.clear_batches();
         self.ui_update_layout();
