@@ -1,8 +1,10 @@
 use ethel::{
     StartupHandler,
+    assets::Handle,
     mesh::{MeshStaging, Vertex},
     state::data::hash::{FxSpatialHash, SpatialResolution},
 };
+use gui::text::{GlyphAtlas, GlyphAtlasTexture};
 use janus::{context::Setup, window::DisplayParameters};
 
 use crate::{
@@ -59,13 +61,32 @@ fn main() {
 
     let ctx = janus::context::Context::new(
         |state: &mut State, renderer: &mut Renderer| {
+            const GLYPH_ATLAS_SIZE: u32 = 2048;
+
             renderer.handler_init_callback(|handle| {
                 handle.textures_master_registry = textures_master_registry;
+
+                let texture = handle
+                    .glyph_atlas_texture
+                    .create_atlas_texture(GLYPH_ATLAS_SIZE as i32);
+                // special gpu-only asset which must never be touched
+                let glyph_asset_handle = Handle::from_gpu_resource(
+                    GlyphAtlasTexture::resource_id(),
+                    texture,
+                    &handle.textures_master_registry,
+                );
+                handle
+                    .textures_master_registry
+                    .add_handle(glyph_asset_handle);
             });
             state.handler_init_callback(|handle| {
                 handle.frag_meshmap = fragment_mesh_mapping;
+
                 handle.textures_metadata_registry = textures_metadata_registry;
                 handle.texture_registry_pipe.set_pipe(texture_pipe);
+
+                handle.glyph_atlas = GlyphAtlas::new(GLYPH_ATLAS_SIZE);
+                handle.ui_system_mut().bind_system_fonts();
             });
             start_handler.init(state, renderer)
         },

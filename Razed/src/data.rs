@@ -1,12 +1,13 @@
 use std::sync::{Arc, atomic::AtomicU32};
 
 use crate::{render::shaders, ui::UiRenderCommandBasic};
+use crossbeam::queue::SegQueue;
 use ethel::{
     DrawCommand, layout_buffer, layout_mesh_buffer,
     render::buffer::{PartitionedTriBuffer, TriBuffer},
     state::data::{DirectIndex, IndirectIndex},
 };
-use gui::draw::Quad;
+use gui::{draw::Quad, text::GlyphRaster};
 
 use crate::structure::fragment::ANCHORS_COUNT as FRAGMENT_ANCHORS_COUNT;
 

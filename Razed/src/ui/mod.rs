@@ -95,7 +95,7 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
         .0;
 
     system
-        .create_element(ElementParams::Button(
+        .create_element(ElementParams::Text(
             CoreElementParams {
                 parent: Some(subpanel),
                 children: None,
@@ -107,14 +107,14 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
                     }),
                     ..Default::default()
                 },
-                layer: 6,
+                layer: 7,
             },
-            ButtonParams {
-                text: TextParams::default(),
-                bg_color: glam::Vec3::splat(0.5),
-                bg_hover_tint: glam::vec4(0.4, 0.4, 0.4, 0.25),
-                bg_press_tint: glam::vec4(0.3, 0.3, 0.3, 0.4),
-                callback: ButtonCallback::Once(|| println!("boop!")),
+            TextParams {
+                string: *ethel::lazy_hash_str!("Quitj"),
+                font_name: *ethel::lazy_hash_str!("Arial"),
+                color: glam::Vec4::ONE,
+                font_size: 11f32,
+                line_height: 12f32,
             },
         ))
         .unwrap();

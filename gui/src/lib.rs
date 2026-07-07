@@ -1,5 +1,6 @@
 use std::sync::RwLock;
 
+use cosmic_text::FontSystem;
 use ethel::{
     assets::{AssetMetadataRegistry, TextureId, TextureMetadata},
     render::Resolution,
@@ -639,6 +640,14 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 },
             )
             .expect("failed to evaluate taffy layout");
+    }
+
+    pub fn bind_system_fonts(&mut self) {
+        self.text_composer.set_font_system(FontSystem::new());
+    }
+
+    pub fn text_composer(&mut self) -> &mut TextComposer {
+        &mut self.text_composer
     }
 
     fn assert_null_archetype(&self, root_id: DirectIndex) -> Result<(), WidgetError> {

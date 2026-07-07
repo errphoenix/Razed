@@ -49,7 +49,7 @@ pub struct GlyphRaster {
     pub data: Vec<u8>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct GlyphAtlasTexture {
     view: Option<TextureView>,
 }

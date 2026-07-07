@@ -3,6 +3,7 @@ pub mod shaders;
 use std::sync::atomic::Ordering;
 
 use ethel::render::command::{DrawGroups, GpuCommandDispatch};
+use gui::text::GlyphAtlasTexture;
 
 #[cfg(feature = "devmode")]
 use crate::render::shaders::lines::DebugLinesData;
@@ -50,6 +51,8 @@ pub struct Renderer {
     lines_debug_buffer: DebugLinesData,
 
     pub textures_master_registry: assets::TextureRegistry,
+
+    pub glyph_atlas_texture: GlyphAtlasTexture,
 }
 
 impl ethel::RenderHandler<FrameDataBuffers> for Renderer {

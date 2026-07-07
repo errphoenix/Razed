@@ -32,7 +32,7 @@ use ethel::{
         },
     },
 };
-use gui::InterfaceSystem;
+use gui::{InterfaceSystem, text::GlyphAtlas};
 use janus::{
     context::DeltaTime,
     input::{Cursor, KeyEvent},
@@ -58,6 +58,7 @@ pub struct State {
     profiler: ethel::profile::Profiler,
 
     ui_system: InterfaceSystem,
+    pub glyph_atlas: GlyphAtlas,
 
     pub textures_metadata_registry: AssetMetadataRegistry<TextureMetadata>,
     pub texture_registry_pipe: RegistryPipe,
@@ -115,6 +116,7 @@ impl Default for State {
             local_keyev_buf: Default::default(),
             textures_metadata_registry: AssetMetadataRegistry::new(),
             texture_registry_pipe: Default::default(),
+            glyph_atlas: Default::default(),
         }
     }
 }
@@ -560,7 +562,7 @@ impl State {
     }
 
     pub fn ui_composite_batches(&mut self) {
-        self.ui_system.prepare_elements();
+        self.ui_system.prepare_elements(&mut self.glyph_atlas);
         let texture_metadata = &self.textures_metadata_registry;
         self.ui_system.composite_layers(texture_metadata);
         self.ui_system.finalize_batches();
