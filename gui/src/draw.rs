@@ -91,14 +91,16 @@ impl InterfaceAggregator<'_> {
         let text = self.texts.string[tdid];
         let metrics = self.texts.metrics[tdid];
         let font = self.texts.font_name[tdid];
-        let measurement = self.texts.measure[tdid];
 
         let text_string = ethel::assets::strings::fetch(&text)
             .expect("text element content string hash must be valid");
         let font_string = ethel::assets::strings::fetch(&font)
             .expect("text element font family string hash must be valid");
 
-        text_composer.set_buffer_size(Some(measurement.width), Some(measurement.height));
+        let core_bounds = self.commons.feedback_bounds[common_handle];
+        let size = core_bounds.size();
+
+        text_composer.set_buffer_size(Some(size.x), Some(size.y));
         text_composer.set_font_metrics(metrics);
         text_composer.set_text(text_string);
         text_composer.set_font(font_string);

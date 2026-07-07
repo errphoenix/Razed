@@ -79,7 +79,7 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
                     container: ContainerLayout::Block,
                     layout_position: LayoutPosition::Relative,
                     size: Some(Point {
-                        x: Value::Absolute(256.0),
+                        x: Value::Absolute(512.0),
                         y: Value::Absolute(128.0),
                     }),
                     align_self: ItemAlignment::Center,
@@ -87,7 +87,7 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
                     margin: Some(Rectangle::ZERO),
                     ..Default::default()
                 },
-                layer: 6,
+                layer: 5,
             },
             GENERIC_PANEL_PARAMS,
         ))
@@ -101,20 +101,17 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
                 children: None,
                 layout_options: LayoutOptions {
                     container: ContainerLayout::Block,
-                    size: Some(Point {
-                        x: Value::Absolute(160.0),
-                        y: Value::Absolute(72.0),
-                    }),
+                    justify_self: ItemAlignment::Center,
                     ..Default::default()
                 },
                 layer: 6,
             },
             TextParams {
-                string: *ethel::lazy_hash_str!("Quitj"),
+                string: *ethel::lazy_hash_str!("Quitj: the return.\nThis paragraph introduces the (not so) marvellous return of the tremendously awaited Quitj. Please, seek shelter.\nThis is not a drill: Quitj must be avoided. Do not interact with the enemy, at any cost."),
                 font_name: *ethel::lazy_hash_str!("Arial"),
                 color: glam::Vec4::ONE,
-                font_size: 32f32,
-                line_height: 38f32,
+                font_size: 24f32,
+                line_height: 28f32,
             },
         ))
         .unwrap();
