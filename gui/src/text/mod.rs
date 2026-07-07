@@ -5,7 +5,9 @@ use cosmic_text::{
 };
 use etagere::{AllocId, Allocation, AtlasAllocator};
 use ethel::assets::TextureId;
-use janus::texture::{ImageFormat, ImageType, Texture, TextureView};
+use janus::texture::{
+    ImageFormat, ImageType, Texture, TextureFiltering, TextureTarget, TextureView,
+};
 use lru::LruCache;
 
 use crate::draw::{InterfaceAttachment, InterfaceObject};
@@ -92,6 +94,7 @@ impl GlyphAtlasTexture {
             ImageType::Bits8,
             ImageFormat::SingleChannel,
         );
+        janus::texture::set_filter(TextureTarget::Flat, TextureFiltering::Nearest);
         self.view = Some(texture.view());
         texture
     }
@@ -362,7 +365,7 @@ impl TextComposer {
                     self.element_buffer.push(InterfaceObject {
                         position: glam::vec2(x, y),
                         size: glam::vec2(width, height),
-                        color: glam::Vec4::ZERO,
+                        color: glam::Vec4::ONE,
                         attachment: Some(InterfaceAttachment::TextureSection {
                             texture_id: GlyphAtlasTexture::resource_id(),
                             uv: [uv.ux, uv.uy, uv.vx, uv.vy],
