@@ -172,7 +172,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             if let Some(pipe) = &self.glyph_pipe {
                 let rasters = self.ui_system.text_composer().rasters();
                 for raster in rasters {
-                    println!("request x{}", raster.size_x);
                     pipe.send(raster).unwrap();
                 }
             }

@@ -1,8 +1,8 @@
 use ethel::render::Resolution;
 use gui::{
-    ButtonCallback, ButtonParams, ContainerLayout, ContentAlignment, CoreElementParams,
-    ElementParams, InterfaceSystem, ItemAlignment, LayoutOptions, LayoutPosition, PanelParams,
-    Point, Rectangle, TextParams, Value, Wrap, draw::Batch, style::FlexDirection,
+    ContainerLayout, ContentAlignment, CoreElementParams, ElementParams, ImageParams,
+    InterfaceSystem, ItemAlignment, LayoutOptions, LayoutPosition, PanelParams, Point, Rectangle,
+    TextParams, Value, Wrap, draw::Batch, style::FlexDirection, text::GlyphAtlasTexture,
 };
 use janus::texture::TextureKey;
 
@@ -107,14 +107,14 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
                     }),
                     ..Default::default()
                 },
-                layer: 7,
+                layer: 6,
             },
             TextParams {
                 string: *ethel::lazy_hash_str!("Quitj"),
                 font_name: *ethel::lazy_hash_str!("Arial"),
                 color: glam::Vec4::ONE,
-                font_size: 11f32,
-                line_height: 12f32,
+                font_size: 32f32,
+                line_height: 38f32,
             },
         ))
         .unwrap();

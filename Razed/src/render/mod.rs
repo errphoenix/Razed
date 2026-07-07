@@ -3,7 +3,7 @@ pub mod shaders;
 use std::sync::atomic::Ordering;
 
 use ethel::render::command::{DrawGroups, GpuCommandDispatch};
-use gui::text::GlyphAtlasTexture;
+use gui::text::{GlyphAtlasTexture, GlyphRaster};
 
 #[cfg(feature = "devmode")]
 use crate::render::shaders::lines::DebugLinesData;
@@ -53,6 +53,7 @@ pub struct Renderer {
     pub textures_master_registry: assets::TextureRegistry,
 
     pub glyph_atlas_texture: GlyphAtlasTexture,
+    pub glyph_pipe: Option<crossbeam::channel::Receiver<GlyphRaster>>,
 }
 
 impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
@@ -161,6 +162,15 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         self.frags_shader.uniform_camera_forward_vec3(cam_forward);
         self.frags_shader.uniform_projection_mat4(*proj);
         self.frags_shader.uniform_view_mat4(view_mat);
+
+        // copy requested glyphs to atlas
+        {
+            if let Some(pipe) = &self.glyph_pipe {
+                while let Ok(raster) = pipe.try_recv() {
+                    self.glyph_atlas_texture.copy_glyph(raster);
+                }
+            }
+        }
     }
 
     fn render_frame(

@@ -85,15 +85,8 @@ impl GlyphAtlasTexture {
     pub fn create_atlas_texture(&mut self, size: i32) -> Texture {
         janus::assert_gl!();
 
-        let bytes = vec![0u8; (size * size) as usize];
-
-        let texture = Texture::from_bytes(
-            size,
-            size,
-            &bytes,
-            ImageType::Bits8,
-            ImageFormat::SingleChannel,
-        );
+        let bytes = vec![0u8; (size * size * 4) as usize];
+        let texture = Texture::from_bytes(size, size, &bytes, ImageType::Bits8, ImageFormat::Rgba);
         janus::texture::set_filter(TextureTarget::Flat, TextureFiltering::Nearest);
         self.view = Some(texture.view());
         texture
@@ -229,12 +222,30 @@ impl GlyphAtlas {
         };
         self.uv_cache.insert(key, glyph_info);
 
+        let mut data = Vec::new();
+        match img.content {
+            // unpack single-channel to rgba
+            cosmic_text::SwashContent::Mask => {
+                data.reserve_exact(img.data.len() * 4);
+                for byte in img.data {
+                    data.push(255u8);
+                    data.push(255u8);
+                    data.push(255u8);
+                    data.push(byte);
+                }
+            }
+            // no op
+            cosmic_text::SwashContent::SubpixelMask | cosmic_text::SwashContent::Color => {
+                data = img.data
+            }
+        }
+
         let raster = GlyphRaster {
             offset_x: rect.min.x as u32,
             offset_y: rect.min.y as u32,
             size_x: rect.width() as u32,
             size_y: rect.height() as u32,
-            data: img.data,
+            data,
         };
         Some((glyph_info, Some(raster)))
     }
