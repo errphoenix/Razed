@@ -63,6 +63,8 @@ fn main() {
         |state: &mut State, renderer: &mut Renderer| {
             const GLYPH_ATLAS_SIZE: u32 = 2048;
 
+            let (raster_tx, raster_rx) = crossbeam::channel::unbounded();
+
             renderer.handler_init_callback(|handle| {
                 handle.textures_master_registry = textures_master_registry;
 
@@ -78,6 +80,8 @@ fn main() {
                 handle
                     .textures_master_registry
                     .add_handle(glyph_asset_handle);
+
+                handle.glyph_pipe = Some(raster_rx);
             });
             state.handler_init_callback(|handle| {
                 handle.frag_meshmap = fragment_mesh_mapping;
@@ -87,6 +91,8 @@ fn main() {
 
                 handle.glyph_atlas = GlyphAtlas::new(GLYPH_ATLAS_SIZE);
                 handle.ui_system_mut().bind_system_fonts();
+
+                handle.glyph_pipe = Some(raster_tx);
             });
             start_handler.init(state, renderer)
         },

@@ -32,7 +32,10 @@ use ethel::{
         },
     },
 };
-use gui::{InterfaceSystem, text::GlyphAtlas};
+use gui::{
+    InterfaceSystem,
+    text::{GlyphAtlas, GlyphRaster},
+};
 use janus::{
     context::DeltaTime,
     input::{Cursor, KeyEvent},
@@ -59,6 +62,7 @@ pub struct State {
 
     ui_system: InterfaceSystem,
     pub glyph_atlas: GlyphAtlas,
+    pub glyph_pipe: Option<crossbeam::channel::Sender<GlyphRaster>>,
 
     pub textures_metadata_registry: AssetMetadataRegistry<TextureMetadata>,
     pub texture_registry_pipe: RegistryPipe,
@@ -117,6 +121,7 @@ impl Default for State {
             textures_metadata_registry: AssetMetadataRegistry::new(),
             texture_registry_pipe: Default::default(),
             glyph_atlas: Default::default(),
+            glyph_pipe: None,
         }
     }
 }
@@ -158,6 +163,17 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                         first_vertex: 0,
                         base_instance: 0,
                     });
+                }
+            }
+        }
+
+        // send glyph raster copy requests
+        {
+            if let Some(pipe) = &self.glyph_pipe {
+                let rasters = self.ui_system.text_composer().rasters();
+                for raster in rasters {
+                    println!("request x{}", raster.size_x);
+                    pipe.send(raster).unwrap();
                 }
             }
         }
