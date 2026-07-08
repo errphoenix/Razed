@@ -1,8 +1,8 @@
 use ethel::render::Resolution;
 use gui::{
-    ContainerLayout, ContentAlignment, CoreElementParams, ElementParams, InterfaceSystem,
-    ItemAlignment, LayoutOptions, LayoutPosition, PanelParams, Point, Rectangle, TextParams, Value,
-    Wrap, draw::Batch, style::FlexDirection,
+    ButtonParams, ContainerLayout, ContentAlignment, CoreElementParams, ElementParams,
+    InterfaceSystem, ItemAlignment, LayoutOptions, LayoutPosition, PanelParams, Point, Rectangle,
+    TextParams, Value, Wrap, draw::Batch, style::FlexDirection,
 };
 use janus::texture::TextureKey;
 

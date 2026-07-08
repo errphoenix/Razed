@@ -35,8 +35,8 @@ ethel::shader_glsl! {
                 }
             };
             uniform {
-                projection: mat4 => glam::Mat4;
-                instance_offset: uint => u32;
+                length 1, projection: mat4 => glam::Mat4;
+                length 1, instance_offset: uint => u32;
             };
             type {
                 TYPE_QUAD_ELEMENT
@@ -89,8 +89,9 @@ ethel::shader_glsl! {
                     input texture_index: uint flat: true;
                 }
             };
-            sampler {
-                sampler2D texture_map array 16;
+            uniform {
+                length 16, texture_map: sampler2D => i32;
+                length 16, texture_masks: uint => u32;
             };
 
             src() "
@@ -98,8 +99,9 @@ ethel::shader_glsl! {
                 vec2 uv = tex_coord;
                 uint tex_index = texture_index;
 
+                float tex_mask = float(texture_masks[tex_index]);
                 vec4 tex_color = texture(texture_map[tex_index], uv);
-                outColor = color * tex_color;
+                outColor = color * mix(vec4(1.0), tex_color, tex_mask);
             "
         ];
     }
