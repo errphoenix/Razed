@@ -140,25 +140,28 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         }
 
         self.interface_shader.bind();
-        self.interface_shader.uniform_projection_mat4(*ortho_proj);
+        self.interface_shader
+            .uniform_projection_mat4v([*ortho_proj]);
 
         self.lattice_shader.bind();
-        self.lattice_shader.uniform_projection_mat4(*proj);
-        self.lattice_shader.uniform_view_mat4(view_mat);
+        self.lattice_shader.uniform_projection_mat4v([*proj]);
+        self.lattice_shader.uniform_view_mat4v([view_mat]);
 
         self.lines_shader.bind();
-        self.lines_shader.uniform_projection_mat4(*proj);
-        self.lines_shader.uniform_view_mat4(view_mat);
+        self.lines_shader.uniform_projection_mat4v([*proj]);
+        self.lines_shader.uniform_view_mat4v([view_mat]);
 
         self.debris_shader.bind();
-        self.debris_shader.uniform_camera_forward_vec3(cam_forward);
-        self.debris_shader.uniform_projection_mat4(*proj);
-        self.debris_shader.uniform_view_mat4(view_mat);
+        self.debris_shader
+            .uniform_camera_forward_vec3v([cam_forward]);
+        self.debris_shader.uniform_projection_mat4v([*proj]);
+        self.debris_shader.uniform_view_mat4v([view_mat]);
 
         self.frags_shader.bind();
-        self.frags_shader.uniform_camera_forward_vec3(cam_forward);
-        self.frags_shader.uniform_projection_mat4(*proj);
-        self.frags_shader.uniform_view_mat4(view_mat);
+        self.frags_shader
+            .uniform_camera_forward_vec3v([cam_forward]);
+        self.frags_shader.uniform_projection_mat4v([*proj]);
+        self.frags_shader.uniform_view_mat4v([view_mat]);
 
         // copy requested glyphs to atlas
         {
