@@ -1,8 +1,8 @@
 use ethel::render::Resolution;
 use gui::{
-    ContainerLayout, ContentAlignment, CoreElementParams, ElementParams, ImageParams,
-    InterfaceSystem, ItemAlignment, LayoutOptions, LayoutPosition, PanelParams, Point, Rectangle,
-    TextParams, Value, Wrap, draw::Batch, style::FlexDirection, text::GlyphAtlasTexture,
+    ContainerLayout, ContentAlignment, CoreElementParams, ElementParams, InterfaceSystem,
+    ItemAlignment, LayoutOptions, LayoutPosition, PanelParams, Point, Rectangle, TextParams, Value,
+    Wrap, draw::Batch, style::FlexDirection,
 };
 use janus::texture::TextureKey;
 
@@ -104,7 +104,7 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
                     justify_self: ItemAlignment::Center,
                     ..Default::default()
                 },
-                layer: 6,
+                layer: 5,
             },
             TextParams {
                 string: *ethel::lazy_hash_str!("Quitj: the return.\nThis paragraph introduces the (not so) marvellous return of the tremendously awaited Quitj. Please, seek shelter.\nThis is not a drill: Quitj must be avoided. Do not interact with the enemy, at any cost."),

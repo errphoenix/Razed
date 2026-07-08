@@ -141,9 +141,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         self.interface_shader.bind();
         self.interface_shader.uniform_projection_mat4(*ortho_proj);
-        let sampler_uniforms = std::array::from_fn(|i| i as u32);
-        self.interface_shader
-            .uniform_texture_map_sampler2Dv(sampler_uniforms);
 
         self.lattice_shader.bind();
         self.lattice_shader.uniform_projection_mat4(*proj);
@@ -348,7 +345,12 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         self.frags_shader = shaders::ShaderFragment::new_compiled();
         self.debris_shader = shaders::ShaderDebris::new_compiled();
         self.lines_shader = shaders::ShaderDebugLines::new_compiled();
+
         self.interface_shader = gui::shaders::ShaderUiBasic::new_compiled();
+        let sampler_uniforms = std::array::from_fn(|i| i as i32);
+        self.interface_shader.bind();
+        self.interface_shader
+            .uniform_texture_map_sampler2Dv(sampler_uniforms);
 
         self.command_process_compute =
             shaders::compute::ComputeShaderProcessCommand::new_compiled();
