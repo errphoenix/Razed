@@ -2,7 +2,7 @@ use ethel::render::Resolution;
 use gui::{
     ButtonParams, ContainerLayout, ContentAlignment, CoreElementParams, ElementParams,
     InterfaceSystem, ItemAlignment, LayoutOptions, LayoutPosition, PanelParams, Point, Rectangle,
-    TextParams, Value, Wrap, draw::Batch, style::FlexDirection,
+    TextContent, TextParams, Value, Wrap, draw::Batch, style::FlexDirection,
 };
 use janus::texture::TextureKey;
 
@@ -90,8 +90,8 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
             },
             ButtonParams {
                 text: TextParams {
-                    string: *ethel::lazy_hash_str!("Test Button"),
-                    font_name: *ethel::lazy_hash_str!("Papyrus"),
+                    content: TextContent::Static("I AM QUITJ"),
+                    font_name: "Papyrus",
                     color: glam::Vec4::ONE,
                     font_size: 32f32,
                     line_height: 36f32,
@@ -123,8 +123,8 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
                 layer: 5,
             },
             TextParams {
-                string: *ethel::lazy_hash_str!("Quitj: the return.\nThis paragraph introduces the (not so) marvellous return of the tremendously awaited Quitj. Please, seek shelter.\nThis is not a drill: Quitj must be avoided. Do not interact with the enemy, at any cost."),
-                font_name: *ethel::lazy_hash_str!("Arial"),
+                content: TextContent::Static("Quitj: the return.\nThis paragraph introduces the (not so) marvellous return of the tremendously awaited Quitj. Please, seek shelter.\nThis is not a drill: Quitj must be avoided. Do not interact with the enemy, at any cost."),
+                font_name: "Arial",
                 color: glam::Vec4::ONE,
                 font_size: 24f32,
                 line_height: 28f32,

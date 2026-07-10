@@ -7,7 +7,7 @@ use ethel::{
     state::data::{Column, DirectIndex, IndirectIndex},
 };
 
-use janus::{context::DeltaTime, input::KeyEvent};
+use janus::{StringHash, context::DeltaTime, input::KeyEvent};
 
 pub mod draw;
 pub mod env;
@@ -46,6 +46,22 @@ pub struct InteractionTime {
     pub frames: u32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TextContent {
+    Static(&'static str),
+    /// Variable, dynamic String text content polled from the
+    /// [`environment`](env::UiEnv).
+    Variable(StringHash),
+}
+impl Default for TextContent {
+    fn default() -> Self {
+        Self::Static("")
+    }
+}
+impl TextContent {
+    pub(crate) const FALLBACK: &str = "Invalid text reference";
+}
+
 ethel::table_spec! {
     struct InterfaceCommon {
         archetype: ComponentKind;
@@ -77,8 +93,8 @@ ethel::table_spec! {
 
 ethel::table_spec! {
     struct InterfaceText {
-        string: CachedStringHash;
-        font_name: CachedStringHash;
+        content: TextContent;
+        font_name: &'static str;
         color: glam::Vec4;
         metrics: FontMetrics;
         measure: TextMeasurement;
@@ -426,6 +442,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
 
     pub fn prepare_elements(&mut self, glyph_atlas: &mut GlyphAtlas) {
         let aggregator = InterfaceAggregator {
+            environment: &self.environment,
             commons: InterfaceCommonRowTableView::from(&self.commons),
             panels: InterfacePanelRowTableView::from(&self.panels),
             texts: InterfaceTextRowTableView::from(&self.texts),
@@ -640,17 +657,32 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                             .expect("text id must be valid")
                             .as_index();
 
-                        let text = self.texts.string[tdid];
+                        let content = self.texts.content[tdid];
                         let metrics = self.texts.metrics[tdid];
                         let font = self.texts.font_name[tdid];
 
-                        let text_string = ethel::assets::strings::fetch(text);
-                        let font_string = ethel::assets::strings::fetch(font);
+                        let text_string = match content {
+                            TextContent::Static(text) => text,
+                            TextContent::Variable(string_hash) => {
+                                let value = &self.environment.get(&string_hash);
+                                if let Some(value) = value {
+                                    if let Some(hashed_static) = value.resolve_hashed_literal() {
+                                        hashed_static
+                                    } else if let Some(hashed_dynamic) = value.as_dynamic_string() {
+                                        hashed_dynamic
+                                    } else {
+                                        TextContent::FALLBACK
+                                    }
+                                } else {
+                                    TextContent::FALLBACK
+                                }
+                            }
+                        };
 
                         self.text_composer.set_buffer_size(width, height);
                         self.text_composer.set_font_metrics(metrics);
                         self.text_composer.set_text(text_string);
-                        self.text_composer.set_font(font_string);
+                        self.text_composer.set_font(font);
                         let measurement = self.text_composer.measure();
 
                         self.texts.measure[tdid] = measurement;
@@ -718,15 +750,15 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     pub fn make_text(
         &mut self,
         id: WidgetId,
-        string: CachedStringHash,
-        font_name: CachedStringHash,
+        content: TextContent,
+        font_name: &'static str,
         color: glam::Vec4,
         metrics: FontMetrics,
     ) -> Result<IndirectIndex, WidgetError> {
         if let Some(commons_id) = self.commons.solve_indirect(id.0) {
             self.assert_null_archetype(commons_id)?;
             let text_element = (
-                string,
+                content,
                 font_name,
                 color,
                 metrics,
@@ -941,7 +973,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                         self.add_new(Some(root_id), None, BUTTON_LABEL_LAYOUT, core.layer)?;
                     let special_text_id = self.make_text(
                         root_text_id,
-                        text.string,
+                        text.content,
                         text.font_name,
                         text.color,
                         FontMetrics {
@@ -964,7 +996,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             }
             ElementParams::Text(_, text_params) => self.make_text(
                 root_id,
-                text_params.string,
+                text_params.content,
                 text_params.font_name,
                 text_params.color,
                 FontMetrics {
@@ -1049,17 +1081,15 @@ impl Default for ButtonParams {
 
 #[derive(Clone, Debug)]
 pub struct TextParams {
-    pub string: CachedStringHash,
-    pub font_name: CachedStringHash,
+    pub content: TextContent,
+    pub font_name: &'static str,
     pub color: glam::Vec4,
     pub font_size: f32,
     pub line_height: f32,
 }
 impl TextParams {
-    ethel::lazy_hash_str! {
-        pub DEFAULT_TEXT = "Lorem Ipsum Blah Blah";
-        pub DEFAULT_FONT = "Arial";
-    }
+    pub const DEFAULT_TEXT: TextContent = TextContent::Static("Lorem Ipsum Blah Blah");
+    pub const DEFAULT_FONT: &'static str = "Arial";
 
     pub const DEFAULT_COLOR: glam::Vec4 = glam::Vec4::ONE;
     pub const DEFAULT_FONT_SIZE: f32 = 11.0;
@@ -1068,8 +1098,8 @@ impl TextParams {
 impl Default for TextParams {
     fn default() -> Self {
         Self {
-            string: *Self::DEFAULT_TEXT,
-            font_name: *Self::DEFAULT_FONT,
+            content: Self::DEFAULT_TEXT,
+            font_name: Self::DEFAULT_FONT,
             color: Self::DEFAULT_COLOR,
             font_size: Self::DEFAULT_FONT_SIZE,
             line_height: Self::DEFAULT_LINE_HEIGHT,

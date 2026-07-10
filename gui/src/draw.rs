@@ -8,12 +8,14 @@ use janus::texture::{TextureKey, TextureTarget};
 
 use crate::{
     InterfaceButtonRowTableView, InterfaceCommonRowTableView, InterfaceImageRowTableView,
-    InterfacePanelRowTableView, InterfaceTextRowTableView,
+    InterfacePanelRowTableView, InterfaceTextRowTableView, TextContent,
+    env::UiEnv,
     text::{GlyphAtlas, TextComposer},
 };
 
 #[derive(Clone, Copy, Debug)]
 pub struct InterfaceAggregator<'t> {
+    pub environment: &'t UiEnv,
     pub commons: InterfaceCommonRowTableView<'t>,
     pub panels: InterfacePanelRowTableView<'t>,
     pub texts: InterfaceTextRowTableView<'t>,
@@ -87,12 +89,27 @@ impl InterfaceAggregator<'_> {
         out: &mut Vec<InterfaceObject>,
     ) {
         let tdid = self.texts.solve(text_index).as_index();
-        let text = self.texts.string[tdid];
+        let content = self.texts.content[tdid];
         let metrics = self.texts.metrics[tdid];
         let font = self.texts.font_name[tdid];
 
-        let text_string = ethel::assets::strings::fetch(text);
-        let font_string = ethel::assets::strings::fetch(font);
+        let text_string = match content {
+            TextContent::Static(text) => text,
+            TextContent::Variable(string_hash) => {
+                let value = &self.environment.get(&string_hash);
+                if let Some(value) = value {
+                    if let Some(hashed_static) = value.resolve_hashed_literal() {
+                        hashed_static
+                    } else if let Some(hashed_dynamic) = value.as_dynamic_string() {
+                        hashed_dynamic
+                    } else {
+                        TextContent::FALLBACK
+                    }
+                } else {
+                    TextContent::FALLBACK
+                }
+            }
+        };
 
         let core_bounds = self.commons.feedback_bounds[common_handle];
         let size = core_bounds.size();
@@ -100,7 +117,7 @@ impl InterfaceAggregator<'_> {
         text_composer.set_buffer_size(Some(size.x), Some(size.y));
         text_composer.set_font_metrics(metrics);
         text_composer.set_text(text_string);
-        text_composer.set_font(font_string);
+        text_composer.set_font(font);
 
         let anchor = self.commons.feedback_anchor[common_handle];
         let layer = self.commons.layer[common_handle];
