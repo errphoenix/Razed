@@ -10,6 +10,7 @@ use ethel::{
 use janus::{context::DeltaTime, input::KeyEvent};
 
 pub mod draw;
+pub mod env;
 pub mod shaders;
 pub mod style;
 pub mod text;
