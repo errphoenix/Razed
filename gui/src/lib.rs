@@ -21,6 +21,7 @@ use taffy::prelude::*;
 
 use crate::{
     draw::{Batch, BatchingLayerCompositor, InterfaceAggregator, InterfaceObject},
+    env::UiEnv,
     text::{FontMetrics, GlyphAtlas, TextComposer, TextMeasurement, font::FontLibrary},
 };
 
@@ -109,8 +110,8 @@ ethel::table_spec! {
 pub enum ButtonCallback {
     #[default]
     None,
-    Once(fn()),
-    Repeating(fn()),
+    Once(fn(&mut UiEnv)),
+    Repeating(fn(&mut UiEnv)),
 }
 
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -282,6 +283,8 @@ pub struct InterfaceSystem<const LAYERS: usize = 10> {
 
     text_composer: TextComposer,
     font_library: FontLibrary,
+
+    environment: UiEnv,
 }
 /// Safety:
 /// TaffyTree is !Send due to internal implementation details related to raw
@@ -295,6 +298,10 @@ unsafe impl<const LAYERS: usize> Send for InterfaceSystem<LAYERS> {}
 unsafe impl<const LAYERS: usize> Sync for InterfaceSystem<LAYERS> {}
 impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     pub fn new(resolution: Resolution) -> Self {
+        Self::with_environment(resolution, UiEnv::new())
+    }
+
+    pub fn with_environment(resolution: Resolution, environment: UiEnv) -> Self {
         let mut layout = TaffyTree::with_capacity(1);
         const ROOT_ID: WidgetId = WidgetId(IndirectIndex::null(0));
 
@@ -325,10 +332,19 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             compositor: BatchingLayerCompositor::new(),
             text_composer: TextComposer::new(),
             font_library: FontLibrary::new(),
+            environment,
         }
     }
 
     pub fn with_capacity(resolution: Resolution, capacity: usize) -> Self {
+        Self::with_environment_and_capacity(resolution, UiEnv::new(), capacity)
+    }
+
+    pub fn with_environment_and_capacity(
+        resolution: Resolution,
+        environment: UiEnv,
+        capacity: usize,
+    ) -> Self {
         let mut layout = TaffyTree::with_capacity(capacity + 1);
         const ROOT_ID: WidgetId = WidgetId(IndirectIndex::null(0));
 
@@ -359,7 +375,16 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             compositor: BatchingLayerCompositor::new(),
             text_composer: TextComposer::new(),
             font_library: FontLibrary::new(),
+            environment,
         }
+    }
+
+    pub const fn env(&self) -> &UiEnv {
+        &self.environment
+    }
+
+    pub const fn env_mut(&mut self) -> &mut UiEnv {
+        &mut self.environment
     }
 
     pub const fn font_library(&mut self) -> &mut FontLibrary {
@@ -465,10 +490,10 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                             ButtonCallback::None => {}
                             ButtonCallback::Once(cb) => {
                                 if press_time[i].frames == 1 {
-                                    cb()
+                                    cb(&mut self.environment)
                                 }
                             }
-                            ButtonCallback::Repeating(cb) => cb(),
+                            ButtonCallback::Repeating(cb) => cb(&mut self.environment),
                         }
                     }
                 }

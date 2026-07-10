@@ -47,12 +47,11 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
                     container: ContainerLayout::Flexbox {
                         direction: FlexDirection::Column,
                         wrap: Wrap::DontWrap,
-                        justify_content: ContentAlignment::Center,
+                        justify_content: ContentAlignment::End,
                         align_content: ContentAlignment::Center,
                         align_items: ItemAlignment::Center,
                     },
                     layout_position: LayoutPosition::Relative,
-                    //margin: Some(Rectangle::splat(Value::Absolute(64.0))),
                     margin: Some(Rectangle {
                         left: Value::Absolute(64.0),
                         ..Default::default()
@@ -70,8 +69,8 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
         .unwrap()
         .0;
 
-    let subpanel = system
-        .create_element(ElementParams::Panel(
+    system
+        .create_element(ElementParams::Button(
             CoreElementParams {
                 parent: Some(root),
                 children: None,
@@ -89,7 +88,19 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
                 },
                 layer: 5,
             },
-            GENERIC_PANEL_PARAMS,
+            ButtonParams {
+                text: TextParams {
+                    string: *ethel::lazy_hash_str!("Test Button"),
+                    font_name: *ethel::lazy_hash_str!("Papyrus"),
+                    color: glam::Vec4::ONE,
+                    font_size: 32f32,
+                    line_height: 36f32,
+                },
+                bg_color: glam::Vec3::Y,
+                bg_hover_tint: glam::vec4(1.0, 0.0, 0.0, 0.8),
+                bg_press_tint: glam::vec4(0.0, 0.0, 1.0, 0.96),
+                callback: gui::ButtonCallback::None,
+            },
         ))
         .unwrap()
         .0;
@@ -97,11 +108,16 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
     system
         .create_element(ElementParams::Text(
             CoreElementParams {
-                parent: Some(subpanel),
+                parent: Some(root),
                 children: None,
                 layout_options: LayoutOptions {
                     container: ContainerLayout::Block,
                     justify_self: ItemAlignment::Center,
+                    align_self: ItemAlignment::End,
+                    margin: Some(Rectangle {
+                        bottom: Value::Absolute(32f32),
+                        ..Default::default()
+                    }),
                     ..Default::default()
                 },
                 layer: 5,
