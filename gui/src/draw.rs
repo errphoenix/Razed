@@ -8,7 +8,7 @@ use janus::texture::{TextureKey, TextureTarget};
 
 use crate::{
     InterfaceButtonRowTableView, InterfaceCommonRowTableView, InterfaceImageRowTableView,
-    InterfacePanelRowTableView, InterfaceTextRowTableView, WidgetId,
+    InterfacePanelRowTableView, InterfaceTextRowTableView,
     text::{GlyphAtlas, TextComposer},
 };
 
@@ -41,10 +41,9 @@ impl InterfaceAggregator<'_> {
                 crate::ComponentKind::Image(indirect_index) => {
                     self.gather_image(index, indirect_index, buffer)
                 }
-                crate::ComponentKind::Button {
-                    handle,
-                    text_handle,
-                } => self.gather_button(index, handle, text_handle, buffer),
+                crate::ComponentKind::Button { handle, .. } => {
+                    self.gather_button(index, handle, buffer)
+                }
                 crate::ComponentKind::Text(indirect_index) => {
                     self.gather_text(index, indirect_index, text_composer, glyph_atlas, buffer);
                 }
@@ -92,10 +91,8 @@ impl InterfaceAggregator<'_> {
         let metrics = self.texts.metrics[tdid];
         let font = self.texts.font_name[tdid];
 
-        let text_string = ethel::assets::strings::fetch(&text)
-            .expect("text element content string hash must be valid");
-        let font_string = ethel::assets::strings::fetch(&font)
-            .expect("text element font family string hash must be valid");
+        let text_string = ethel::assets::strings::fetch(text);
+        let font_string = ethel::assets::strings::fetch(font);
 
         let core_bounds = self.commons.feedback_bounds[common_handle];
         let size = core_bounds.size();
@@ -140,7 +137,6 @@ impl InterfaceAggregator<'_> {
         &self,
         common_handle: usize,
         button_index: IndirectIndex,
-        _text_root_id: WidgetId,
         out: &mut Vec<InterfaceObject>,
     ) {
         let hovered = self.commons.hovered[common_handle];
@@ -157,8 +153,6 @@ impl InterfaceAggregator<'_> {
         let mut color = glam::vec4(base_color.x, base_color.y, base_color.z, 1.0);
         color = color * (1.0 - hover_f) + hover_f * hover_tint;
         color = color * (1.0 - press_f) + press_f * press_tint;
-
-        // todo: text
 
         let bounds = self.commons.feedback_bounds[common_handle];
         let layer = self.commons.layer[common_handle];

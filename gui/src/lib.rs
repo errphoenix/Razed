@@ -2,12 +2,12 @@ use std::sync::RwLock;
 
 use cosmic_text::FontSystem;
 use ethel::{
-    assets::{AssetMetadataRegistry, TextureId, TextureMetadata},
+    assets::{AssetMetadataRegistry, CachedStringHash, TextureId, TextureMetadata},
     render::Resolution,
     state::data::{Column, DirectIndex, IndirectIndex},
 };
 
-use janus::{StringHash, context::DeltaTime, input::KeyEvent};
+use janus::{context::DeltaTime, input::KeyEvent};
 
 pub mod draw;
 pub mod shaders;
@@ -75,8 +75,8 @@ ethel::table_spec! {
 
 ethel::table_spec! {
     struct InterfaceText {
-        string: StringHash;
-        font_name: StringHash;
+        string: CachedStringHash;
+        font_name: CachedStringHash;
         color: glam::Vec4;
         metrics: FontMetrics;
         measure: TextMeasurement;
@@ -618,10 +618,8 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                         let metrics = self.texts.metrics[tdid];
                         let font = self.texts.font_name[tdid];
 
-                        let text_string = ethel::assets::strings::fetch(&text)
-                            .expect("text element content string hash must be valid");
-                        let font_string = ethel::assets::strings::fetch(&font)
-                            .expect("text element font family string hash must be valid");
+                        let text_string = ethel::assets::strings::fetch(text);
+                        let font_string = ethel::assets::strings::fetch(font);
 
                         self.text_composer.set_buffer_size(width, height);
                         self.text_composer.set_font_metrics(metrics);
@@ -694,8 +692,8 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     pub fn make_text(
         &mut self,
         id: WidgetId,
-        string: StringHash,
-        font_name: StringHash,
+        string: CachedStringHash,
+        font_name: CachedStringHash,
         color: glam::Vec4,
         metrics: FontMetrics,
     ) -> Result<IndirectIndex, WidgetError> {
@@ -1025,8 +1023,8 @@ impl Default for ButtonParams {
 
 #[derive(Clone, Debug)]
 pub struct TextParams {
-    pub string: StringHash,
-    pub font_name: StringHash,
+    pub string: CachedStringHash,
+    pub font_name: CachedStringHash,
     pub color: glam::Vec4,
     pub font_size: f32,
     pub line_height: f32,
