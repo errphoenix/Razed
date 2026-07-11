@@ -238,13 +238,17 @@ impl XpbdLatticeBuilder {
             let a = constraint.node_a;
             let b = constraint.node_b;
             let compliance = constraint.options.compliance;
-            let rest_length = constraint.options.rest_length.unwrap_or_else(|| {
-                let p_a = nodes.positions[a as usize];
-                let p_b = nodes.positions[b as usize];
-                p_a.distance(p_b)
-            });
 
-            constraints.add([a, b], compliance, rest_length);
+            let p_a = nodes.positions[a as usize];
+            let p_b = nodes.positions[b as usize];
+            let edge = p_b - p_a;
+
+            let rest_length = constraint
+                .options
+                .rest_length
+                .unwrap_or_else(|| p_a.distance(p_b));
+
+            constraints.add([a, b], edge, compliance, rest_length);
         });
 
         RawXpbdLattice { nodes, constraints }
@@ -296,6 +300,7 @@ impl RawNodes {
 #[derive(Clone, Debug, Default)]
 pub struct RawConstraints {
     pub node_ids: Vec<[u32; 2]>,
+    pub edges: Vec<glam::Vec3>,
     pub compliances: Vec<f32>,
     pub rest_lengths: Vec<f32>,
 }
@@ -308,13 +313,15 @@ impl RawConstraints {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             node_ids: Vec::with_capacity(capacity),
+            edges: Vec::with_capacity(capacity),
             compliances: Vec::with_capacity(capacity),
             rest_lengths: Vec::with_capacity(capacity),
         }
     }
 
-    pub fn add(&mut self, nodes: [u32; 2], compliance: f32, rest_length: f32) {
+    pub fn add(&mut self, nodes: [u32; 2], edge: glam::Vec3, compliance: f32, rest_length: f32) {
         self.node_ids.push(nodes);
+        self.edges.push(edge);
         self.compliances.push(compliance);
         self.rest_lengths.push(rest_length);
     }
@@ -327,11 +334,16 @@ impl RawConstraints {
         &self,
     ) -> std::iter::Zip<
         std::slice::Iter<'_, [u32; 2]>,
-        std::iter::Zip<std::slice::Iter<'_, f32>, std::slice::Iter<'_, f32>>,
+        std::iter::Zip<
+            std::slice::Iter<'_, glam::Vec3>,
+            std::iter::Zip<std::slice::Iter<'_, f32>, std::slice::Iter<'_, f32>>,
+        >,
     > {
-        self.node_ids
-            .iter()
-            .zip(self.compliances.iter().zip(&self.rest_lengths))
+        self.node_ids.iter().zip(
+            self.edges
+                .iter()
+                .zip(self.compliances.iter().zip(&self.rest_lengths)),
+        )
     }
 }
 
