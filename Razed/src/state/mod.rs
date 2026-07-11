@@ -437,39 +437,12 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         _view_point: &janus::sync::TriCell<camera::ViewPoint>,
         delta: janus::context::DeltaTime,
     ) {
-        self.lattice.clear_damage_buffers();
-
-        self.profiler.capture_duration("lattice_sync_integ", || {
-            let fragments = FragmentsRowTableView::from(self.fragments.data());
-            self.lattice.pull_integrity_mass(&fragments);
-            self.lattice.sync_constraint_attributes();
+        self.profiler.capture_duration("lattice_update", || {
+            self.lattice.update(delta);
         });
-
-        self.profiler.capture_duration("lattice_trivialities", || {
-            const WIND_FORCE: f32 = 0.0;
-            self.lattice
-                .apply_forces_batched(glam::vec3(WIND_FORCE, -9.81, WIND_FORCE));
-
-            let deforms = DeformsRowTableView::from(self.deforms.data());
-            self.fragments.compute_world_positions(&deforms);
-
-            // synchronizes lattice damage from xpbd-lattice solver
-            self.lattice.register_dead_nodes();
+        self.profiler.capture_duration("debris_simulate", || {
+            self.debris.simulate_bodies(delta);
         });
-
-        //self.process_cage_damage();
-
-        // synchronizes lattice and cage damage to fragments.
-        // after this point, the order of fragment elements must not change;
-        // i.e. there must be no free operations on the fragment table until
-        // after the release_debris_bodies function.
-        self.process_fragment_damage();
-        self.deforms.delete_dead_points();
-        self.release_debris_bodies();
-        self.delete_disabled_fragments();
-
-        self.update_subsystems(delta);
-        self.update_debris(delta);
     }
 
     fn on_key_event(&mut self, event: KeyEvent) {
@@ -554,6 +527,49 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         }
 
         self.local_keyev_buf.clear();
+
+        self.lattice.clear_damage_buffers();
+        self.profiler.capture_duration("lattice_sync_integ", || {
+            let fragments = FragmentsRowTableView::from(self.fragments.data());
+            self.lattice.pull_integrity_mass(&fragments);
+            self.lattice.sync_constraint_attributes();
+        });
+
+        self.profiler.capture_duration("lattice_trivialities", || {
+            const WIND_FORCE: f32 = 0.0;
+            self.lattice
+                .apply_forces_batched(glam::vec3(WIND_FORCE, -9.81, WIND_FORCE));
+
+            let deforms = DeformsRowTableView::from(self.deforms.data());
+            self.fragments.compute_world_positions(&deforms);
+
+            // synchronizes lattice damage from xpbd-lattice solver
+            self.lattice.register_dead_nodes();
+        });
+
+        //self.process_cage_damage();
+
+        // synchronizes lattice and cage damage to fragments.
+        // after this point, the order of fragment elements must not change;
+        // i.e. there must be no free operations on the fragment table until
+        // after the release_debris_bodies function.
+        self.process_fragment_damage();
+        self.deforms.delete_dead_points();
+        self.release_debris_bodies();
+        self.delete_disabled_fragments();
+
+        self.profiler.capture_duration("cage_update", || {
+            let lattice = NodesRowTableView::from(self.lattice.nodes());
+            self.deforms.deform(&lattice)
+        });
+
+        self.profiler.capture_duration("debris_sleep", || {
+            self.debris.accumulate_motion();
+            self.debris.freeze_old_debris(delta);
+        });
+        self.profiler.capture_duration("debris_hash", || {
+            self.debris.hash_debris();
+        });
     }
 }
 
@@ -754,30 +770,6 @@ impl State {
 
         self.deforms.clear_damage_buffers();
         self.deforms.sync_lattice_damage(degenerate_nodes, &lattice);
-    }
-
-    fn update_debris(&mut self, delta: DeltaTime) {
-        self.profiler.capture_duration("debris_hash", || {
-            self.debris.hash_debris();
-        });
-        self.profiler.capture_duration("debris_simulate", || {
-            self.debris.simulate_bodies(delta);
-        });
-        self.profiler.capture_duration("debris_sleep", || {
-            self.debris.accumulate_motion();
-            self.debris.freeze_old_debris(delta);
-        });
-    }
-
-    fn update_subsystems(&mut self, delta: DeltaTime) {
-        self.profiler.capture_duration("lattice_update", || {
-            self.lattice.update(delta);
-        });
-
-        self.profiler.capture_duration("cage_update", || {
-            let lattice = NodesRowTableView::from(self.lattice.nodes());
-            self.deforms.deform(&lattice)
-        });
     }
 
     fn spawn_debug_structure(&mut self, view_point: &ViewPoint) {
