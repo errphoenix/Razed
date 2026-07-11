@@ -148,25 +148,71 @@ impl DeformSystem {
     }
 
     pub fn deform(&mut self, lattice: &NodesRowTableView) {
-        let (deforms, pose, controllers, binds) = self.data.split_mut();
-        for (deform, pose, controllers, binds) in deforms.join(pose).join(controllers).join(binds) {
-            *deform = glam::Vec3::ZERO;
-            controllers.iter().zip(binds.iter()).for_each(
-                |(&ControlPoint { id, weight }, &bind)| {
-                    if id.as_int() == 0 {
-                        return;
-                    }
+        let deforms = &mut self.data.deformed;
+        let pose = &self.data.pose;
+        let controllers = &self.data.controllers;
+        let node_binds = &self.data.binds;
 
-                    // SAFETY:
-                    // we assume the indirect index is always valid
-                    let position = unsafe { lattice.current_pos_unchecked(id) };
-                    let delta = position - bind;
+        for ((deform, &pose), (controllers, controller_bind)) in deforms
+            .iter_mut()
+            .zip(pose)
+            .zip(controllers.iter().zip(node_binds))
+        {
+            // rotation blending quaternion from node rotations
+            let r_blend = {
+                let (master_rot, master_w, master_id) = {
+                    let (master_point, mw) = controllers.iter().fold(
+                        (IndirectIndex::default(), 0f32),
+                        |(mid, mw), &ControlPoint { id, weight }| {
+                            if weight > mw { (id, weight) } else { (mid, mw) }
+                        },
+                    );
+                    let rot = glam::Quat::from_mat3(lattice.rotation_ex(master_point));
+                    (rot, mw, master_point.as_int())
+                };
 
-                    *deform += delta * weight;
-                },
-            );
+                controllers
+                    .iter()
+                    .fold(
+                        master_rot * master_w,
+                        |blend, &ControlPoint { id, weight }| {
+                            if id.as_int() == 0 || id.as_int() == master_id {
+                                return blend;
+                            }
 
-            *deform += *pose;
+                            let mat = lattice.rotation_ex(id);
+                            let quat = glam::Quat::from_mat3(mat);
+                            let quat = if quat.dot(master_rot) < 0.0 {
+                                -quat
+                            } else {
+                                quat
+                            };
+
+                            blend + (quat * weight)
+                        },
+                    )
+                    .normalize()
+            };
+
+            // bind & current blending vecs from node bind and current positions
+            let (b_blend, p_blend) = {
+                controllers.iter().zip(controller_bind).fold(
+                    (glam::Vec3::ZERO, glam::Vec3::ZERO),
+                    |(b, p), (controller, &c_bind)| {
+                        let c_id = controller.id;
+                        let c_w = controller.weight;
+
+                        let pos = lattice.current_pos(c_id);
+                        let bd = c_bind * c_w;
+                        let pd = pos * c_w;
+
+                        (b + bd, p + pd)
+                    },
+                )
+            };
+
+            // final LBS
+            *deform = r_blend * (pose - b_blend) + p_blend;
         }
     }
 
