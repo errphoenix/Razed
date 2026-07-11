@@ -716,7 +716,7 @@ impl XpbdSolver {
             let eff_masses = constraints.effective_masses;
             let integrities = constraints.integrities;
 
-            for (((handle, lambda), (&eff_mass, &integrity)), &a) in handles
+            for (((handle, lambda), (&eff_mass, &integrity)), _a) in handles
                 .iter()
                 .zip(lambdas)
                 .zip(eff_masses.iter().zip(integrities))
@@ -729,7 +729,6 @@ impl XpbdSolver {
                 let threshold = integrity * BREAK_THRESHOLD;
                 let compression_threshold = integrity.exp() - 1.0;
 
-
                 if force_strain > threshold
                     || force_strain < -compression_threshold * BREAK_THRESHOLD
                 {
@@ -737,14 +736,6 @@ impl XpbdSolver {
                 }
             }
         }
-
-        // println!(
-        //     "strain.. max: {} / min: {} // threshold.. max: {} / min: {}",
-        //     unsafe { MAX_STRAIN },
-        //     unsafe { MIN_STRAIN },
-        //     unsafe { MAX_INT },
-        //     unsafe { MIN_INT }
-        // );
 
         for _ in 0..self.substeps {
             self.substep(node_table, constraint_table);
@@ -858,7 +849,7 @@ impl XpbdSolver {
         let forces = nodes.forces;
         let velocities = nodes.velocities;
 
-        for ((n_pos, c_pos), (forces, vel)) in proj_pos
+        for ((n_pos, c_pos), (_forces, vel)) in proj_pos
             .iter_mut()
             .zip(live_pos)
             .zip(forces.iter_mut().zip(velocities))
