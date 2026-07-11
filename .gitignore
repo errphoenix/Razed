@@ -2,4 +2,7 @@
 Cargo.lock
 *.bin
 *.sh
-/game/perf_graphs/*
+perf_graphs/*
+*.svg
+*.png
+*.data*
