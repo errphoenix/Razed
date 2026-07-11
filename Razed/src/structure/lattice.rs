@@ -11,11 +11,14 @@ ethel::table_spec! {
     struct Nodes {
         predicted_pos: glam::Vec3;
         current_pos: glam::Vec3;
+
         mass: f32;
         inv_mass: f32;
         forces: glam::Vec3;
         velocity: glam::Vec3;
+
         covariant: glam::Mat3;
+        rotation_ex: glam::Mat3;
     }
 }
 
@@ -116,6 +119,79 @@ impl LatticeSystem {
     pub fn clear_damage_buffers(&mut self) {
         self.damaged_nodes_data.clear();
         self.damaged_nodes_hash.clear();
+    }
+
+    pub fn compute_edges(&mut self) {
+        let links = &self.links.relation;
+        let edges = &mut self.links.edge;
+        let nodes = &self.nodes.current_pos;
+
+        for (&[a, b], edge) in links.iter().zip(edges) {
+            let di_a = self
+                .nodes
+                .solve_indirect(a)
+                .expect("registered node is always present");
+            let di_b = self
+                .nodes
+                .solve_indirect(b)
+                .expect("registered node is always present");
+            let p_a = nodes[di_a.as_index()];
+            let p_b = nodes[di_b.as_index()];
+
+            let e_ab = p_b - p_a;
+            *edge = e_ab;
+        }
+    }
+
+    pub fn compute_covariances(&mut self) {
+        fn outer_product(a: glam::Vec3, b: glam::Vec3) -> glam::Mat3 {
+            glam::Mat3::from_cols(a * b.x, a * b.y, a * b.z)
+        }
+
+        let links = &self.links.relation;
+        let bind_edges = &self.links.b_edge;
+        let edges = &self.links.edge;
+
+        self.nodes.covariant.fill(glam::Mat3::ZERO);
+        for (&[a, b], (&bind_edge, &edge)) in links.iter().zip(bind_edges.iter().zip(edges)) {
+            let di_a = self
+                .nodes
+                .solve_indirect(a)
+                .expect("registered node is always present");
+            let di_b = self
+                .nodes
+                .solve_indirect(b)
+                .expect("registered node is always present");
+
+            {
+                let cov_a = &mut self.nodes.covariant[di_a.as_index()];
+                let o_dot_a = outer_product(edge, bind_edge);
+                *cov_a += o_dot_a;
+            }
+            {
+                let cov_b = &mut self.nodes.covariant[di_b.as_index()];
+                let o_dot_b = outer_product(-edge, -bind_edge);
+                *cov_b += o_dot_b;
+            }
+        }
+    }
+
+    pub fn extract_node_rotations(&mut self, iterations: usize) {
+        let covariants = &self.nodes.covariant;
+        let rot_extracts = &mut self.nodes.rotation_ex;
+
+        'cov: for (&cov, rot) in covariants.iter().zip(rot_extracts) {
+            let mut r = cov;
+            for _ in 0..iterations {
+                let ri = r.try_inverse();
+                if ri.is_none() {
+                    continue 'cov;
+                }
+                let ri = ri.unwrap();
+                r = (r + ri.transpose()) * 0.5;
+            }
+            *rot = r;
+        }
     }
 
     pub fn register_dead_nodes(&mut self) {
@@ -258,7 +334,7 @@ impl LatticeSystem {
 
     #[inline]
     pub fn apply_forces_batched(&mut self, force: glam::Vec3) {
-        let (_, _, m, _, f, _, _) = self.nodes_mut().split_mut();
+        let (_, _, m, _, f, _, _, _) = self.nodes_mut().split_mut();
         for (f, m) in f.join(m) {
             *f += force * *m;
         }
@@ -317,6 +393,7 @@ impl LatticeSystem {
                 inv_mass,
                 glam::Vec3::ZERO,
                 glam::Vec3::ZERO,
+                glam::Mat3::IDENTITY,
                 glam::Mat3::IDENTITY,
             ));
             self.node_id_buffer.push(handle);
