@@ -15,12 +15,17 @@ ethel::table_spec! {
         inv_mass: f32;
         forces: glam::Vec3;
         velocity: glam::Vec3;
+        covariant: glam::Mat3;
     }
 }
 
 ethel::table_spec! {
     struct Links {
         relation: [IndirectIndex; 2];
+
+        b_edge: glam::Vec3;
+        edge: glam::Vec3;
+
         compliance: f32;
         rest_length: f32;
         lambda: f32;
@@ -253,7 +258,7 @@ impl LatticeSystem {
 
     #[inline]
     pub fn apply_forces_batched(&mut self, force: glam::Vec3) {
-        let (_, _, m, _, f, _) = self.nodes_mut().split_mut();
+        let (_, _, m, _, f, _, _) = self.nodes_mut().split_mut();
         for (f, m) in f.join(m) {
             *f += force * *m;
         }
@@ -305,19 +310,35 @@ impl LatticeSystem {
         }
 
         lattice.nodes.iter().for_each(|(&pos, (&mass, &inv_mass))| {
-            let handle =
-                self.nodes
-                    .insert((pos, pos, mass, inv_mass, glam::Vec3::ZERO, glam::Vec3::ZERO));
+            let handle = self.nodes.insert((
+                pos,
+                pos,
+                mass,
+                inv_mass,
+                glam::Vec3::ZERO,
+                glam::Vec3::ZERO,
+                glam::Mat3::IDENTITY,
+            ));
             self.node_id_buffer.push(handle);
         });
         lattice
             .constraints
             .iter()
-            .for_each(|(&[a, b], (&compliance, &rest_length))| {
+            .for_each(|(&[a, b], (&edge, (&compliance, &rest_length)))| {
                 let a = self.node_id_buffer[a as usize];
                 let b = self.node_id_buffer[b as usize];
-                self.links
-                    .insert(([a, b], compliance, rest_length, 0f32, 0f32, 0f32, 0f32));
+
+                self.links.insert((
+                    [a, b],
+                    edge, // bind
+                    edge, // current is same as bind at init
+                    compliance,
+                    rest_length,
+                    0f32,
+                    0f32,
+                    0f32,
+                    0f32,
+                ));
             });
 
         self.node_id_buffer.clear();
