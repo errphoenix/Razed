@@ -558,6 +558,15 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         self.release_debris_bodies();
         self.delete_disabled_fragments();
 
+        self.profiler
+            .capture_duration("extract_lattice_rotations", || {
+                //const PD_ITERATIONS: usize = 5;
+                self.lattice.compute_edges();
+                self.lattice.compute_covariances();
+                //self.lattice.extract_node_rotations_polar(PD_ITERATIONS);
+                self.lattice.extract_node_rotations_svd();
+            });
+
         self.profiler.capture_duration("cage_update", || {
             let lattice = NodesRowTableView::from(self.lattice.nodes());
             self.deforms.deform(&lattice)
