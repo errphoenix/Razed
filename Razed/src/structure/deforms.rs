@@ -158,61 +158,7 @@ impl DeformSystem {
             .zip(pose)
             .zip(controllers.iter().zip(node_binds))
         {
-            // rotation blending quaternion from node rotations
-            let r_blend = {
-                let (master_rot, master_w, master_id) = {
-                    let (master_point, mw) = controllers.iter().fold(
-                        (IndirectIndex::default(), 0f32),
-                        |(mid, mw), &ControlPoint { id, weight }| {
-                            if weight > mw { (id, weight) } else { (mid, mw) }
-                        },
-                    );
-                    let rot = glam::Quat::from_mat3(lattice.rotation_ex(master_point));
-                    (rot, mw, master_point.as_int())
-                };
-
-                controllers
-                    .iter()
-                    .fold(
-                        master_rot * master_w,
-                        |blend, &ControlPoint { id, weight }| {
-                            if id.as_int() == 0 || id.as_int() == master_id {
-                                return blend;
-                            }
-
-                            let mat = lattice.rotation_ex(id);
-                            let quat = glam::Quat::from_mat3(mat);
-                            let quat = if quat.dot(master_rot) < 0.0 {
-                                -quat
-                            } else {
-                                quat
-                            };
-
-                            blend + (quat * weight)
-                        },
-                    )
-                    .normalize()
-            };
-
-            // bind & current blending vecs from node bind and current positions
-            let (b_blend, p_blend) = {
-                controllers.iter().zip(controller_bind).fold(
-                    (glam::Vec3::ZERO, glam::Vec3::ZERO),
-                    |(b, p), (controller, &c_bind)| {
-                        let c_id = controller.id;
-                        let c_w = controller.weight;
-
-                        let pos = lattice.current_pos(c_id);
-                        let bd = c_bind * c_w;
-                        let pd = pos * c_w;
-
-                        (b + bd, p + pd)
-                    },
-                )
-            };
-
-            // final LBS
-            *deform = r_blend * (pose - b_blend) + p_blend;
+            //todo
         }
     }
 
