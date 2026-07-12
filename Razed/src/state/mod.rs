@@ -560,11 +560,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 
         self.profiler
             .capture_duration("extract_lattice_rotations", || {
-                //const PD_ITERATIONS: usize = 5;
-                self.lattice.compute_edges();
-                self.lattice.compute_covariances();
-                //self.lattice.extract_node_rotations_polar(PD_ITERATIONS);
-                self.lattice.extract_node_rotations_svd();
+                //todo
             });
 
         self.profiler.capture_duration("cage_update", || {

@@ -16,18 +16,12 @@ ethel::table_spec! {
         inv_mass: f32;
         forces: glam::Vec3;
         velocity: glam::Vec3;
-
-        covariant: glam::Mat3;
-        rotation_ex: glam::Mat3;
     }
 }
 
 ethel::table_spec! {
     struct Links {
         relation: [IndirectIndex; 2];
-
-        b_edge: glam::Vec3;
-        edge: glam::Vec3;
 
         compliance: f32;
         rest_length: f32;
@@ -227,122 +221,6 @@ impl LatticeSystem {
         }
     }
 
-    pub fn compute_edges(&mut self) {
-        let edges = &mut self.links.edge;
-        let links = &self.links.relation;
-        let nodes = &self.nodes.current_pos;
-
-        for (&[a, b], edge) in links.iter().zip(edges) {
-            let di_a = self
-                .nodes
-                .solve_indirect(a)
-                .expect("registered node is always present");
-            let di_b = self
-                .nodes
-                .solve_indirect(b)
-                .expect("registered node is always present");
-            let p_a = nodes[di_a.as_index()];
-            let p_b = nodes[di_b.as_index()];
-
-            *edge = p_b - p_a;
-        }
-    }
-
-    pub fn compute_covariances(&mut self) {
-        fn outer_product(a: glam::Vec3, b: glam::Vec3) -> glam::Mat3 {
-            glam::Mat3::from_cols(a * b.x, a * b.y, a * b.z)
-        }
-
-        let links = &self.links.relation;
-        let bind_edges = &self.links.b_edge;
-        let edges = &self.links.edge;
-
-        self.nodes.covariant.fill(glam::Mat3::IDENTITY);
-        for (&[a, b], (&bind_edge, &edge)) in links.iter().zip(bind_edges.iter().zip(edges)) {
-            let di_a = self
-                .nodes
-                .solve_indirect(a)
-                .expect("registered node is always present");
-            let di_b = self
-                .nodes
-                .solve_indirect(b)
-                .expect("registered node is always present");
-
-            let o_dot = outer_product(edge, bind_edge);
-            self.nodes.covariant[di_a.as_index()] += o_dot;
-            self.nodes.covariant[di_b.as_index()] += o_dot;
-        }
-    }
-
-    pub fn extract_node_rotations_svd(&mut self) {
-        let covariants = &self.nodes.covariant;
-        let rot_extracts = &mut self.nodes.rotation_ex;
-
-        for (&cov, rot) in covariants.iter().zip(rot_extracts) {
-            let last_rotation = *rot;
-            let cov = cov + last_rotation * 0.001;
-
-            let svd = {
-                let gc0 = cov.col(0);
-                let gc1 = cov.col(1);
-                let gc2 = cov.col(2);
-                let nc0 = nalgebra::Vector3::new(gc0.x, gc0.y, gc0.z);
-                let nc1 = nalgebra::Vector3::new(gc1.x, gc1.y, gc1.z);
-                let nc2 = nalgebra::Vector3::new(gc2.x, gc2.y, gc2.z);
-                nalgebra::Matrix3::<f32>::from_columns(&[nc0, nc1, nc2])
-            }
-            .svd(true, true);
-
-            let u = svd.u.unwrap();
-            let v = svd.v_t.unwrap();
-
-            let nalg_rot = u * v;
-            let nalg_c0 = nalg_rot.column(0);
-            let nalg_c1 = nalg_rot.column(1);
-            let nalg_c2 = nalg_rot.column(2);
-            *rot = glam::Mat3::from_cols(
-                glam::vec3(nalg_c0.x, nalg_c0.y, nalg_c0.z),
-                glam::vec3(nalg_c1.x, nalg_c1.y, nalg_c1.z),
-                glam::vec3(nalg_c2.x, nalg_c2.y, nalg_c2.z),
-            );
-
-            if rot.determinant() < 0.0 {
-                let mut aligned_u = {
-                    let nalg_c0 = u.column(0);
-                    let nalg_c1 = u.column(1);
-                    let nalg_c2 = u.column(2);
-                    glam::Mat3::from_cols(
-                        glam::vec3(nalg_c0.x, nalg_c0.y, nalg_c0.z),
-                        glam::vec3(nalg_c1.x, nalg_c1.y, nalg_c1.z),
-                        glam::vec3(nalg_c2.x, nalg_c2.y, nalg_c2.z),
-                    )
-                };
-                aligned_u.z_axis = -aligned_u.z_axis;
-                *rot *= aligned_u;
-            }
-        }
-    }
-
-    #[allow(unused)]
-    pub fn extract_node_rotations_polar(&mut self, iterations: usize) {
-        let covariants = &self.nodes.covariant;
-        let rot_extracts = &mut self.nodes.rotation_ex;
-
-        'cov: for (&cov, rot) in covariants.iter().zip(rot_extracts) {
-            let mut r = cov + glam::Mat3::IDENTITY * 0.001;
-            for _ in 0..iterations {
-                let ri = r.try_inverse();
-                if ri.is_none() {
-                    *rot = glam::Mat3::IDENTITY;
-                    continue 'cov;
-                }
-                let ri = ri.unwrap();
-                r = (r + ri.transpose()) * 0.5;
-            }
-            *rot = r;
-        }
-    }
-
     pub fn update(&mut self, delta: DeltaTime) {
         self.solver.set_step_time(delta);
         self.solver.step(&mut self.nodes, &mut self.links);
@@ -377,7 +255,7 @@ impl LatticeSystem {
 
     #[inline]
     pub fn apply_forces_batched(&mut self, force: glam::Vec3) {
-        let (_, _, m, _, f, _, _, _) = self.nodes_mut().split_mut();
+        let (_, _, m, _, f, _) = self.nodes_mut().split_mut();
         for (f, m) in f.join(m) {
             *f += force * *m;
         }
@@ -429,16 +307,9 @@ impl LatticeSystem {
         }
 
         lattice.nodes.iter().for_each(|(&pos, (&mass, &inv_mass))| {
-            let handle = self.nodes.insert((
-                pos,
-                pos,
-                mass,
-                inv_mass,
-                glam::Vec3::ZERO,
-                glam::Vec3::ZERO,
-                glam::Mat3::IDENTITY,
-                glam::Mat3::IDENTITY,
-            ));
+            let handle =
+                self.nodes
+                    .insert((pos, pos, mass, inv_mass, glam::Vec3::ZERO, glam::Vec3::ZERO));
             self.node_id_buffer.push(handle);
         });
         lattice
@@ -448,17 +319,8 @@ impl LatticeSystem {
                 let a = self.node_id_buffer[a as usize];
                 let b = self.node_id_buffer[b as usize];
 
-                self.links.insert((
-                    [a, b],
-                    edge, // bind
-                    edge, // current is same as bind at init
-                    compliance,
-                    rest_length,
-                    0f32,
-                    0f32,
-                    0f32,
-                    0f32,
-                ));
+                self.links
+                    .insert(([a, b], compliance, rest_length, 0f32, 0f32, 0f32, 0f32));
             });
 
         self.node_id_buffer.clear();
