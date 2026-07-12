@@ -263,7 +263,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     Some(7),
                 );
                 unsafe {
-                    janus::gl::PointSize(2.5);
+                    janus::gl::PointSize(3.0);
                     janus::gl::DrawArrays(janus::gl::POINTS, 0, debug_cage_size as i32);
                 }
 

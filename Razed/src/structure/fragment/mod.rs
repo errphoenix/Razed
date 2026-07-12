@@ -319,7 +319,7 @@ impl FragmentSystem {
         &self.disabled_frags_frame
     }
 
-    const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 16;
+    const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 8;
 
     pub fn bind_deforms(
         &mut self,
@@ -341,7 +341,7 @@ impl FragmentSystem {
 
                 // locate anchors via octant query
                 {
-                    const OCTANT_QUERY: u32 = 16;
+                    const OCTANT_QUERY: u32 = 32;
                     let _ = deforms_hash.nearest_cells(
                         fragment_cell,
                         OCTANT_QUERY,
