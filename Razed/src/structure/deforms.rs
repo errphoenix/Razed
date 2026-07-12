@@ -261,21 +261,23 @@ impl DeformSystem {
         let lattice_size = lattice.size();
         self.node_map.resize_with(lattice_size, || Vec::new());
 
-        let vox = fragments.voxels();
         let (mx, my, mz) = fragments.dimensions();
         let total = mx * my * mz + mx + my + mz;
 
         let mut points = Vec::<DeformPoint>::with_capacity(total as usize);
         let mut near_buf = Vec::<Cell>::with_capacity(CONTROL_POINTS_COUNT);
 
-        for voxel in vox.cells() {
-            let point = glam::vec3(
-                (voxel.x as f32 / fragments.options().cell_size) as f32,
-                (voxel.y as f32 / fragments.options().cell_size) as f32,
-                (voxel.z as f32 / fragments.options().cell_size) as f32,
-            ) + origin;
-
-            points.push(self.create_deform(point, node_hash, lattice, &mut near_buf));
+        let bounds_x = (mx + 2) / 2;
+        let bounds_y = (my + 2) / 2;
+        let bounds_z = (mz + 2) / 2;
+        for x in -bounds_x..bounds_x {
+            for y in -bounds_y..bounds_y {
+                for z in -bounds_z..bounds_z {
+                    let cell = Cell { x, y, z };
+                    let point = fragments.point_at_or_approx(cell) + origin;
+                    points.push(self.create_deform(point, node_hash, lattice, &mut near_buf));
+                }
+            }
         }
 
         let r0 = self.data.len();
