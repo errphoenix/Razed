@@ -148,17 +148,106 @@ impl DeformSystem {
     }
 
     pub fn deform(&mut self, lattice: &NodesRowTableView) {
+        fn decompose_rotation_polar<const ITER: usize>(cov: glam::Mat3) -> glam::Mat3 {
+            let mut r = cov;
+            for _ in 0..ITER {
+                let ri = r.try_inverse();
+                if ri.is_none() {
+                    return glam::Mat3::IDENTITY;
+                }
+                let ri = ri.unwrap();
+                r = (r + ri.transpose()) * 0.5;
+            }
+            r
+        }
+
+        fn decompose_rotation_svd(cov: glam::Mat3) -> glam::Mat3 {
+            fn nalg_to_glam(nalg: nalgebra::Matrix3<f32>) -> glam::Mat3 {
+                let c0 = nalg.column(0);
+                let c1 = nalg.column(1);
+                let c2 = nalg.column(2);
+                glam::Mat3::from_cols(
+                    glam::vec3(c0.x, c0.y, c0.z),
+                    glam::vec3(c1.x, c1.y, c1.z),
+                    glam::vec3(c2.x, c2.y, c2.z),
+                )
+            }
+            fn glam_to_nalg(glam: glam::Mat3) -> nalgebra::Matrix3<f32> {
+                let c0 = glam.x_axis;
+                let c1 = glam.y_axis;
+                let c2 = glam.z_axis;
+                nalgebra::Matrix3::from_columns(&[
+                    nalgebra::Vector3::new(c0.x, c0.y, c0.z),
+                    nalgebra::Vector3::new(c1.x, c1.y, c1.z),
+                    nalgebra::Vector3::new(c2.x, c2.y, c2.z),
+                ])
+            }
+
+            let nalg_cov = glam_to_nalg(cov);
+            let nalg_svd = nalg_cov.svd(true, true);
+
+            let u = nalg_to_glam(nalg_svd.u.unwrap());
+            let v_t = nalg_to_glam(nalg_svd.v_t.unwrap());
+
+            u * v_t
+        }
+
+        fn outer_product(a: glam::Vec3, b: glam::Vec3) -> glam::Mat3 {
+            glam::Mat3::from_cols(a * b.x, a * b.y, a * b.z)
+        }
+
         let deforms = &mut self.data.deformed;
         let pose = &self.data.pose;
         let controllers = &self.data.controllers;
         let node_binds = &self.data.binds;
 
-        for ((deform, &pose), (controllers, controller_bind)) in deforms
+        for ((deform, &pose), (controllers, controller_binds)) in deforms
             .iter_mut()
             .zip(pose)
             .zip(controllers.iter().zip(node_binds))
+            .skip(1)
         {
-            //todo
+            let w_sum = controllers
+                .iter()
+                .filter(|c| c.id.as_int() != 0)
+                .fold(0f32, |sum, &ControlPoint { weight, .. }| sum + weight);
+            if w_sum < 0.0001 {
+                continue;
+            }
+
+            let b_bar = controllers
+                .iter()
+                .zip(controller_binds)
+                .filter(|(c, _)| c.id.as_int() != 0)
+                .fold(
+                    glam::Vec3::ZERO,
+                    |acc, (&ControlPoint { weight, .. }, bind_pos)| acc + bind_pos * weight,
+                )
+                / w_sum;
+
+            let p_bar = controllers
+                .iter()
+                .filter(|c| c.id.as_int() != 0)
+                .fold(glam::Vec3::ZERO, |acc, &ControlPoint { id, weight }| {
+                    acc + lattice.current_pos(id) * weight
+                })
+                / w_sum;
+
+            let covariance = controllers
+                .iter()
+                .zip(controller_binds)
+                .filter(|(c, _)| c.id.as_int() != 0)
+                .fold(
+                    glam::Mat3::ZERO,
+                    |acc, (&ControlPoint { id, weight }, &bind_pos)| {
+                        let real_pos = lattice.current_pos(id);
+                        acc + outer_product(real_pos - p_bar, bind_pos - b_bar) * weight
+                    },
+                )
+                + glam::Mat3::IDENTITY * 0.00001;
+
+            let rotation = decompose_rotation_svd(covariance);
+            *deform = rotation * (pose - b_bar) + p_bar;
         }
     }
 
