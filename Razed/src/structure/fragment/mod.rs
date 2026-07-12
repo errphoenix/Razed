@@ -352,13 +352,50 @@ impl FragmentSystem {
                     )
                 }
 
-                let near_count = near_buf.len().min(ANCHORS_COUNT);
                 let fragment_direct = self.fragments.solve_indirect(indirect).expect("fragment indirect always valid");
                 let fragment_anchors = &mut self.fragments.anchors[fragment_direct.as_index()];
                 let fragment_weights = &mut self.fragments.anchors_weights[fragment_direct.as_index()];
 
+                {
+                    // origin reference is -x, -y, -z
+                    let origin = *near_buf.iter().min().expect("near_buf is always populated");
+
+                    // the 4 anchors of the front (-Z rhs) side of the bind-cube
+                    // -x, -y, -z,
+                    // x, -y, -z,
+                    // -x, y, -z,
+                    // x, y, -z,
+                    let front_side = [
+                        origin,
+                        Cell::new(origin.x + 1, origin.y, origin.z),
+                        Cell::new(origin.x, origin.y + 1, origin.z),
+                        Cell::new(origin.x + 1, origin.y + 1, origin.z),
+                    ];
+
+                    // the 4 anchors of the back (+Z rhs) side of the bind-cube
+                    // -x, -y, z,
+                    // x, -y, z,
+                    // -x, y, z,
+                    // x, y, z,
+                    let back_side = [
+                        Cell::new(origin.x, origin.y, origin.z + 1),
+                        Cell::new(origin.x + 1, origin.y, origin.z + 1),
+                        Cell::new(origin.x, origin.y + 1, origin.z + 1),
+                        Cell::new(origin.x + 1, origin.y + 1, origin.z + 1),
+                    ];
+
+                    near_buf[0] = front_side[0];
+                    near_buf[1] = front_side[1];
+                    near_buf[2] = front_side[2];
+                    near_buf[3] = front_side[3];
+                    near_buf[4] = back_side[0];
+                    near_buf[5] = back_side[1];
+                    near_buf[6] = back_side[2];
+                    near_buf[7] = back_side[3];
+                }
+
                 near_buf.drain(..)
-                    .take(near_count)
+                    .take(ANCHORS_COUNT)
                     .zip(fragment_anchors.iter_mut())
                     .zip(fragment_weights.iter_mut())
                     .for_each(|((cell, anchor_id), anchor_weight)| {
