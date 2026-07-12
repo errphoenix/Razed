@@ -255,7 +255,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 self.frags_shader.bind();
                 GpuCommandDispatch::from_view(frags_cmd_view).dispatch();
 
-                let debug_cage_size = frame_data.debris_count.load(Ordering::Acquire);
+                let debug_cage_size = frame_data.cage_points_count.load(Ordering::Acquire);
                 self.cage_shader.bind();
                 frags_buf.bind_shader_storage_single(
                     buf_idx,
