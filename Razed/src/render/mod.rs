@@ -46,6 +46,7 @@ pub struct Renderer {
     frags_shader: shaders::ShaderFragment,
     debris_shader: shaders::ShaderDebris,
     lines_shader: shaders::ShaderDebugLines,
+    cage_shader: shaders::debug::ShaderDebugCage,
     interface_shader: gui::shaders::ShaderUiBasic,
 
     command_process_compute: shaders::compute::ComputeShaderProcessCommand,
@@ -150,6 +151,10 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         self.lattice_shader.uniform_projection_mat4v([*proj]);
         self.lattice_shader.uniform_view_mat4v([view_mat]);
 
+        self.cage_shader.bind();
+        self.cage_shader.uniform_projection_mat4v([*proj]);
+        self.cage_shader.uniform_view_mat4v([view_mat]);
+
         self.lines_shader.bind();
         self.lines_shader.uniform_projection_mat4v([*proj]);
         self.lines_shader.uniform_view_mat4v([view_mat]);
@@ -244,11 +249,23 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             janus::gl::barrier_shader_storage();
             janus::gl::barrier_commands();
 
-            // draw dispatch - fragments, debris
+            // draw dispatch - fragments, debris (also debug cage)
             {
                 frags_buf.bind_shader_storage(buf_idx);
                 self.frags_shader.bind();
                 GpuCommandDispatch::from_view(frags_cmd_view).dispatch();
+
+                let debug_cage_size = frame_data.debris_count.load(Ordering::Acquire);
+                self.cage_shader.bind();
+                frags_buf.bind_shader_storage_single(
+                    buf_idx,
+                    LayoutFragmentData::PodDeformsPositions as usize,
+                    Some(7),
+                );
+                unsafe {
+                    janus::gl::PointSize(2.5);
+                    janus::gl::DrawArrays(janus::gl::POINTS, 0, debug_cage_size as i32);
+                }
 
                 debris_buf.bind_shader_storage(buf_idx);
                 self.debris_shader.bind();
@@ -362,6 +379,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         self.frags_shader = shaders::ShaderFragment::new_compiled();
         self.debris_shader = shaders::ShaderDebris::new_compiled();
         self.lines_shader = shaders::ShaderDebugLines::new_compiled();
+        self.cage_shader = shaders::debug::ShaderDebugCage::new_compiled();
 
         self.interface_shader = gui::shaders::ShaderUiBasic::new_compiled();
         let sampler_uniforms = std::array::from_fn(|i| i as i32);

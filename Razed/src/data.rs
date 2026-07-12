@@ -1,13 +1,12 @@
 use std::sync::{Arc, atomic::AtomicU32};
 
 use crate::{render::shaders, ui::UiRenderCommandBasic};
-use crossbeam::queue::SegQueue;
 use ethel::{
     DrawCommand, layout_buffer, layout_mesh_buffer,
     render::buffer::{PartitionedTriBuffer, TriBuffer},
     state::data::{DirectIndex, IndirectIndex},
 };
-use gui::{draw::Quad, text::GlyphRaster};
+use gui::draw::Quad;
 
 use crate::structure::fragment::ANCHORS_COUNT as FRAGMENT_ANCHORS_COUNT;
 
@@ -183,6 +182,7 @@ pub struct FrameDataBuffers {
     pub fragments: PartitionedTriBuffer<FRAGMENTS_STORAGE_PARTS>,
     pub debris: PartitionedTriBuffer<DEBRIS_STORAGE_PARTS>,
     pub debris_count: Arc<AtomicU32>,
+    pub cage_points_count: Arc<AtomicU32>,
 
     pub lattice_debug: PartitionedTriBuffer<LATTICE_STORAGE_PARTS>,
     pub lattice_constraint_count: Arc<AtomicU32>,
@@ -222,6 +222,7 @@ impl FrameDataBuffers {
             fragments: fragment_data,
             debris: debris_data,
             debris_count: Arc::new(AtomicU32::new(0)),
+            cage_points_count: Arc::new(AtomicU32::new(0)),
 
             lattice_debug: xpbd_visualiser,
             lattice_constraint_count: Arc::new(AtomicU32::new(0)),

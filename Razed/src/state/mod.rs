@@ -221,6 +221,11 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 let pod_bind_pose = self.fragments.data().bind_position_slice();
                 let pod_mesh_id = self.fragments.data().mesh_id_slice();
 
+                let deform_count = (pod_deforms_positions.len() - 1) as u32;
+                storage
+                    .cage_points_count
+                    .store(deform_count, Ordering::Relaxed);
+
                 // SAFETY: the use of LayoutFragmentData ensures we blit to a
                 // valid section of the partitioned buffer.
                 unsafe {
