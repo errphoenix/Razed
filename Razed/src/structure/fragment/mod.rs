@@ -332,74 +332,80 @@ impl FragmentSystem {
         }
 
         let mut near_buf = Vec::with_capacity(ANCHORS_COUNT);
+        let mut anchors = Vec::with_capacity(ANCHORS_COUNT);
 
         self.uninitialised.retain(|frag| {
             if let UninitFragmentStage::Unfinished { indirect } = frag.stage {
                 let fragment_world = frag.position;
                 let fragment_cell = deforms_hash.cell_at(fragment_world);
 
-                if let Err(rem) = deforms_hash.nearest_cells(
-                    fragment_cell,
-                    ANCHORS_COUNT as u32,
-                    Self::VOXEL_NEIGHBOR_QUERY_RADIUS,
-                    &mut near_buf,
-                    false,
-                ) {
-                    tracing::event!(
-                        name: "fragment.bind_deforms.near_query.miss",
-                        tracing::Level::ERROR,
-                        "Query for nearby deforms to {fragment_cell:?}: miss {rem} deforms within range.",
-                    )
-                }
-
-                let fragment_direct = self.fragments.solve_indirect(indirect).expect("fragment indirect always valid");
-                let fragment_anchors = &mut self.fragments.anchors[fragment_direct.as_index()];
-                let fragment_weights = &mut self.fragments.anchors_weights[fragment_direct.as_index()];
-
+                // locate anchors via octant query
                 {
-                    // origin reference is -x, -y, -z
-                    let origin = *near_buf.iter().min().expect("near_buf is always populated");
+                    const OCTANT_QUERY: u32 = 16;
+                    let _ = deforms_hash.nearest_cells(
+                        fragment_cell,
+                        OCTANT_QUERY,
+                        Self::VOXEL_NEIGHBOR_QUERY_RADIUS,
+                        &mut near_buf,
+                        false,
+                    );
 
-                    // the 4 anchors of the front (-Z rhs) side of the bind-cube
-                    // -x, -y, -z,
-                    // x, -y, -z,
-                    // -x, y, -z,
-                    // x, y, -z,
-                    let front_side = [
-                        origin,
-                        Cell::new(origin.x + 1, origin.y, origin.z),
-                        Cell::new(origin.x, origin.y + 1, origin.z),
-                        Cell::new(origin.x + 1, origin.y + 1, origin.z),
-                    ];
+                    let mut octant_closest = [None::<(Cell, f32)>; ANCHORS_COUNT];
+                    near_buf.drain(..).for_each(|cell| {
+                        let id = deforms_hash.get(cell).unwrap();
+                        let pos = deforms.pose(*id);
+                        let delta = pos - fragment_world;
+                        let dist_sq = delta.length_squared();
 
-                    // the 4 anchors of the back (+Z rhs) side of the bind-cube
-                    // -x, -y, z,
-                    // x, -y, z,
-                    // -x, y, z,
-                    // x, y, z,
-                    let back_side = [
-                        Cell::new(origin.x, origin.y, origin.z + 1),
-                        Cell::new(origin.x + 1, origin.y, origin.z + 1),
-                        Cell::new(origin.x, origin.y + 1, origin.z + 1),
-                        Cell::new(origin.x + 1, origin.y + 1, origin.z + 1),
-                    ];
+                        // select quadrant
+                        let mut octant_index = 0;
+                        if delta.x >= 0.0 {
+                            octant_index |= 1;
+                        }
+                        if delta.y >= 0.0 {
+                            octant_index |= 2;
+                        }
+                        if delta.z >= 0.0 {
+                            octant_index |= 4;
+                        }
 
-                    near_buf[0] = front_side[0];
-                    near_buf[1] = front_side[1];
-                    near_buf[2] = front_side[2];
-                    near_buf[3] = front_side[3];
-                    near_buf[4] = back_side[0];
-                    near_buf[5] = back_side[1];
-                    near_buf[6] = back_side[2];
-                    near_buf[7] = back_side[3];
+                        // compare to existing value
+                        match octant_closest[octant_index] {
+                            Some((_, dist)) if dist_sq >= dist => {}
+                            _ => octant_closest[octant_index] = Some((cell, dist_sq)),
+                        }
+                    });
+
+                    for (i, octant) in octant_closest.iter().enumerate() {
+                        if let Some((cell, _)) = octant {
+                            anchors.push(*cell);
+                        } else {
+                            tracing::warn!(
+                                "Missing octant for fragment at index {i}: fallback to self"
+                            );
+
+                            anchors.push(fragment_cell)
+                        }
+                    }
                 }
 
-                near_buf.drain(..)
-                    .take(ANCHORS_COUNT)
+                let fragment_direct = self
+                    .fragments
+                    .solve_indirect(indirect)
+                    .expect("fragment indirect always valid");
+                let fragment_anchors = &mut self.fragments.anchors[fragment_direct.as_index()];
+                let fragment_weights =
+                    &mut self.fragments.anchors_weights[fragment_direct.as_index()];
+
+                anchors
+                    .drain(..)
                     .zip(fragment_anchors.iter_mut())
                     .zip(fragment_weights.iter_mut())
                     .for_each(|((cell, anchor_id), anchor_weight)| {
-                        let deform = deforms_hash.get(cell).copied().expect("deforms hash neighbors are populated");
+                        let deform = deforms_hash
+                            .get(cell)
+                            .copied()
+                            .expect("deforms hash neighbors are populated");
                         let point = deforms.pose(deform);
                         let ds = fragment_world.distance(*point);
 
