@@ -150,11 +150,13 @@ ethel::shader_glsl! {
             vec3 model = vertex.position.xyz;
             vec3 normal = normalize(vertex.normal.xyz);
 
-            IndirectIndex[8] anchors = pod_anchors[fragment_id];
-            vec4[2] weights = pod_weights[fragment_id];
+            // fragment bind pos
             vec3 bind_pose = pod_bind_pose[fragment_id].xyz;
+            vec3 w_rest = bind_pose + model; // bind vertex
 
-            // common ids and weights gather
+            IndirectIndex[8] anchors = pod_anchors[fragment_id];
+
+            // gather anchor data (index, real pos, bind pos)
             uint i0 = imap_deforms[anchors[0].index].index;
             uint i1 = imap_deforms[anchors[1].index].index;
             uint i2 = imap_deforms[anchors[2].index].index;
@@ -163,16 +165,6 @@ ethel::shader_glsl! {
             uint i5 = imap_deforms[anchors[5].index].index;
             uint i6 = imap_deforms[anchors[6].index].index;
             uint i7 = imap_deforms[anchors[7].index].index;
-
-            float w0 = weights[0].x;
-            float w1 = weights[0].y;
-            float w2 = weights[0].z;
-            float w3 = weights[0].w;
-            float w4 = weights[1].x;
-            float w5 = weights[1].y;
-            float w6 = weights[1].z;
-            float w7 = weights[1].w;
-
             vec3 p0 = pod_deforms_positions[i0].xyz;
             vec3 p1 = pod_deforms_positions[i1].xyz;
             vec3 p2 = pod_deforms_positions[i2].xyz;
@@ -181,7 +173,6 @@ ethel::shader_glsl! {
             vec3 p5 = pod_deforms_positions[i5].xyz;
             vec3 p6 = pod_deforms_positions[i6].xyz;
             vec3 p7 = pod_deforms_positions[i7].xyz;
-
             vec3 b0 = pod_deforms_pose[i0].xyz;
             vec3 b1 = pod_deforms_pose[i1].xyz;
             vec3 b2 = pod_deforms_pose[i2].xyz;
@@ -191,13 +182,11 @@ ethel::shader_glsl! {
             vec3 b6 = pod_deforms_pose[i6].xyz;
             vec3 b7 = pod_deforms_pose[i7].xyz;
 
-            vec3 w_rest = bind_pose + model;
-
+            // determine vertex relative to bind cage
+            // todo: move to precompute, possibly
             const float M = 1000000.0;
-
-            // locate cage bounds (bind-time)
-            vec3 cage_min = vec3(M);
-            vec3 cage_max = -vec3(M);
+            vec3 cage_min = vec3( M);
+            vec3 cage_max = vec3(-M);
             for (int i = 0; i < 8; i++) {
                 uint anchor_i = anchors[i].index;
                 uint cage_imap = imap_deforms[anchor_i].index;
@@ -210,7 +199,6 @@ ethel::shader_glsl! {
                 cage_max.y = max(cage_max.y, point.y);
                 cage_max.z = max(cage_max.z, point.z);
             }
-
             float cdx = cage_max.x - cage_min.x;
             float cdy = cage_max.y - cage_min.y;
             float cdz = cage_max.z - cage_min.z;
@@ -222,27 +210,37 @@ ethel::shader_glsl! {
             float ify = vdy / cdy;
             float ifz = vdz / cdz;
 
-            // locate cage bounds (real-time)
-            cage_min = vec3(M);
-            cage_max = -vec3(M);
-            for (int i = 0; i < 8; i++) {
-                uint anchor_i = anchors[i].index;
-                uint cage_imap = imap_deforms[anchor_i].index;
-                vec3 point = pod_deforms_positions[cage_imap].xyz;
+            // anchor order is guaranteed to be:
+            // 0: -x, -y, -z,
+            // 1:  x, -y, -z,
+            // 2: -x,  y, -z,
+            // 3:  x,  y, -z,
+            // 4: -x, -y,  z,
+            // 5:  x, -y,  z,
+            // 6: -x,  y,  z,
+            // 7:  x,  y,  z,
 
-                cage_min.x = min(cage_min.x, point.x);
-                cage_min.y = min(cage_min.y, point.y);
-                cage_min.z = min(cage_min.z, point.z);
-                cage_max.x = max(cage_max.x, point.x);
-                cage_max.y = max(cage_max.y, point.y);
-                cage_max.z = max(cage_max.z, point.z);
-            }
+            vec3 p000 = p0;
+            vec3 p100 = p1;
+            vec3 p010 = p2;
+            vec3 p110 = p3;
+            vec3 p001 = p4;
+            vec3 p101 = p5;
+            vec3 p011 = p6;
+            vec3 p111 = p7;
 
-            float x = mix(cage_min.x, cage_max.x, ifx);
-            float y = mix(cage_min.y, cage_max.y, ify);
-            float z = mix(cage_min.z, cage_max.z, ifz);
+            // interpolate x, isolate to 4 points
+            vec3 p00 = mix(p000, p100, ifx);
+            vec3 p10 = mix(p010, p110, ifx);
+            vec3 p01 = mix(p001, p101, ifx);
+            vec3 p11 = mix(p011, p111, ifx);
+            // interpolate y, isolate to 2 points
+            vec3 fp0 = mix(p00, p10, ify);
+            vec3 fp1 = mix(p01, p11, ify);
+            // interpolate z, isolate final point
+            vec3 final_point = mix(fp0, fp1, ifz);
 
-            vec4 world = vec4(x, y, z, 1.0);
+            vec4 world = vec4(final_point, 1.0);
 
             // float d0 = distance(w_rest, b0) + 0.000001;
             // float d1 = distance(w_rest, b1) + 0.000001;
