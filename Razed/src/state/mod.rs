@@ -1,4 +1,13 @@
-use std::{io::BufWriter, path::PathBuf, str::FromStr, sync::atomic::Ordering, time::Instant};
+use std::{
+    io::BufWriter,
+    path::PathBuf,
+    str::FromStr,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::{Duration, Instant},
+};
 
 use crate::{
     data::{
@@ -132,52 +141,63 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         frame_boundary: &Cross<Producer, FrameDataBuffers>,
         command_queue: &mut GpuCommandQueue<ethel::DrawCommand, RenderGroup>,
     ) {
-        let t0 = Instant::now();
-
-        self.ui_composite_batches();
-
-        // populate command buffers
+        // prepare uploads
         {
-            command_queue.clear();
+            let t0 = Instant::now();
+            self.ui_composite_batches();
 
-            let fragment_count = self.fragments.data().len() - 1;
-            let debris_count = self.debris.total_debris_count();
-
+            // populate command buffers
             {
-                command_queue.push_group(RenderGroup::Fragment);
-                for _ in 0..fragment_count {
-                    command_queue.push_command(DrawArraysIndirectCommand {
-                        count: 0,
-                        instance_count: 1,
-                        first_vertex: 0,
-                        base_instance: 0,
-                    });
+                command_queue.clear();
+
+                let fragment_count = self.fragments.data().len() - 1;
+                let debris_count = self.debris.total_debris_count();
+
+                {
+                    command_queue.push_group(RenderGroup::Fragment);
+                    for _ in 0..fragment_count {
+                        command_queue.push_command(DrawArraysIndirectCommand {
+                            count: 0,
+                            instance_count: 1,
+                            first_vertex: 0,
+                            base_instance: 0,
+                        });
+                    }
+                }
+                {
+                    command_queue.push_group(RenderGroup::Debris);
+                    for _ in 0..debris_count {
+                        command_queue.push_command(DrawArraysIndirectCommand {
+                            count: 0,
+                            instance_count: 1,
+                            first_vertex: 0,
+                            base_instance: 0,
+                        });
+                    }
                 }
             }
+
+            // send glyph raster copy requests
             {
-                command_queue.push_group(RenderGroup::Debris);
-                for _ in 0..debris_count {
-                    command_queue.push_command(DrawArraysIndirectCommand {
-                        count: 0,
-                        instance_count: 1,
-                        first_vertex: 0,
-                        base_instance: 0,
-                    });
+                if let Some(pipe) = &self.glyph_pipe {
+                    let rasters = self.ui_system.text_composer().rasters();
+                    for raster in rasters {
+                        pipe.send(raster).unwrap();
+                    }
                 }
             }
+
+            let t1 = Instant::now();
+            self.profiler.log_explicit("upload_prepare", t0 - t1);
         }
 
-        // send glyph raster copy requests
-        {
-            if let Some(pipe) = &self.glyph_pipe {
-                let rasters = self.ui_system.text_composer().rasters();
-                for raster in rasters {
-                    pipe.send(raster).unwrap();
-                }
-            }
-        }
-
+        // initialize start profiler frame point after cross() operation
+        // to avoid including sync time in profile report
+        let t0 = Arc::new(AtomicU64::new(0));
+        let t00 = Instant::now();
         frame_boundary.cross(|section, storage| {
+            let elapsed = t00.elapsed().as_nanos();
+            t0.store(elapsed as u64, Ordering::Relaxed);
             let buf_idx = section.as_index();
 
             // interface quads & commands upload
@@ -431,8 +451,11 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             );
         });
 
+        let sync_duration = t0.load(Ordering::Acquire);
         let t1 = Instant::now();
-        self.profiler.log_explicit("upload_gpu", t0, t1);
+        let nanos = ((t1 - t00).as_nanos() as u64) - sync_duration;
+        self.profiler
+            .log_explicit("upload_gpu", Duration::from_nanos(nanos));
     }
 
     fn step(
@@ -562,11 +585,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         self.deforms.delete_dead_points();
         self.release_debris_bodies();
         self.delete_disabled_fragments();
-
-        self.profiler
-            .capture_duration("extract_lattice_rotations", || {
-                //todo
-            });
 
         self.profiler.capture_duration("cage_update", || {
             let lattice = NodesRowTableView::from(self.lattice.nodes());
