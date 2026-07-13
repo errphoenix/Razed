@@ -165,25 +165,38 @@ ethel::shader_glsl! {
             uint i5 = imap_deforms[anchors[5].index].index;
             uint i6 = imap_deforms[anchors[6].index].index;
             uint i7 = imap_deforms[anchors[7].index].index;
-            vec3 p0 = pod_deforms_positions[i0].xyz;
-            vec3 p1 = pod_deforms_positions[i1].xyz;
-            vec3 p2 = pod_deforms_positions[i2].xyz;
-            vec3 p3 = pod_deforms_positions[i3].xyz;
-            vec3 p4 = pod_deforms_positions[i4].xyz;
-            vec3 p5 = pod_deforms_positions[i5].xyz;
-            vec3 p6 = pod_deforms_positions[i6].xyz;
-            vec3 p7 = pod_deforms_positions[i7].xyz;
-            vec3 b0 = pod_deforms_pose[i0].xyz;
-            vec3 b1 = pod_deforms_pose[i1].xyz;
-            vec3 b2 = pod_deforms_pose[i2].xyz;
-            vec3 b3 = pod_deforms_pose[i3].xyz;
-            vec3 b4 = pod_deforms_pose[i4].xyz;
-            vec3 b5 = pod_deforms_pose[i5].xyz;
-            vec3 b6 = pod_deforms_pose[i6].xyz;
-            vec3 b7 = pod_deforms_pose[i7].xyz;
 
-            // determine vertex relative to bind cage
-            // todo: move to precompute, possibly
+            // anchor order is guaranteed to be:
+            // 0: -x, -y, -z,
+            // 1:  x, -y, -z,
+            // 2: -x,  y, -z,
+            // 3:  x,  y, -z,
+            // 4: -x, -y,  z,
+            // 5:  x, -y,  z,
+            // 6: -x,  y,  z,
+            // 7:  x,  y,  z,
+
+            // bind-time positions
+            vec3 b000 = pod_deforms_pose[i0].xyz;
+            vec3 b100 = pod_deforms_pose[i1].xyz;
+            vec3 b010 = pod_deforms_pose[i2].xyz;
+            vec3 b110 = pod_deforms_pose[i3].xyz;
+            vec3 b001 = pod_deforms_pose[i4].xyz;
+            vec3 b101 = pod_deforms_pose[i5].xyz;
+            vec3 b011 = pod_deforms_pose[i6].xyz;
+            vec3 b111 = pod_deforms_pose[i7].xyz;
+
+            // real-time positions
+            vec3 p000 = pod_deforms_positions[i0].xyz;
+            vec3 p100 = pod_deforms_positions[i1].xyz;
+            vec3 p010 = pod_deforms_positions[i2].xyz;
+            vec3 p110 = pod_deforms_positions[i3].xyz;
+            vec3 p001 = pod_deforms_positions[i4].xyz;
+            vec3 p101 = pod_deforms_positions[i5].xyz;
+            vec3 p011 = pod_deforms_positions[i6].xyz;
+            vec3 p111 = pod_deforms_positions[i7].xyz;
+
+            // determine AABB of deformation cage
             const float M = 1000000.0;
             vec3 cage_min = vec3( M);
             vec3 cage_max = vec3(-M);
@@ -206,85 +219,42 @@ ethel::shader_glsl! {
             float vdy = w_rest.y - cage_min.y;
             float vdz = w_rest.z - cage_min.z;
 
+            // axis-aligned interpolation factors
             float ifx = vdx / cdx;
             float ify = vdy / cdy;
             float ifz = vdz / cdz;
 
-            // anchor order is guaranteed to be:
-            // 0: -x, -y, -z,
-            // 1:  x, -y, -z,
-            // 2: -x,  y, -z,
-            // 3:  x,  y, -z,
-            // 4: -x, -y,  z,
-            // 5:  x, -y,  z,
-            // 6: -x,  y,  z,
-            // 7:  x,  y,  z,
+            // double cage trilinear interpolation:
+            // - isolate 4 points by interpolating ifx
+            // - isolate 2 points by interpolating ify
+            // - isolate final point by interpolating ifz
+            //
+            // occurs for BIND cage, then REAL cage, to determine the delta
+            // between bind-time and real-time states.
+            //
+            // the delta is then used to apply the final displacement on
+            // the vertex, effectively applying the deformation.
 
-            vec3 p000 = p0;
-            vec3 p100 = p1;
-            vec3 p010 = p2;
-            vec3 p110 = p3;
-            vec3 p001 = p4;
-            vec3 p101 = p5;
-            vec3 p011 = p6;
-            vec3 p111 = p7;
+            // bind-time cage interp.
+            vec3 bc00 = mix(b000, b100, ifx);
+            vec3 bc01 = mix(b001, b101, ifx);
+            vec3 bc10 = mix(b010, b110, ifx);
+            vec3 bc11 = mix(b011, b111, ifx);
+            vec3 bc0 = mix(bc00, bc10, ify);
+            vec3 bc1 = mix(bc01, bc11, ify);
+            vec3 b_final = mix(bc0, bc1, ifz);
 
-            // interpolate x, isolate to 4 points
-            vec3 p00 = mix(p000, p100, ifx);
-            vec3 p10 = mix(p010, p110, ifx);
-            vec3 p01 = mix(p001, p101, ifx);
-            vec3 p11 = mix(p011, p111, ifx);
-            // interpolate y, isolate to 2 points
-            vec3 fp0 = mix(p00, p10, ify);
-            vec3 fp1 = mix(p01, p11, ify);
-            // interpolate z, isolate final point
-            vec3 final_point = mix(fp0, fp1, ifz);
+            // real-time cage interp.
+            vec3 rc00 = mix(p000, p100, ifx);
+            vec3 rc01 = mix(p001, p101, ifx);
+            vec3 rc10 = mix(p010, p110, ifx);
+            vec3 rc11 = mix(p011, p111, ifx);
+            vec3 rc0 = mix(rc00, rc10, ify);
+            vec3 rc1 = mix(rc01, rc11, ify);
+            vec3 r_final = mix(rc0, rc1, ifz);
 
-            vec4 world = vec4(final_point, 1.0);
-
-            // float d0 = distance(w_rest, b0) + 0.000001;
-            // float d1 = distance(w_rest, b1) + 0.000001;
-            // float d2 = distance(w_rest, b2) + 0.000001;
-            // float d3 = distance(w_rest, b3) + 0.000001;
-            // float d4 = distance(w_rest, b4) + 0.000001;
-            // float d5 = distance(w_rest, b5) + 0.000001;
-            // float d6 = distance(w_rest, b6) + 0.000001;
-            // float d7 = distance(w_rest, b7) + 0.000001;
-
-            // float vw0 = 1.0 / d0;
-            // float vw1 = 1.0 / d1;
-            // float vw2 = 1.0 / d2;
-            // float vw3 = 1.0 / d3;
-            // float vw4 = 1.0 / d4;
-            // float vw5 = 1.0 / d5;
-            // float vw6 = 1.0 / d6;
-            // float vw7 = 1.0 / d7;
-
-            // float vwt = vw0 + vw1 + vw2 + vw3 + vw4 + vw5 + vw6 + vw7;
-            // vw0 /= vwt;
-            // vw1 /= vwt;
-            // vw2 /= vwt;
-            // vw3 /= vwt;
-            // vw4 /= vwt;
-            // vw5 /= vwt;
-            // vw6 /= vwt;
-            // vw7 /= vwt;
-
-            // vec3 deform = vec3(0.0);
-            // if (i0 != 0) deform += vw0 * (p0 - b0);
-            // if (i1 != 0) deform += vw1 * (p1 - b1);
-            // if (i2 != 0) deform += vw2 * (p2 - b2);
-            // if (i3 != 0) deform += vw3 * (p3 - b3);
-            // if (i4 != 0) deform += vw4 * (p4 - b4);
-            // if (i5 != 0) deform += vw5 * (p5 - b5);
-            // if (i6 != 0) deform += vw6 * (p6 - b6);
-            // if (i7 != 0) deform += vw7 * (p7 - b7);
-
-            // vec4 world = vec4(deform + w_rest, 1.0);
-            // fs_world = world.xyz;
-            // //fs_normal = mix(normal, normalize(abs(world.xyz)), 0.35);
-            // fs_normal = normal;
-            // fs_color = vec4(vec3(0.8), 1.0);
+            vec3 displacement_delta = r_final - b_final;
+            vec4 world = vec4(w_rest + displacement_delta, 1.0);
 
             fs_world = world.xyz;
             fs_normal = normal;
