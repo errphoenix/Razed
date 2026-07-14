@@ -3,6 +3,9 @@ use ethel::state::data::{
     hash::{Cell, FxSpatialHash},
     table::TableView,
 };
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator,
+};
 
 use crate::{procedural::VoxelGrid, structure::lattice::NodesRowTableView};
 
@@ -148,17 +151,8 @@ impl DeformSystem {
     }
 
     pub fn deform(&mut self, lattice: &NodesRowTableView) {
-        fn decompose_rotation_polar<const ITER: usize>(cov: glam::Mat3) -> glam::Mat3 {
-            let mut r = cov;
-            for _ in 0..ITER {
-                let ri = r.try_inverse();
-                if ri.is_none() {
-                    return glam::Mat3::IDENTITY;
-                }
-                let ri = ri.unwrap();
-                r = (r + ri.transpose()) * 0.5;
-            }
-            r
+        fn outer_product(a: glam::Vec3, b: glam::Vec3) -> glam::Mat3 {
+            glam::mat3(a * b.x, a * b.y, a * b.z)
         }
 
         fn decompose_rotation_svd(cov: glam::Mat3) -> glam::Mat3 {
@@ -192,63 +186,59 @@ impl DeformSystem {
             u * v_t
         }
 
-        fn outer_product(a: glam::Vec3, b: glam::Vec3) -> glam::Mat3 {
-            glam::Mat3::from_cols(a * b.x, a * b.y, a * b.z)
-        }
-
         let deforms = &mut self.data.deformed;
         let pose = &self.data.pose;
         let controllers = &self.data.controllers;
         let node_binds = &self.data.binds;
 
-        for ((deform, &pose), (controllers, controller_binds)) in deforms
-            .iter_mut()
+        deforms
+            .par_iter_mut()
             .zip(pose)
-            .zip(controllers.iter().zip(node_binds))
+            .zip(controllers.par_iter().zip(node_binds))
             .skip(1)
-        {
-            let w_sum = controllers
-                .iter()
-                .filter(|c| c.id.as_int() != 0)
-                .fold(0f32, |sum, &ControlPoint { weight, .. }| sum + weight);
-            if w_sum < 0.0001 {
-                continue;
-            }
+            .for_each(|((deform, &pose), (controllers, controller_binds))| {
+                let w_sum = controllers
+                    .iter()
+                    .filter(|c| c.id.as_int() != 0)
+                    .fold(0f32, |sum, &ControlPoint { weight, .. }| sum + weight);
+                if w_sum < 0.0001 {
+                    return;
+                }
 
-            let b_bar = controllers
-                .iter()
-                .zip(controller_binds)
-                .filter(|(c, _)| c.id.as_int() != 0)
-                .fold(
-                    glam::Vec3::ZERO,
-                    |acc, (&ControlPoint { weight, .. }, bind_pos)| acc + bind_pos * weight,
-                )
-                / w_sum;
+                let b_bar = controllers
+                    .iter()
+                    .zip(controller_binds)
+                    .filter(|(c, _)| c.id.as_int() != 0)
+                    .fold(
+                        glam::Vec3::ZERO,
+                        |acc, (&ControlPoint { weight, .. }, bind_pos)| acc + bind_pos * weight,
+                    )
+                    / w_sum;
 
-            let p_bar = controllers
-                .iter()
-                .filter(|c| c.id.as_int() != 0)
-                .fold(glam::Vec3::ZERO, |acc, &ControlPoint { id, weight }| {
-                    acc + lattice.current_pos(id) * weight
-                })
-                / w_sum;
+                let p_bar = controllers
+                    .iter()
+                    .filter(|c| c.id.as_int() != 0)
+                    .fold(glam::Vec3::ZERO, |acc, &ControlPoint { id, weight }| {
+                        acc + lattice.current_pos(id) * weight
+                    })
+                    / w_sum;
 
-            let covariance = controllers
-                .iter()
-                .zip(controller_binds)
-                .filter(|(c, _)| c.id.as_int() != 0)
-                .fold(
-                    glam::Mat3::ZERO,
-                    |acc, (&ControlPoint { id, weight }, &bind_pos)| {
-                        let real_pos = lattice.current_pos(id);
-                        acc + outer_product(real_pos - p_bar, bind_pos - b_bar) * weight
-                    },
-                )
-                + glam::Mat3::IDENTITY * 0.00001;
+                let covariance = controllers
+                    .iter()
+                    .zip(controller_binds)
+                    .filter(|(c, _)| c.id.as_int() != 0)
+                    .fold(
+                        glam::Mat3::ZERO,
+                        |acc, (&ControlPoint { id, weight }, &bind_pos)| {
+                            let real_pos = lattice.current_pos(id);
+                            acc + outer_product(real_pos - p_bar, bind_pos - b_bar) * weight
+                        },
+                    )
+                    + glam::Mat3::IDENTITY * 0.00001;
 
-            let rotation = decompose_rotation_svd(covariance);
-            *deform = rotation * (pose - b_bar) + p_bar;
-        }
+                let rotation = decompose_rotation_svd(covariance);
+                *deform = rotation * (pose - b_bar) + p_bar;
+            });
     }
 
     pub fn generate_points(
