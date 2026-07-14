@@ -8,12 +8,12 @@ use janus::texture::{TextureKey, TextureTarget};
 
 use crate::{
     InterfaceButtonRowTableView, InterfaceCommonRowTableView, InterfaceImageRowTableView,
-    InterfacePanelRowTableView, InterfaceTextRowTableView, TextContent,
+    InterfacePanelRowTableView, InterfaceTextRowTableView,
     env::UiEnv,
     text::{GlyphAtlas, TextComposer},
 };
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug)]
 pub struct InterfaceAggregator<'t> {
     pub environment: &'t UiEnv,
     pub commons: InterfaceCommonRowTableView<'t>,
@@ -21,10 +21,11 @@ pub struct InterfaceAggregator<'t> {
     pub texts: InterfaceTextRowTableView<'t>,
     pub images: InterfaceImageRowTableView<'t>,
     pub buttons: InterfaceButtonRowTableView<'t>,
+    pub text_resolve_buf: &'t mut String,
 }
 impl InterfaceAggregator<'_> {
     pub fn gather_quad_elements(
-        &self,
+        &mut self,
         text_composer: &mut TextComposer,
         glyph_atlas: &mut GlyphAtlas,
         buffer: &mut Vec<InterfaceObject>,
@@ -81,7 +82,7 @@ impl InterfaceAggregator<'_> {
     }
 
     fn gather_text(
-        &self,
+        &mut self,
         common_handle: usize,
         text_index: IndirectIndex,
         text_composer: &mut TextComposer,
@@ -89,34 +90,20 @@ impl InterfaceAggregator<'_> {
         out: &mut Vec<InterfaceObject>,
     ) {
         let tdid = self.texts.solve(text_index).as_index();
-        let content = self.texts.content[tdid];
+        let contents = self.texts.contents[tdid];
         let metrics = self.texts.metrics[tdid];
         let font = self.texts.font_name[tdid];
 
-        let text_string = match content {
-            TextContent::Static(text) => text,
-            TextContent::Variable(string_hash) => {
-                let value = &self.environment.get(&string_hash);
-                if let Some(value) = value {
-                    if let Some(hashed_static) = value.resolve_hashed_literal() {
-                        hashed_static
-                    } else if let Some(hashed_dynamic) = value.as_dynamic_string() {
-                        hashed_dynamic
-                    } else {
-                        TextContent::FALLBACK
-                    }
-                } else {
-                    TextContent::FALLBACK
-                }
-            }
-        };
+        let text_buf = &mut self.text_resolve_buf;
+        text_buf.clear();
+        contents.resolve(self.environment, text_buf);
 
         let core_bounds = self.commons.feedback_bounds[common_handle];
         let size = core_bounds.size();
 
         text_composer.set_buffer_size(Some(size.x), Some(size.y));
         text_composer.set_font_metrics(metrics);
-        text_composer.set_text(text_string);
+        text_composer.set_text(text_buf);
         text_composer.set_font(font);
 
         let anchor = self.commons.feedback_anchor[common_handle];

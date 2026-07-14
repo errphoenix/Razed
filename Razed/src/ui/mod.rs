@@ -2,7 +2,7 @@ use ethel::render::Resolution;
 use gui::{
     ButtonParams, ContainerLayout, ContentAlignment, CoreElementParams, ElementParams,
     InterfaceSystem, ItemAlignment, LayoutOptions, LayoutPosition, PanelParams, Point, Rectangle,
-    TextContent, TextParams, Value, Wrap, draw::Batch, style::FlexDirection,
+    TextContents, TextNode, TextParams, Value, Wrap, draw::Batch, style::FlexDirection,
 };
 use janus::texture::TextureKey;
 

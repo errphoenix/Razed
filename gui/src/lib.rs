@@ -1,8 +1,8 @@
-use std::sync::RwLock;
+use std::{fmt::Write, sync::RwLock};
 
 use cosmic_text::FontSystem;
 use ethel::{
-    assets::{AssetMetadataRegistry, CachedStringHash, TextureId, TextureMetadata},
+    assets::{AssetMetadataRegistry, TextureId, TextureMetadata},
     render::Resolution,
     state::data::{Column, DirectIndex, IndirectIndex},
 };
@@ -46,20 +46,60 @@ pub struct InteractionTime {
     pub frames: u32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum TextContent {
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TextContents(pub [TextNode; Self::NODE_COUNT]);
+impl TextContents {
+    pub const NODE_COUNT: usize = 8;
+
+    pub const fn literal(string: &'static str) -> Self {
+        Self::from_node(TextNode::Static(string))
+    }
+
+    pub const fn from_node(node: TextNode) -> Self {
+        let mut nodes = [TextNode::Empty; Self::NODE_COUNT];
+        nodes[0] = node;
+        Self(nodes)
+    }
+
+    pub const fn from_array(array: [TextNode; Self::NODE_COUNT]) -> Self {
+        Self(array)
+    }
+
+    pub fn from_nodes(input_nodes: &[TextNode]) -> Self {
+        let mut nodes = [TextNode::Empty; Self::NODE_COUNT];
+        input_nodes
+            .iter()
+            .take(Self::NODE_COUNT)
+            .enumerate()
+            .for_each(|(i, node)| {
+                nodes[i] = *node;
+            });
+        Self(nodes)
+    }
+
+    pub fn resolve(&self, env: &UiEnv, out: &mut String) {
+        for node in &self.0 {
+            match node {
+                TextNode::Static(literal) => out.write_str(literal).unwrap(),
+                TextNode::Variable(string_hash) => {
+                    if let Some(value) = env.get(string_hash) {
+                        value.write(out).unwrap()
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TextNode {
+    #[default]
+    Empty,
     Static(&'static str),
     /// Variable, dynamic String text content polled from the
     /// [`environment`](env::UiEnv).
     Variable(StringHash),
-}
-impl Default for TextContent {
-    fn default() -> Self {
-        Self::Static("")
-    }
-}
-impl TextContent {
-    pub(crate) const FALLBACK: &str = "Invalid text reference";
 }
 
 ethel::table_spec! {
@@ -93,7 +133,7 @@ ethel::table_spec! {
 
 ethel::table_spec! {
     struct InterfaceText {
-        content: TextContent;
+        contents: TextContents;
         font_name: &'static str;
         color: glam::Vec4;
         metrics: FontMetrics;
@@ -301,6 +341,7 @@ pub struct InterfaceSystem<const LAYERS: usize = 10> {
     font_library: FontLibrary,
 
     environment: UiEnv,
+    text_resolve_buf: String,
 }
 /// Safety:
 /// TaffyTree is !Send due to internal implementation details related to raw
@@ -349,6 +390,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             text_composer: TextComposer::new(),
             font_library: FontLibrary::new(),
             environment,
+            text_resolve_buf: String::new(),
         }
     }
 
@@ -392,6 +434,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             text_composer: TextComposer::new(),
             font_library: FontLibrary::new(),
             environment,
+            text_resolve_buf: String::new(),
         }
     }
 
@@ -441,8 +484,9 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     }
 
     pub fn prepare_elements(&mut self, glyph_atlas: &mut GlyphAtlas) {
-        let aggregator = InterfaceAggregator {
+        let mut aggregator = InterfaceAggregator {
             environment: &self.environment,
+            text_resolve_buf: &mut self.text_resolve_buf,
             commons: InterfaceCommonRowTableView::from(&self.commons),
             panels: InterfacePanelRowTableView::from(&self.panels),
             texts: InterfaceTextRowTableView::from(&self.texts),
@@ -657,31 +701,17 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                             .expect("text id must be valid")
                             .as_index();
 
-                        let content = self.texts.content[tdid];
+                        let contents = self.texts.contents[tdid];
                         let metrics = self.texts.metrics[tdid];
                         let font = self.texts.font_name[tdid];
 
-                        let text_string = match content {
-                            TextContent::Static(text) => text,
-                            TextContent::Variable(string_hash) => {
-                                let value = &self.environment.get(&string_hash);
-                                if let Some(value) = value {
-                                    if let Some(hashed_static) = value.resolve_hashed_literal() {
-                                        hashed_static
-                                    } else if let Some(hashed_dynamic) = value.as_dynamic_string() {
-                                        hashed_dynamic
-                                    } else {
-                                        TextContent::FALLBACK
-                                    }
-                                } else {
-                                    TextContent::FALLBACK
-                                }
-                            }
-                        };
+                        let text_buf = &mut self.text_resolve_buf;
+                        text_buf.clear();
+                        contents.resolve(&self.environment, text_buf);
 
                         self.text_composer.set_buffer_size(width, height);
                         self.text_composer.set_font_metrics(metrics);
-                        self.text_composer.set_text(text_string);
+                        self.text_composer.set_text(text_buf);
                         self.text_composer.set_font(font);
                         let measurement = self.text_composer.measure();
 
@@ -750,7 +780,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     pub fn make_text(
         &mut self,
         id: WidgetId,
-        content: TextContent,
+        contents: TextContents,
         font_name: &'static str,
         color: glam::Vec4,
         metrics: FontMetrics,
@@ -758,7 +788,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         if let Some(commons_id) = self.commons.solve_indirect(id.0) {
             self.assert_null_archetype(commons_id)?;
             let text_element = (
-                content,
+                contents,
                 font_name,
                 color,
                 metrics,
@@ -973,7 +1003,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                         self.add_new(Some(root_id), None, BUTTON_LABEL_LAYOUT, core.layer)?;
                     let special_text_id = self.make_text(
                         root_text_id,
-                        text.content,
+                        text.contents,
                         text.font_name,
                         text.color,
                         FontMetrics {
@@ -996,7 +1026,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             }
             ElementParams::Text(_, text_params) => self.make_text(
                 root_id,
-                text_params.content,
+                text_params.contents,
                 text_params.font_name,
                 text_params.color,
                 FontMetrics {
@@ -1081,14 +1111,14 @@ impl Default for ButtonParams {
 
 #[derive(Clone, Debug)]
 pub struct TextParams {
-    pub content: TextContent,
+    pub contents: TextContents,
     pub font_name: &'static str,
     pub color: glam::Vec4,
     pub font_size: f32,
     pub line_height: f32,
 }
 impl TextParams {
-    pub const DEFAULT_TEXT: TextContent = TextContent::Static("Lorem Ipsum Blah Blah");
+    pub const DEFAULT_TEXT: TextContents = TextContents::literal("Invalid Text");
     pub const DEFAULT_FONT: &'static str = "Arial";
 
     pub const DEFAULT_COLOR: glam::Vec4 = glam::Vec4::ONE;
@@ -1098,7 +1128,7 @@ impl TextParams {
 impl Default for TextParams {
     fn default() -> Self {
         Self {
-            content: Self::DEFAULT_TEXT,
+            contents: Self::DEFAULT_TEXT,
             font_name: Self::DEFAULT_FONT,
             color: Self::DEFAULT_COLOR,
             font_size: Self::DEFAULT_FONT_SIZE,

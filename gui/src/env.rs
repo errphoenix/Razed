@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use ethel::assets::CachedStringHash;
 use janus::StringHash;
 
@@ -131,6 +133,19 @@ impl EnvValue {
         match self {
             EnvValue::DynamicString(hash) => Some(hash),
             _ => None,
+        }
+    }
+
+    pub fn write(&self, string: &mut String) -> std::fmt::Result {
+        match self {
+            EnvValue::Null => write!(string, "null"),
+            EnvValue::Boolean(boolean) => write!(string, "{boolean}"),
+            EnvValue::Integer(int) => write!(string, "{int}"),
+            EnvValue::Float(float) => write!(string, "{float}"),
+            EnvValue::HashedLiteral(_) => {
+                write!(string, "{}", self.resolve_hashed_literal().unwrap())
+            }
+            EnvValue::DynamicString(dyn_str) => write!(string, "{dyn_str}"),
         }
     }
 }
