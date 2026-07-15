@@ -1000,7 +1000,10 @@ impl State {
         let mut lattice_hash = FxSpatialHash::new(SpatialResolution::new(1.0));
         lattice_hash.dump_soa(lattice.current_pos, lattice.handles);
 
-        let mut deforms_vox = VoxelGrid::new(grid.generator, *(grid.options()));
+        let deform_vox_options = grid
+            .options()
+            .with_cell_size(grid.options().cell_size * 2.0);
+        let mut deforms_vox = VoxelGrid::new(grid.generator, deform_vox_options);
         deforms_vox.repopulate_defaults();
         let generated_len =
             self.deforms
@@ -1011,7 +1014,8 @@ impl State {
             generated_len.start,
             generated_len.end - generated_len.start - 1,
         );
-        let mut deforms_hash = FxSpatialHash::new(SpatialResolution::new(1.0));
+        let deforms_resolution = SpatialResolution::new(deform_vox_options.cell_size);
+        let mut deforms_hash = FxSpatialHash::new(deforms_resolution);
         deforms_hash.dump_soa(deforms.pose, deforms.handles);
 
         // handle degenerate
