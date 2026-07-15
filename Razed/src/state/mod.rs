@@ -141,10 +141,14 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         frame_boundary: &Cross<Producer, FrameDataBuffers>,
         command_queue: &mut GpuCommandQueue<ethel::DrawCommand, RenderGroup>,
     ) {
+        self.profiler.push_trace("upload");
         // prepare uploads
         {
             let t0 = Instant::now();
             self.ui_composite_batches();
+            let t1 = Instant::now();
+            self.profiler.log_explicit("composite_ui", t0 - t1);
+            let t0 = t1;
 
             // populate command buffers
             {
@@ -177,6 +181,10 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 }
             }
 
+            let t1 = Instant::now();
+            self.profiler.log_explicit("prepare_commands", t0 - t1);
+            let t0 = t1;
+
             // send glyph raster copy requests
             {
                 if let Some(pipe) = &self.glyph_pipe {
@@ -188,7 +196,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             }
 
             let t1 = Instant::now();
-            self.profiler.log_explicit("upload_prepare", t0 - t1);
+            self.profiler.log_explicit("rasterize_glyphs", t0 - t1);
         }
 
         // initialize start profiler frame point after cross() operation
@@ -455,7 +463,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         let t1 = Instant::now();
         let nanos = ((t1 - t00).as_nanos() as u64) - sync_duration;
         self.profiler
-            .log_explicit("upload_gpu", Duration::from_nanos(nanos));
+            .log_explicit("transfer", Duration::from_nanos(nanos));
+        self.profiler.pop_trace();
     }
 
     fn step(
