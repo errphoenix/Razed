@@ -29,16 +29,10 @@ impl UiRenderCommandBasic {
     }
 }
 
-pub const GENERIC_PANEL_PARAMS: PanelParams = PanelParams {
-    color: glam::Vec3::ZERO,
-    hover_tint: glam::Vec4::ZERO,
-    opacity: 0.6,
-};
-
 pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
     let mut system = InterfaceSystem::new(resolution);
 
-    let root = system
+    let debug_panel = system
         .create_element(ElementParams::Panel(
             CoreElementParams {
                 parent: None,
@@ -46,91 +40,96 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
                 layout_options: LayoutOptions {
                     container: ContainerLayout::Flexbox {
                         direction: FlexDirection::Column,
-                        wrap: Wrap::DontWrap,
-                        justify_content: ContentAlignment::End,
-                        align_content: ContentAlignment::Center,
-                        align_items: ItemAlignment::Center,
+                        wrap: Wrap::Wrap,
+                        justify_content: ContentAlignment::SpaceEvenly,
+                        align_content: ContentAlignment::Start,
+                        align_items: ItemAlignment::Start,
                     },
-                    layout_position: LayoutPosition::Relative,
-                    margin: Some(Rectangle {
-                        left: Value::Absolute(64.0),
-                        ..Default::default()
-                    }),
+                    layout_position: LayoutPosition::Absolute {
+                        x: Some(Value::Absolute(8f32)),
+                        y: Some(Value::Absolute(8f32)),
+                    },
                     size: Some(Point {
-                        x: Value::Absolute(1024.0),
-                        y: Value::Absolute(512.0),
+                        x: Value::Absolute(840f32),
+                        y: Value::Absolute(420f32),
                     }),
+                    padding: Some(Rectangle::splat(Value::Absolute(10f32))),
                     ..Default::default()
                 },
                 layer: 5,
             },
-            GENERIC_PANEL_PARAMS,
+            Default::default(),
         ))
         .unwrap()
         .0;
 
-    system
-        .create_element(ElementParams::Button(
-            CoreElementParams {
-                parent: Some(root),
-                children: None,
-                layout_options: LayoutOptions {
-                    container: ContainerLayout::Block,
-                    layout_position: LayoutPosition::Relative,
-                    size: Some(Point {
-                        x: Value::Absolute(512.0),
-                        y: Value::Absolute(128.0),
-                    }),
-                    align_self: ItemAlignment::Center,
-                    justify_self: ItemAlignment::Center,
-                    margin: Some(Rectangle::ZERO),
-                    ..Default::default()
-                },
-                layer: 5,
-            },
-            ButtonParams {
-                text: TextParams {
-                    content: TextContent::Static("I AM QUITJ"),
-                    font_name: "Papyrus",
-                    color: glam::Vec4::ONE,
-                    font_size: 32f32,
-                    line_height: 36f32,
-                },
-                bg_color: glam::Vec3::Y,
-                bg_hover_tint: glam::vec4(1.0, 0.0, 0.0, 0.8),
-                bg_press_tint: glam::vec4(0.0, 0.0, 1.0, 0.96),
-                callback: gui::ButtonCallback::None,
-            },
-        ))
-        .unwrap()
-        .0;
-
-    system
-        .create_element(ElementParams::Text(
-            CoreElementParams {
-                parent: Some(root),
-                children: None,
-                layout_options: LayoutOptions {
-                    container: ContainerLayout::Block,
-                    justify_self: ItemAlignment::Center,
-                    align_self: ItemAlignment::End,
-                    margin: Some(Rectangle {
-                        bottom: Value::Absolute(32f32),
+    let mut debug_text = |contents: TextContents| {
+        system
+            .create_element(ElementParams::Text(
+                CoreElementParams {
+                    parent: Some(debug_panel),
+                    children: None,
+                    layout_options: LayoutOptions {
+                        align_self: ItemAlignment::Start,
+                        min_size: Some(Point {
+                            x: Value::Absolute(256f32),
+                            y: Value::Absolute(0f32),
+                        }),
                         ..Default::default()
-                    }),
+                    },
+                    layer: 5,
+                },
+                TextParams {
+                    contents,
+                    font_size: 14f32,
+                    line_height: 16f32,
                     ..Default::default()
                 },
-                layer: 5,
-            },
-            TextParams {
-                content: TextContent::Static("Quitj: the return.\nThis paragraph introduces the (not so) marvellous return of the tremendously awaited Quitj. Please, seek shelter.\nThis is not a drill: Quitj must be avoided. Do not interact with the enemy, at any cost."),
-                font_name: "Arial",
-                color: glam::Vec4::ONE,
-                font_size: 24f32,
-                line_height: 28f32,
-            },
-        ))
-        .unwrap();
+            ))
+            .unwrap();
+    };
+
+    debug_text(TextContents::from_nodes(&[
+        TextNode::Static("Last frame duration = "),
+        TextNode::Variable(env_names::DEBUG_PERF_LAST_FRAME_TIME_MILLIS),
+        TextNode::Static("ms"),
+    ]));
+    debug_text(TextContents::from_nodes(&[
+        TextNode::Static("Lattice nodes = "),
+        TextNode::Variable(env_names::DEBUG_COUNTER_LATTICE_NODES),
+    ]));
+    debug_text(TextContents::from_nodes(&[
+        TextNode::Static("Lattice constraints = "),
+        TextNode::Variable(env_names::DEBUG_COUNTER_LATTICE_CONSTRAINTS),
+    ]));
+    debug_text(TextContents::from_nodes(&[
+        TextNode::Static("Fragments = "),
+        TextNode::Variable(env_names::DEBUG_COUNTER_FRAGMENTS),
+    ]));
+    debug_text(TextContents::from_nodes(&[
+        TextNode::Static("Cage points = "),
+        TextNode::Variable(env_names::DEBUG_COUNTER_CAGE_POINTS),
+    ]));
+    debug_text(TextContents::from_nodes(&[
+        TextNode::Static("Debris = "),
+        TextNode::Variable(env_names::DEBUG_COUNTER_DEBRIS),
+    ]));
 
     system
+}
+
+pub mod env_names {
+    use janus::StringHash;
+
+    pub const DEBUG_PERF_LAST_FRAME_TIME_MILLIS: StringHash =
+        janus::hash_string("__debug.perf.last_frame_time.millis");
+
+    pub const DEBUG_COUNTER_LATTICE_NODES: StringHash =
+        janus::hash_string("__debug.counter.lattice.nodes");
+    pub const DEBUG_COUNTER_LATTICE_CONSTRAINTS: StringHash =
+        janus::hash_string("__debug.counter.lattice.constraints");
+    pub const DEBUG_COUNTER_FRAGMENTS: StringHash = janus::hash_string("__debug.counter.fragments");
+    pub const DEBUG_COUNTER_CAGE_POINTS: StringHash =
+        janus::hash_string("__debug.counter.cage_points");
+    pub const DEBUG_COUNTER_DEBRIS: StringHash = janus::hash_string("__debug.counter.debris");
 }

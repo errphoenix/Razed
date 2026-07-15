@@ -492,6 +492,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             self.ui_system.set_resolution(screen.resolution());
         }
 
+        self.update_environment(delta);
+
         self.ui_system.clear_batches();
         self.ui_update_layout();
         self.ui_process_input(input.cursor(), delta);
@@ -602,6 +604,25 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 }
 
 impl State {
+    pub fn update_environment(&mut self, last_frame_time: DeltaTime) {
+        use crate::ui::env_names::*;
+
+        let frame_time_millis = last_frame_time.as_millis();
+        let lattice_node_count = self.lattice.nodes().len();
+        let lattice_constr_count = self.lattice.links().len();
+        let fragment_count = self.fragments.data().len();
+        let cage_points_count = self.deforms.data().len();
+        let debris_count = self.debris.data().len();
+
+        let env = self.ui_system.env_mut();
+        env.insert(DEBUG_PERF_LAST_FRAME_TIME_MILLIS, frame_time_millis);
+        env.insert(DEBUG_COUNTER_LATTICE_NODES, lattice_node_count);
+        env.insert(DEBUG_COUNTER_LATTICE_CONSTRAINTS, lattice_constr_count);
+        env.insert(DEBUG_COUNTER_FRAGMENTS, fragment_count);
+        env.insert(DEBUG_COUNTER_CAGE_POINTS, cage_points_count);
+        env.insert(DEBUG_COUNTER_DEBRIS, debris_count);
+    }
+
     pub fn ui_system(&self) -> &InterfaceSystem {
         &self.ui_system
     }
