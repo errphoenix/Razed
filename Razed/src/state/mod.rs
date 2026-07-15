@@ -466,6 +466,10 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         delta: janus::context::DeltaTime,
     ) {
         self.profiler.capture_duration("lattice_update", || {
+            const WIND_FORCE: f32 = 0.0;
+            self.lattice
+                .apply_forces_batched(glam::vec3(WIND_FORCE, -9.81, WIND_FORCE));
+
             self.lattice.update(delta);
         });
         self.profiler.capture_duration("debris_simulate", || {
@@ -566,10 +570,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         });
 
         self.profiler.capture_duration("lattice_trivialities", || {
-            const WIND_FORCE: f32 = 0.0;
-            self.lattice
-                .apply_forces_batched(glam::vec3(WIND_FORCE, -9.81, WIND_FORCE));
-
             let deforms = DeformsRowTableView::from(self.deforms.data());
             self.fragments.compute_world_positions(&deforms);
 
