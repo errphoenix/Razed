@@ -59,7 +59,6 @@ pub struct Renderer {
     pub glyph_atlas_texture: GlyphAtlasTexture,
     pub glyph_pipe: Option<crossbeam::channel::Receiver<GlyphRaster>>,
 }
-
 impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
     fn pre_frame(
         &mut self,

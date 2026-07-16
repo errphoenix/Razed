@@ -467,7 +467,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         self.profiler.pop_trace();
     }
 
-    fn step(
+    fn fixed_step(
         &mut self,
         _input: &mut ethel::InputSystem,
         _screen: &mut janus::sync::Mirror<ScreenSpace>,
