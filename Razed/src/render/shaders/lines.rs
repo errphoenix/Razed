@@ -1,6 +1,6 @@
 use super::commons;
 
-use ethel::shader::{GlslStruct, GlslUniform, ShaderKind};
+use ethel::shader::{GlslStruct, GlslUniform, ShaderKind, ShaderProgram};
 use ethel::state::data::IndirectIndex;
 
 #[cfg(feature = "devmode")]

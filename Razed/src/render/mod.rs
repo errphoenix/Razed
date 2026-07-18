@@ -205,8 +205,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 self.command_process_compute.bind();
                 let cmd_len = frags_cmd_view.length();
                 let wg_d_count = cmd_len.div_ceil(COMPUTE_WG_INVOCATIONS);
-                self.command_process_compute
-                    .set_workgroups_size(wg_d_count, 1, 1);
                 {
                     let i_mesh_id =
                         shaders::compute::process_command::SSBO_INDEX_FRAGMENTS_MESH_IDS;
@@ -219,14 +217,12 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     let i_cmd_buf = shaders::compute::process_command::SSBO_INDEX_COMMAND_BUFFER;
                     frags_cmd.bind_shader_storage(buf_idx, i_cmd_buf as usize, 0);
                 }
-                self.command_process_compute.dispatch();
+                self.command_process_compute.dispatch([wg_d_count, 1, 1]);
             }
             {
                 self.command_process_compute.bind();
                 let cmd_len = debris_cmd_view.length();
                 let wg_d_count = cmd_len.div_ceil(COMPUTE_WG_INVOCATIONS);
-                self.command_process_compute
-                    .set_workgroups_size(wg_d_count, 1, 1);
                 {
                     let i_mesh_id =
                         shaders::compute::process_command::SSBO_INDEX_FRAGMENTS_MESH_IDS;
@@ -239,7 +235,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     let i_cmd_buf = shaders::compute::process_command::SSBO_INDEX_COMMAND_BUFFER;
                     debris_cmd.bind_shader_storage(buf_idx, i_cmd_buf as usize, 0);
                 }
-                self.command_process_compute.dispatch();
+                self.command_process_compute.dispatch([wg_d_count, 1, 1]);
             }
 
             janus::gl::barrier_shader_storage();

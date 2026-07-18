@@ -1,6 +1,6 @@
 use super::commons;
 
-use ethel::shader::{GlslUniform, ShaderKind};
+use ethel::shader::{GlslUniform, ShaderKind, ShaderProgram};
 
 macro_rules! ssbo_binding {
     (POD_Positions) => {

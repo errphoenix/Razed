@@ -1,4 +1,4 @@
-use ethel::shader::{GlslStruct, GlslUniform, ShaderKind};
+use ethel::shader::{GlslStruct, GlslUniform, ShaderKind, ShaderProgram};
 
 ethel::shader_glsl_struct! {
     struct QuadElement {

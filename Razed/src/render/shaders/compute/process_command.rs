@@ -15,7 +15,7 @@
 //!
 //! [`MeshID`]: ethel::mesh::Id
 
-use ethel::shader::GlslStruct;
+use ethel::shader::{GlslStruct, ShaderProgram};
 
 use crate::render::shaders::commons;
 
