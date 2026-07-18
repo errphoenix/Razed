@@ -85,8 +85,7 @@ impl GlyphAtlasTexture {
     pub fn create_atlas_texture(&mut self, size: i32) -> Texture {
         janus::assert_gl!();
 
-        let bytes = vec![0u8; (size * size * 4) as usize];
-        let texture = Texture::from_bytes(size, size, &bytes, ImageType::Bits8, ImageFormat::Rgba);
+        let texture = Texture::empty(size, size, ImageType::Bits8, ImageFormat::Rgba);
         janus::texture::set_filter(TextureTarget::Flat, TextureFiltering::Nearest);
         self.view = Some(texture.view());
         texture
