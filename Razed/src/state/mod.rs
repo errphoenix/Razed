@@ -77,7 +77,9 @@ pub struct State {
     pub texture_registry_pipe: RegistryPipe,
 
     camera: camera::Orbital,
-    mesh_ids: Vec<ethel::mesh::Id>,
+
+    #[allow(unused, reason = "currently unused, might be discarded")]
+    mesh_ids: Vec<ethel::mesh::Id>, // generic objects mesh ids imap
 
     pub generic_objects: RenderableRowTable,
 
