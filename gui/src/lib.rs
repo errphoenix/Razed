@@ -15,12 +15,13 @@ pub mod shaders;
 pub mod style;
 pub mod text;
 
+use rendrs::batch::Batch;
 pub use style::*;
 
 use taffy::prelude::*;
 
 use crate::{
-    draw::{Batch, BatchingLayerCompositor, InterfaceAggregator, InterfaceObject},
+    draw::{BatchingLayerCompositor, InterfaceAggregator, InterfaceObject, Quad},
     env::UiEnv,
     text::{FontMetrics, GlyphAtlas, TextComposer, TextMeasurement, font::FontLibrary},
 };
@@ -501,21 +502,17 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     }
 
     pub fn composite_layers(&mut self, registry: &AssetMetadataRegistry<TextureMetadata>) {
-        self.intermediate_buffer
-            .drain(..)
-            .for_each(|object| self.compositor.insert(object, registry));
+        self.intermediate_buffer.drain(..).for_each(|object| {
+            self.compositor.insert(object, registry);
+        });
     }
 
-    pub fn finalize_batches(&mut self) {
-        self.compositor.pull_batches();
-    }
-
-    pub fn batches(&self) -> &[Batch] {
+    pub fn batches(&self) -> impl Iterator<Item = &Batch<Quad>> {
         self.compositor.batches()
     }
 
-    pub fn clear_batches(&mut self) {
-        self.compositor.clear_batches();
+    pub fn clear_compositor_layers(&mut self) {
+        self.compositor.clear_layers();
     }
 
     pub fn compositor(&self) -> &BatchingLayerCompositor<LAYERS> {
