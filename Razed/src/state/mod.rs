@@ -221,9 +221,9 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 let batches = self.ui_system.batches();
 
                 let mut quad_offset = 0;
-                for (i, batch) in batches.iter().enumerate() {
-                    quads.blit_section(buf_idx, &batch.array().inner, quad_offset as usize);
-                    let count = batch.array().len() as u32;
+                for (i, batch) in batches.enumerate() {
+                    quads.blit_section(buf_idx, batch.data(), quad_offset as usize);
+                    let count = batch.data().len() as u32;
 
                     let command = UiRenderCommandBasic {
                         vertex_count: QUAD_VERTEX_COUNT,
@@ -509,7 +509,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 
         self.update_environment(delta);
 
-        self.ui_system.clear_batches();
         self.ui_update_layout();
         self.ui_process_input(input.cursor(), delta);
         self.ui_system.process_widget_states(delta);
@@ -657,8 +656,8 @@ impl State {
     pub fn ui_composite_batches(&mut self) {
         self.ui_system.prepare_elements(&mut self.glyph_atlas);
         let texture_metadata = &self.textures_metadata_registry;
+        self.ui_system.clear_compositor_layers();
         self.ui_system.composite_layers(texture_metadata);
-        self.ui_system.finalize_batches();
     }
 
     pub fn create_generic_object(

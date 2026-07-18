@@ -3,10 +3,7 @@ pub mod shaders;
 use std::sync::atomic::Ordering;
 
 use ethel::render::command::{DrawGroups, GpuCommandDispatch};
-use gui::{
-    draw::Batch,
-    text::{GlyphAtlasTexture, GlyphRaster},
-};
+use gui::text::{GlyphAtlasTexture, GlyphRaster};
 
 #[cfg(feature = "devmode")]
 use crate::render::shaders::lines::DebugLinesData;
@@ -287,7 +284,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
             quads.bind_shader_storage(buf_idx, QUAD_SSBO_INDEX as usize, 0);
 
-            let mut texture_masks = [0u32; Batch::UNITS];
+            let mut texture_masks = [0u32; rendrs::BATCH_UNITS];
 
             for command in commands.iter() {
                 if command.instance_count == 0 {
@@ -297,7 +294,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 command.bind_texture_units();
                 let offset = command.instance_offset;
 
-                for i in 0..Batch::UNITS {
+                for i in 0..rendrs::BATCH_UNITS {
                     let unit = command.texture_units[i];
                     let has_texture = unit.is_some_and(|tex| tex.0 != 0);
                     texture_masks[i] = has_texture as u32;

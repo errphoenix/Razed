@@ -1,8 +1,8 @@
 use ethel::render::Resolution;
 use gui::{
-    ButtonParams, ContainerLayout, ContentAlignment, CoreElementParams, ElementParams,
-    InterfaceSystem, ItemAlignment, LayoutOptions, LayoutPosition, PanelParams, Point, Rectangle,
-    TextContents, TextNode, TextParams, Value, Wrap, draw::Batch, style::FlexDirection,
+    ContainerLayout, ContentAlignment, CoreElementParams, ElementParams, InterfaceSystem,
+    ItemAlignment, LayoutOptions, LayoutPosition, Point, Rectangle, TextContents, TextNode,
+    TextParams, Value, Wrap, style::FlexDirection,
 };
 use janus::texture::TextureKey;
 
@@ -12,7 +12,7 @@ pub struct UiRenderCommandBasic {
     pub vertex_count: u32,
     pub instance_count: u32,
     pub instance_offset: u32,
-    pub texture_units: [Option<TextureKey>; Batch::UNITS],
+    pub texture_units: [Option<TextureKey>; rendrs::BATCH_UNITS],
 }
 impl UiRenderCommandBasic {
     pub fn bind_texture_units(&self) {
