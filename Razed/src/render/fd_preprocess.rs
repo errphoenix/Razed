@@ -29,7 +29,7 @@ use crate::{
     render::shader_commons,
 };
 
-pub type FdPreprocessComputePass<'ctx> = ComputePass<FdPreprocessCtx<'ctx>, 0, 0>;
+pub type FdPreprocessComputePass = ComputePass<FdPreprocessCtxWrapper, 0, 0>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FdPreprocessTarget {
@@ -47,6 +47,8 @@ pub struct FdPreprocessCtx<'data> {
     pub debris_commands: &'data TriBuffer<DrawArraysIndirectCommand>,
     pub debris_data: &'data PartitionedTriBuffer<3>,
 }
+
+rendrs::context_wrapper!(for<'data> FdPreprocessCtx);
 
 pub const fn pass(shader: &ComputeShaderProcessCommand) -> FdPreprocessComputePass {
     let handle_view = shader.compute_handle().view();

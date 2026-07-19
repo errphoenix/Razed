@@ -8,9 +8,15 @@ pub mod shader_commons;
 
 use std::sync::atomic::Ordering;
 
-use ethel::render::{Resolution, command::DrawGroups};
+use ethel::{
+    render::{Resolution, command::DrawGroups},
+    state::camera::ViewPoint,
+};
 use gui::text::{GlyphAtlasTexture, GlyphRaster};
-use janus::texture::{ImageFormat, ImageType, TextureFiltering};
+use janus::{
+    sync::TriCell,
+    texture::{ImageFormat, ImageType, TextureFiltering},
+};
 use rendrs::pipeline::{Pass, RenderPool, RenderTarget, RenderTargetDescriptor, RenderTargetId};
 
 #[cfg(feature = "devmode")]
@@ -53,10 +59,10 @@ impl RenderTargetHandles {
 }
 
 #[derive(Debug)]
-pub struct RenderPipeline<'ctx> {
-    fd_preprocess_pass: fd_preprocess::FdPreprocessComputePass<'ctx>,
+pub struct RenderPipeline {
+    fd_preprocess_pass: fd_preprocess::FdPreprocessComputePass,
 }
-impl RenderPipeline<'_> {
+impl RenderPipeline {
     fn invalidate_framebuffers(&mut self) {
         //todo
     }
@@ -74,9 +80,9 @@ pub struct RenderShaders {
 }
 
 #[derive(Debug, Default)]
-pub struct Renderer<'ctx> {
+pub struct Renderer {
     // safe to unwrap during rendering
-    pipeline: Option<RenderPipeline<'ctx>>,
+    pipeline: Option<RenderPipeline>,
 
     // safe to unwrap during rendering
     target_handles: Option<RenderTargetHandles>,
@@ -91,7 +97,7 @@ pub struct Renderer<'ctx> {
 
     pub textures_master_registry: assets::TextureRegistry,
 }
-impl ethel::RenderHandler<FrameDataBuffers> for Renderer<'_> {
+impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
     fn pre_frame(
         &mut self,
         screen: &mut janus::sync::Mirror<ethel::render::ScreenSpace>,
@@ -414,7 +420,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer<'_> {
         });
     }
 }
-impl Renderer<'_> {
+impl Renderer {
     fn initialize_shaders(&mut self) {
         self.shaders.lattice = debug_lattice_draw::ShaderDebugLattice::new_compiled();
         self.shaders.fragments = fragments_draw::ShaderFragment::new_compiled();
