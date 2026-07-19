@@ -8,15 +8,14 @@ pub mod shader_commons;
 
 use std::sync::atomic::Ordering;
 
-use ethel::render::command::{DrawGroups, GpuCommandDispatch};
+use ethel::render::{Resolution, command::DrawGroups};
 use gui::text::{GlyphAtlasTexture, GlyphRaster};
+use janus::texture::{ImageFormat, ImageType, TextureFiltering};
+use rendrs::pipeline::{Pass, RenderPool, RenderTarget, RenderTargetDescriptor, RenderTargetId};
 
 #[cfg(feature = "devmode")]
 use crate::render::debug_lines_draw::DebugLinesData;
-use crate::{
-    assets,
-    data::{FrameDataBuffers, LayoutFragmentData},
-};
+use crate::{assets, data::FrameDataBuffers};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RenderGroup {
@@ -43,26 +42,56 @@ impl DrawGroups for RenderGroup {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct Renderer {
-    lattice_shader: debug_lattice_draw::ShaderDebugLattice,
-    frags_shader: fragments_draw::ShaderFragment,
-    debris_shader: debris_draw::ShaderDebris,
-    lines_shader: debug_lines_draw::ShaderDebugLines,
-    cage_shader: debug_cage_draw::ShaderDebugCage,
-    interface_shader: gui::shaders::ShaderUiBasic,
+#[derive(Debug, Clone, Copy)]
+pub struct RenderTargetHandles {
+    base: RenderTargetId,
+}
+impl RenderTargetHandles {
+    pub fn base(&self) -> RenderTargetId {
+        self.base
+    }
+}
 
-    command_process_compute: frag_debris_preprocess::ComputeShaderProcessCommand,
+#[derive(Debug)]
+pub struct RenderPipeline<'ctx> {
+    fd_preprocess_pass: fd_preprocess::FdPreprocessComputePass<'ctx>,
+}
+impl RenderPipeline<'_> {
+    fn invalidate_framebuffers(&mut self) {
+        //todo
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct RenderShaders {
+    lattice: debug_lattice_draw::ShaderDebugLattice,
+    fragments: fragments_draw::ShaderFragment,
+    debris: debris_draw::ShaderDebris,
+    lines: debug_lines_draw::ShaderDebugLines,
+    cage: debug_cage_draw::ShaderDebugCage,
+    interface: gui::shaders::ShaderUiBasic,
+    fd_preprocess: fd_preprocess::ComputeShaderProcessCommand,
+}
+
+#[derive(Debug, Default)]
+pub struct Renderer<'ctx> {
+    // safe to unwrap during rendering
+    pipeline: Option<RenderPipeline<'ctx>>,
+
+    // safe to unwrap during rendering
+    target_handles: Option<RenderTargetHandles>,
+    render_pool: RenderPool,
+    shaders: RenderShaders,
 
     #[cfg(feature = "devmode")]
     lines_debug_buffer: DebugLinesData,
 
-    pub textures_master_registry: assets::TextureRegistry,
-
     pub glyph_atlas_texture: GlyphAtlasTexture,
     pub glyph_pipe: Option<crossbeam::channel::Receiver<GlyphRaster>>,
+
+    pub textures_master_registry: assets::TextureRegistry,
 }
-impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
+impl ethel::RenderHandler<FrameDataBuffers> for Renderer<'_> {
     fn pre_frame(
         &mut self,
         screen: &mut janus::sync::Mirror<ethel::render::ScreenSpace>,
@@ -145,33 +174,40 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             self.lines_debug_buffer.set_color_fallback(COLOR);
         }
 
-        self.interface_shader.bind();
-        self.interface_shader
-            .uniform_projection_mat4v([*ortho_proj]);
+        let RenderShaders {
+            lattice,
+            fragments: frags,
+            debris,
+            lines,
+            cage,
+            interface,
+            ..
+        } = &self.shaders;
 
-        self.lattice_shader.bind();
-        self.lattice_shader.uniform_projection_mat4v([*proj]);
-        self.lattice_shader.uniform_view_mat4v([view_mat]);
+        interface.bind();
+        interface.uniform_projection_mat4v([*ortho_proj]);
 
-        self.cage_shader.bind();
-        self.cage_shader.uniform_projection_mat4v([*proj]);
-        self.cage_shader.uniform_view_mat4v([view_mat]);
+        lattice.bind();
+        lattice.uniform_projection_mat4v([*proj]);
+        lattice.uniform_view_mat4v([view_mat]);
 
-        self.lines_shader.bind();
-        self.lines_shader.uniform_projection_mat4v([*proj]);
-        self.lines_shader.uniform_view_mat4v([view_mat]);
+        cage.bind();
+        cage.uniform_projection_mat4v([*proj]);
+        cage.uniform_view_mat4v([view_mat]);
 
-        self.debris_shader.bind();
-        self.debris_shader
-            .uniform_camera_forward_vec3v([cam_forward]);
-        self.debris_shader.uniform_projection_mat4v([*proj]);
-        self.debris_shader.uniform_view_mat4v([view_mat]);
+        lines.bind();
+        lines.uniform_projection_mat4v([*proj]);
+        lines.uniform_view_mat4v([view_mat]);
 
-        self.frags_shader.bind();
-        self.frags_shader
-            .uniform_camera_forward_vec3v([cam_forward]);
-        self.frags_shader.uniform_projection_mat4v([*proj]);
-        self.frags_shader.uniform_view_mat4v([view_mat]);
+        debris.bind();
+        debris.uniform_camera_forward_vec3v([cam_forward]);
+        debris.uniform_projection_mat4v([*proj]);
+        debris.uniform_view_mat4v([view_mat]);
+
+        frags.bind();
+        frags.uniform_camera_forward_vec3v([cam_forward]);
+        frags.uniform_projection_mat4v([*proj]);
+        frags.uniform_view_mat4v([view_mat]);
 
         // copy requested glyphs to atlas
         {
@@ -369,20 +405,44 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         }
     }
 
-    fn init_resources(&mut self, _resolution: ethel::render::Resolution) {
-        self.lattice_shader = debug_lattice_draw::ShaderDebugLattice::new_compiled();
-        self.frags_shader = fragments_draw::ShaderFragment::new_compiled();
-        self.debris_shader = debris_draw::ShaderDebris::new_compiled();
-        self.lines_shader = debug_lines_draw::ShaderDebugLines::new_compiled();
-        self.cage_shader = debug_cage_draw::ShaderDebugCage::new_compiled();
+    fn init_resources(&mut self, resolution: Resolution) {
+        self.initialize_shaders();
+        self.initialize_render_targets(resolution);
 
-        self.interface_shader = gui::shaders::ShaderUiBasic::new_compiled();
+        self.pipeline = Some(RenderPipeline {
+            fd_preprocess_pass: fd_preprocess::pass(&self.shaders.fd_preprocess),
+        });
+    }
+}
+impl Renderer<'_> {
+    fn initialize_shaders(&mut self) {
+        self.shaders.lattice = debug_lattice_draw::ShaderDebugLattice::new_compiled();
+        self.shaders.fragments = fragments_draw::ShaderFragment::new_compiled();
+        self.shaders.debris = debris_draw::ShaderDebris::new_compiled();
+        self.shaders.lines = debug_lines_draw::ShaderDebugLines::new_compiled();
+        self.shaders.cage = debug_cage_draw::ShaderDebugCage::new_compiled();
+        self.shaders.interface = gui::shaders::ShaderUiBasic::new_compiled();
+        self.shaders.fd_preprocess = fd_preprocess::ComputeShaderProcessCommand::new_compiled();
+
         let sampler_uniforms = std::array::from_fn(|i| i as i32);
-        self.interface_shader.bind();
-        self.interface_shader
+        self.shaders.interface.bind();
+        self.shaders
+            .interface
             .uniform_texture_map_sampler2Dv(sampler_uniforms);
+    }
 
-        self.command_process_compute =
-            frag_debris_preprocess::ComputeShaderProcessCommand::new_compiled();
+    fn initialize_render_targets(&mut self, resolution: Resolution) {
+        let base = self.render_pool.add(RenderTarget::new(
+            "base",
+            RenderTargetDescriptor::new(
+                ImageFormat::Rgb,
+                ImageType::Bits8,
+                TextureFiltering::Nearest,
+                1.0,
+            ),
+            resolution,
+        ));
+
+        self.target_handles = Some(RenderTargetHandles { base });
     }
 }

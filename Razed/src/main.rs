@@ -24,7 +24,7 @@ mod ui;
 const DISPLAY_PARAMS: DisplayParameters = DisplayParameters::fullscreen("Razed");
 
 type State = ethel::state::State<FrameDataBuffers, state::State, RenderGroup>;
-type Renderer = ethel::render::Renderer<FrameDataBuffers, render::Renderer>;
+type Renderer<'ctx> = ethel::render::Renderer<FrameDataBuffers, render::Renderer<'ctx>>;
 
 fn main() {
     tracing_subscriber::FmtSubscriber::builder().init();
