@@ -1,5 +1,4 @@
-use super::commons;
-
+use super::shader_commons;
 use ethel::shader::{GlslUniform, ShaderKind, ShaderProgram};
 
 macro_rules! ssbo_binding {
@@ -37,8 +36,8 @@ ethel::shader_glsl! {
             };
 
             type {
-                commons::TYPE_MESH_METADATA
-                commons::TYPE_MESH_VERTEX
+                shader_commons::TYPE_MESH_METADATA
+                shader_commons::TYPE_MESH_VERTEX
             };
 
             ssbo {
@@ -63,9 +62,9 @@ ethel::shader_glsl! {
             };
 
             lib {
-                commons::LIB_QUAT_CONVERT_MAT;
-                commons::LIB_QUAT_MUL_QUAT;
-                commons::LIB_QUAT_ROT_VEC;
+                shader_commons::LIB_QUAT_CONVERT_MAT;
+                shader_commons::LIB_QUAT_MUL_QUAT;
+                shader_commons::LIB_QUAT_ROT_VEC;
             };
 
             src() "
@@ -98,7 +97,7 @@ ethel::shader_glsl! {
 
         unit ShaderKind::Pixel => [
             attribs {
-                commons::ATTRIBS_PIXEL_MINIMAL
+                shader_commons::ATTRIBS_PIXEL_MINIMAL
             };
 
             uniform {
@@ -106,7 +105,7 @@ ethel::shader_glsl! {
             };
 
             const {
-                commons::CONST_AMBIENT_LIGHT
+                shader_commons::CONST_AMBIENT_LIGHT
             };
 
             src() "

@@ -1,6 +1,6 @@
-use super::commons;
-
 use ethel::shader::{GlslUniform, ShaderKind, ShaderProgram};
+
+use crate::render::shader_commons;
 
 macro_rules! ssbo_binding {
     (POD_Anchors) => {
@@ -38,8 +38,8 @@ ethel::shader_glsl! {
     struct Fragment > [460] {
         common {
             type {
-                commons::TYPE_MESH_METADATA
-                commons::TYPE_MESH_VERTEX
+                shader_commons::TYPE_MESH_METADATA
+                shader_commons::TYPE_MESH_VERTEX
             };
 
             ssbo {
@@ -50,7 +50,7 @@ ethel::shader_glsl! {
 
         unit ShaderKind::Pixel => [
             attribs {
-                commons::ATTRIBS_PIXEL_MINIMAL
+                shader_commons::ATTRIBS_PIXEL_MINIMAL
             };
 
             uniform {
@@ -58,7 +58,7 @@ ethel::shader_glsl! {
             };
 
             const {
-                commons::CONST_AMBIENT_LIGHT
+                shader_commons::CONST_AMBIENT_LIGHT
             };
 
             src() "
@@ -96,8 +96,8 @@ ethel::shader_glsl! {
             };
 
             type {
-                commons::TYPE_INDEX_INDIRECT
-                commons::TYPE_INDEX_DIRECT
+                shader_commons::TYPE_INDEX_INDIRECT
+                shader_commons::TYPE_INDEX_DIRECT
             };
 
             ssbo {

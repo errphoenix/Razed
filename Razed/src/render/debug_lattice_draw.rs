@@ -1,7 +1,7 @@
-use super::commons;
-
 use ethel::shader::{GlslStruct, GlslUniform, ShaderKind, ShaderProgram};
 use ethel::state::data::IndirectIndex;
+
+use crate::render::shader_commons;
 
 macro_rules! ssbo_binding {
     (POD_Constraints) => {
@@ -52,8 +52,8 @@ ethel::shader_glsl! {
             };
 
             type {
-                commons::TYPE_INDEX_INDIRECT
-                commons::TYPE_INDEX_DIRECT
+                shader_commons::TYPE_INDEX_INDIRECT
+                shader_commons::TYPE_INDEX_DIRECT
 
                 TYPE_CONSTRAINT
             };
@@ -109,45 +109,6 @@ ethel::shader_glsl! {
 
             src() "
                 out_Color = fs_color;
-            "
-        ];
-    }
-}
-
-ethel::shader_glsl! {
-    struct DebugCage > [460] {
-        common {};
-
-        unit ShaderKind::Vertex => [
-            uniform {
-                length 1, projection: mat4 => glam::Mat4;
-                length 1, view: mat4 => glam::Mat4;
-            };
-
-            ssbo {
-                ethel::shader_glsl_ssbo! {
-                    buf POD_Deform_Points => {
-                        [dyn_array vec4: pod_deforms]
-                    }
-                }
-            };
-
-            src() "
-                uint id = gl_VertexID + 1;
-                vec3 deform = pod_deforms[id].xyz;
-                gl_Position = projection * view * vec4(deform, 1.0);
-            "
-        ];
-
-        unit ShaderKind::Pixel => [
-            attribs {
-                ethel::shader_glsl_attribs! {
-                    output out_Color: vec4;
-                }
-            };
-
-            src() "
-                out_Color = vec4(1.0, 0.0, 1.0, 1.0);
             "
         ];
     }

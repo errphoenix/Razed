@@ -1,7 +1,4 @@
-use super::commons;
-
-use ethel::shader::{GlslStruct, GlslUniform, ShaderKind, ShaderProgram};
-use ethel::state::data::IndirectIndex;
+use ethel::shader::{GlslUniform, ShaderKind, ShaderProgram};
 
 #[cfg(feature = "devmode")]
 #[derive(Clone, Debug, Default)]

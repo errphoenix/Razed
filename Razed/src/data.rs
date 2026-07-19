@@ -1,6 +1,7 @@
 use std::sync::{Arc, atomic::AtomicU32};
 
-use crate::{render::shaders, ui::UiRenderCommandBasic};
+use crate::render;
+use crate::ui::UiRenderCommandBasic;
 use ethel::{
     DrawCommand, layout_buffer, layout_mesh_buffer,
     render::buffer::{PartitionedTriBuffer, TriBuffer},
@@ -72,24 +73,24 @@ layout_buffer! {
         enum Constraints: LATTICE_CONSTRAINT_ALLOC => {
             type [IndirectIndex; 2];
             bind 0;
-            shader shaders::debug::SSBO_INDEX_POD_CONSTRAINTS;
+            shader render::debug_lattice_draw::SSBO_INDEX_POD_CONSTRAINTS;
         };
 
         enum IMapNodes: LATTICE_NODE_ALLOC => {
             type IndirectIndex;
             bind 1;
-            shader shaders::debug::SSBO_INDEX_IMAP_NODES;
+            shader render::debug_lattice_draw::SSBO_INDEX_IMAP_NODES;
         };
         enum PodNodes: LATTICE_CONSTRAINT_ALLOC => {
             type [f32; 4];
             bind 2;
-            shader shaders::debug::SSBO_INDEX_POD_NODES;
+            shader render::debug_lattice_draw::SSBO_INDEX_POD_NODES;
         };
 
         enum I_Selected: 1 => {
             type DirectIndex;
             bind 3;
-            shader shaders::debug::SSBO_INDEX_I_SELECTED;
+            shader render::debug_lattice_draw::SSBO_INDEX_I_SELECTED;
         };
     }
 }
@@ -99,38 +100,38 @@ layout_buffer! {
         enum PodAnchors: FRAGMENTS_ALLOC => {
             type [IndirectIndex; FRAGMENT_ANCHORS_COUNT];
             bind 0;
-            shader shaders::fragments::SSBO_INDEX_POD_ANCHORS;
+            shader render::fragments_draw::SSBO_INDEX_POD_ANCHORS;
         };
         enum PodAnchorsWeights: FRAGMENTS_ALLOC => {
             type [f32; FRAGMENT_ANCHORS_COUNT];
             bind 1;
-            shader shaders::fragments::SSBO_INDEX_POD_WEIGHTS;
+            shader render::fragments_draw::SSBO_INDEX_POD_WEIGHTS;
         };
         enum PodBindPose: FRAGMENTS_ALLOC => {
             type glam::Vec4;
             bind 2;
-            shader shaders::fragments::SSBO_INDEX_POD_BINDPOSE;
+            shader render::fragments_draw::SSBO_INDEX_POD_BINDPOSE;
         };
         enum PodMeshId: FRAGMENTS_ALLOC => {
             type ethel::mesh::Id;
             bind 3;
-            shader shaders::fragments::SSBO_INDEX_POD_MESHID;
+            shader render::fragments_draw::SSBO_INDEX_POD_MESHID;
         };
 
         enum IMapDeforms: DEFORM_POINTS_ALLOC => {
             type IndirectIndex;
             bind 4;
-            shader shaders::fragments::SSBO_INDEX_IMAP_DEFORMS;
+            shader render::fragments_draw::SSBO_INDEX_IMAP_DEFORMS;
         };
         enum PodDeformsPositions: DEFORM_POINTS_ALLOC => {
             type [f32; 4];
             bind 5;
-            shader shaders::fragments::SSBO_INDEX_POD_DEFORMS_POSITIONS;
+            shader render::fragments_draw::SSBO_INDEX_POD_DEFORMS_POSITIONS;
         };
         enum PodDeformsBindPose: DEFORM_POINTS_ALLOC => {
             type [f32; 4];
             bind 6;
-            shader shaders::fragments::SSBO_INDEX_POD_DEFORMS_BINDPOSE;
+            shader render::fragments_draw::SSBO_INDEX_POD_DEFORMS_BINDPOSE;
         };
     }
 }
@@ -140,17 +141,17 @@ layout_buffer! {
         enum PodPositions: DEBRIS_ALLOC => {
             type [f32; 4];
             bind 0;
-            shader shaders::debris::SSBO_INDEX_POD_POSITIONS;
+            shader render::debris_draw::SSBO_INDEX_POD_POSITIONS;
         };
         enum PodRotations: DEBRIS_ALLOC => {
             type [f32; 4];
             bind 1;
-            shader shaders::debris::SSBO_INDEX_POD_ROTATIONS;
+            shader render::debris_draw::SSBO_INDEX_POD_ROTATIONS;
         };
         enum PodMeshId: DEBRIS_ALLOC => {
             type ethel::mesh::Id;
             bind 2;
-            shader shaders::debris::SSBO_INDEX_POD_MESHID;
+            shader render::debris_draw::SSBO_INDEX_POD_MESHID;
         };
     }
 }
@@ -161,12 +162,12 @@ layout_buffer! {
         enum PodPoints: DEBUG_LINES_ALLOC => {
             type [f32; 4];
             bind 0;
-            shader shaders::lines::SSBO_INDEX_POD_POINTS;
+            shader render::debug_lines_draw::SSBO_INDEX_POD_POINTS;
         };
         enum PodColors: DEBUG_LINES_ALLOC => {
             type [f32; 4];
             bind 1;
-            shader shaders::lines::SSBO_INDEX_POD_COLORS;
+            shader render::debug_lines_draw::SSBO_INDEX_POD_COLORS;
         };
     }
 }
