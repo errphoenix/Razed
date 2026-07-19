@@ -2,7 +2,7 @@ pub mod debris_draw;
 pub mod debug_cage_draw;
 pub mod debug_lattice_draw;
 pub mod debug_lines_draw;
-pub mod frag_debris_preprocess;
+pub mod fd_preprocess;
 pub mod fragments_draw;
 pub mod shader_commons;
 
@@ -255,7 +255,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 frags_buf.bind_shader_storage_single(
                     buf_idx,
                     LayoutFragmentData::PodDeformsPositions as usize,
-                    Some(7),
+                    Some(debug_cage_draw::SSBO_INDEX_POD_DEFORM_POINTS),
                 );
                 unsafe {
                     janus::gl::PointSize(3.0);

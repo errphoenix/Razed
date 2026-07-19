@@ -16,9 +16,6 @@ macro_rules! ssbo_binding {
     (I_Selected) => {
         7
     };
-    (POD_Deform_Points) => {
-        7
-    };
 }
 
 ethel::shader_glsl_struct! {
@@ -33,7 +30,6 @@ pub const SSBO_INDEX_POD_CONSTRAINTS: u32 = ssbo_binding!(POD_Constraints);
 pub const SSBO_INDEX_POD_NODES: u32 = ssbo_binding!(POD_Nodes);
 pub const SSBO_INDEX_I_SELECTED: u32 = ssbo_binding!(I_Selected);
 pub const SSBO_INDEX_IMAP_NODES: u32 = ssbo_binding!(IMap_Nodes);
-pub const SSBO_INDEX_POD_DEFORM_POINTS: u32 = ssbo_binding!(POD_Deform_Points);
 
 ethel::shader_glsl! {
     struct DebugLattice > [460] {

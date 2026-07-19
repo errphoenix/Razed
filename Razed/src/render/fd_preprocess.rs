@@ -29,18 +29,17 @@ use crate::{
     render::shader_commons,
 };
 
-pub type FragmentDebrisPreprocessComputePass<'ctx> =
-    ComputePass<FragmentDebrisPreprocessCtx<'ctx>, 0, 0>;
+pub type FdPreprocessComputePass<'ctx> = ComputePass<FdPreprocessCtx<'ctx>, 0, 0>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum FragmentDebrisPreprocessTarget {
+pub enum FdPreprocessTarget {
     Fragments,
     Debris,
 }
 
 #[derive(Debug)]
-pub struct FragmentDebrisPreprocessCtx<'data> {
-    pub target: FragmentDebrisPreprocessTarget,
+pub struct FdPreprocessCtx<'data> {
+    pub target: FdPreprocessTarget,
 
     pub fragment_commands: &'data TriBuffer<DrawArraysIndirectCommand>,
     pub fragment_data: &'data PartitionedTriBuffer<8>,
@@ -49,16 +48,16 @@ pub struct FragmentDebrisPreprocessCtx<'data> {
     pub debris_data: &'data PartitionedTriBuffer<3>,
 }
 
-pub const fn pass(shader: &ComputeShaderProcessCommand) -> FragmentDebrisPreprocessComputePass {
+pub const fn pass(shader: &ComputeShaderProcessCommand) -> FdPreprocessComputePass {
     let handle_view = shader.compute_handle().view();
-    FragmentDebrisPreprocessComputePass::new(handle_view, [], [], |section, ctx| {
+    FdPreprocessComputePass::new(handle_view, [], [], |section, ctx| {
         let section = section.as_index();
 
         const MESH_BIND: u32 = SSBO_INDEX_FRAGMENTS_MESH_IDS;
         const CMD_BIND: u32 = SSBO_INDEX_COMMAND_BUFFER;
 
         let wg_count = match ctx.target {
-            FragmentDebrisPreprocessTarget::Fragments => {
+            FdPreprocessTarget::Fragments => {
                 let cmds = ctx.fragment_commands.view_section(section);
                 ctx.fragment_data.bind_shader_storage_single(
                     section,
@@ -69,7 +68,7 @@ pub const fn pass(shader: &ComputeShaderProcessCommand) -> FragmentDebrisPreproc
                     .bind_shader_storage(section, CMD_BIND, 0);
                 cmds.length().div_ceil(WORKGROUP_INVOCATIONS)
             }
-            FragmentDebrisPreprocessTarget::Debris => {
+            FdPreprocessTarget::Debris => {
                 let cmds = ctx.debris_commands.view_section(section);
                 ctx.debris_data.bind_shader_storage_single(
                     section,
