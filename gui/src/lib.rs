@@ -11,7 +11,7 @@ use janus::{StringHash, context::DeltaTime, input::KeyEvent};
 
 pub mod draw;
 pub mod env;
-pub mod shaders;
+pub mod render;
 pub mod style;
 pub mod text;
 
