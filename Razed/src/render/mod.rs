@@ -17,7 +17,7 @@ use ethel::{
 use gui::text::{GlyphAtlasTexture, GlyphRaster};
 use janus::{
     sync::TriCell,
-    texture::{ImageFormat, ImageType, Tex, TextureFiltering},
+    texture::{ImageFormat, ImageType, MipLevels, Tex, TextureFiltering},
 };
 use rendrs::pipeline::{Pass, RenderPool, RenderTarget, RenderTargetDescriptor, RenderTargetId};
 
@@ -410,7 +410,7 @@ impl Renderer {
                 ImageFormat::Rgb,
                 ImageType::Bits8,
                 TextureFiltering::Nearest,
-                0,
+                MipLevels::default(),
                 1.0,
             ),
             resolution,

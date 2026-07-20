@@ -5,7 +5,9 @@ use cosmic_text::{
 };
 use etagere::{AllocId, Allocation, AtlasAllocator};
 use ethel::assets::TextureId;
-use janus::texture::{ImageFormat, ImageType, Tex, Texture, TextureFiltering, TextureView};
+use janus::texture::{
+    ImageFormat, ImageType, MipLevels, Tex, Texture, TextureFiltering, TextureView,
+};
 use lru::LruCache;
 
 use crate::draw::{InterfaceAttachment, InterfaceObject};
@@ -83,9 +85,16 @@ impl GlyphAtlasTexture {
     pub fn create_atlas_texture(&mut self, size: i32) -> Texture {
         janus::assert_gl!();
 
-        let texture = Texture::new_2d(size, size, 0, ImageType::Bits8, ImageFormat::Rgba);
+        let texture = Texture::new_2d(
+            size,
+            size,
+            MipLevels::default(),
+            ImageType::Bits8,
+            ImageFormat::Rgba,
+        );
         texture.set_filtering_minmag(TextureFiltering::Nearest);
         self.view = Some(texture.view());
+
         texture
     }
 
