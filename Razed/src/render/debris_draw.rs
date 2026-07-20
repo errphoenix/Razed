@@ -1,5 +1,32 @@
 use super::shader_commons;
-use ethel::shader::{GlslUniform, ShaderKind, ShaderProgram};
+use ethel::{
+    render::{
+        buffer::{PartitionedTriBuffer, TriBuffer},
+        command::{DrawArraysIndirectCommand, GpuCommandDispatch},
+    },
+    shader::{GlslUniform, ShaderKind, ShaderProgram},
+};
+use rendrs::pipeline::DrawPass;
+
+pub type DebrisDrawPass = DrawPass<DebrisDrawCtxWrapper, 0, 0>;
+
+#[derive(Debug)]
+pub struct DebrisDrawCtx<'data> {
+    pub debris_data: &'data PartitionedTriBuffer<3>,
+    pub debris_commands: &'data TriBuffer<DrawArraysIndirectCommand>,
+}
+
+rendrs::context_wrapper!(for<'ctx> DebrisDrawCtx);
+
+pub const fn pass(shader: &ShaderDebris) -> DebrisDrawPass {
+    let handle_view = shader.handle().view();
+    DebrisDrawPass::new(handle_view, [], [], |section, ctx| {
+        let section = section.as_index();
+        ctx.debris_data.bind_shader_storage(section);
+        let commands = ctx.debris_commands.view_section(section);
+        GpuCommandDispatch::from_view(commands).dispatch();
+    })
+}
 
 macro_rules! ssbo_binding {
     (POD_Positions) => {

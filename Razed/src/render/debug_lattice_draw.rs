@@ -1,7 +1,31 @@
+use ethel::render::buffer::PartitionedTriBuffer;
 use ethel::shader::{GlslStruct, GlslUniform, ShaderKind, ShaderProgram};
 use ethel::state::data::IndirectIndex;
+use rendrs::pipeline::DrawPass;
 
 use crate::render::shader_commons;
+
+pub type DebugLatticeDrawPass = DrawPass<DebugLatticeDrawCtxWrapper, 0, 0>;
+
+#[derive(Debug)]
+pub struct DebugLatticeDrawCtx<'data> {
+    pub lattice_data: &'data PartitionedTriBuffer<4>,
+    pub constraints_count: i32,
+}
+
+rendrs::context_wrapper!(for<'ctx> DebugLatticeDrawCtx);
+
+pub const fn pass(shader: &ShaderDebugLattice) -> DebugLatticeDrawPass {
+    let handle_view = shader.handle().view();
+    DebugLatticeDrawPass::new(handle_view, [], [], |section, ctx| {
+        let section = section.as_index();
+        ctx.lattice_data.bind_shader_storage(section);
+        let count = ctx.constraints_count;
+        unsafe {
+            janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 2, count);
+        }
+    })
+}
 
 macro_rules! ssbo_binding {
     (POD_Constraints) => {

@@ -1,6 +1,33 @@
-use ethel::shader::{GlslUniform, ShaderKind, ShaderProgram};
+use ethel::{
+    render::{
+        buffer::{PartitionedTriBuffer, TriBuffer},
+        command::{DrawArraysIndirectCommand, GpuCommandDispatch},
+    },
+    shader::{GlslUniform, ShaderKind, ShaderProgram},
+};
+use rendrs::pipeline::DrawPass;
 
 use crate::render::shader_commons;
+
+pub type FragmentsDrawPass = DrawPass<FragmentsDrawCtxWrapper, 0, 0>;
+
+#[derive(Debug)]
+pub struct FragmentsDrawCtx<'data> {
+    pub fragments_data: &'data PartitionedTriBuffer<8>,
+    pub fragments_commands: &'data TriBuffer<DrawArraysIndirectCommand>,
+}
+
+rendrs::context_wrapper!(for<'ctx> FragmentsDrawCtx);
+
+pub const fn pass(shader: &ShaderFragment) -> FragmentsDrawPass {
+    let handle_view = shader.handle().view();
+    FragmentsDrawPass::new(handle_view, [], [], |section, ctx| {
+        let section = section.as_index();
+        ctx.fragments_data.bind_shader_storage(section);
+        let commands = ctx.fragments_commands.view_section(section);
+        GpuCommandDispatch::from_view(commands).dispatch();
+    })
+}
 
 macro_rules! ssbo_binding {
     (POD_Anchors) => {

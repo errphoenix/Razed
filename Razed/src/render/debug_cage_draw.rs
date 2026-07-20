@@ -1,4 +1,39 @@
-use ethel::shader::{GlslUniform, ShaderKind, ShaderProgram};
+use ethel::{
+    render::buffer::PartitionedTriBuffer,
+    shader::{GlslUniform, ShaderKind, ShaderProgram},
+};
+use rendrs::pipeline::DrawPass;
+
+use crate::data::LayoutFragmentData;
+
+pub type DebugCageDrawPass = DrawPass<DebugCageDrawCtxWrapper, 0, 0>;
+
+#[derive(Debug)]
+pub struct DebugCageDrawCtx<'data> {
+    pub fragment_data: &'data PartitionedTriBuffer<8>,
+    pub point_size: f32,
+    pub cage_points_count: i32,
+}
+
+rendrs::context_wrapper!(for<'ctx> DebugCageDrawCtx);
+
+pub const fn pass(shader: &ShaderDebugCage) -> DebugCageDrawPass {
+    let handle_view = shader.handle().view();
+    DebugCageDrawPass::new(handle_view, [], [], |section, ctx| {
+        let section = section.as_index();
+        ctx.fragment_data.bind_shader_storage_single(
+            section,
+            LayoutFragmentData::PodDeformsPositions as usize,
+            Some(SSBO_INDEX_POD_DEFORM_POINTS),
+        );
+        let count = ctx.cage_points_count;
+        let point_size = ctx.point_size;
+        unsafe {
+            janus::gl::PointSize(point_size);
+            janus::gl::DrawArrays(janus::gl::POINTS, 0, count);
+        }
+    })
+}
 
 macro_rules! ssbo_binding {
     (POD_Deform_Points) => {

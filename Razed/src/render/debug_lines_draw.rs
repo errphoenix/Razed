@@ -1,13 +1,17 @@
-use ethel::shader::{GlslUniform, ShaderKind, ShaderProgram};
+use ethel::{
+    render::buffer::PartitionedTriBuffer,
+    shader::{GlslUniform, ShaderKind, ShaderProgram},
+};
+use rendrs::pipeline::DrawPass;
 
-#[cfg(feature = "devmode")]
+use crate::data::LayoutDebugLinesData;
+
 #[derive(Clone, Debug, Default)]
 pub struct DebugLinesData {
     pub positions: Vec<glam::Vec3>,
     pub colors: Vec<glam::Vec4>,
 }
 
-#[cfg(feature = "devmode")]
 impl DebugLinesData {
     pub fn new() -> Self {
         Self::default()
@@ -47,6 +51,44 @@ impl DebugLinesData {
     pub fn len(&self) -> usize {
         self.positions.len().min(self.colors.len())
     }
+}
+
+pub type DebugLinesDrawPass = DrawPass<DebugLinesDrawCtxWrapper, 0, 0>;
+
+#[derive(Debug)]
+pub struct DebugLinesDrawCtx<'data> {
+    pub lines_data: &'data PartitionedTriBuffer<2>,
+    pub lines_buffer: &'data DebugLinesData,
+}
+
+rendrs::context_wrapper!(for<'ctx> DebugLinesDrawCtx);
+
+pub const fn pass(shader: &ShaderDebugLines) -> DebugLinesDrawPass {
+    let handle_view = shader.handle().view();
+    DebugLinesDrawPass::new(handle_view, [], [], |section, ctx| {
+        let section = section.as_index();
+        unsafe {
+            ctx.lines_data.blit_part_padded(
+                section,
+                LayoutDebugLinesData::PodPoints as usize,
+                &ctx.lines_buffer.positions,
+                0,
+                4,
+            );
+            ctx.lines_data.blit_part(
+                section,
+                LayoutDebugLinesData::PodColors as usize,
+                &ctx.lines_buffer.colors,
+                0,
+            );
+        }
+
+        ctx.lines_data.bind_shader_storage(section);
+        let count = ctx.lines_buffer.len() as i32;
+        unsafe {
+            janus::gl::DrawArrays(janus::gl::LINES, 0, count);
+        }
+    })
 }
 
 macro_rules! ssbo_binding {
