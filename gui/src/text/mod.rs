@@ -5,9 +5,7 @@ use cosmic_text::{
 };
 use etagere::{AllocId, Allocation, AtlasAllocator};
 use ethel::assets::TextureId;
-use janus::texture::{
-    ImageFormat, ImageType, Texture, TextureFiltering, TextureTarget, TextureView,
-};
+use janus::texture::{ImageFormat, ImageType, Tex, Texture, TextureFiltering, TextureView};
 use lru::LruCache;
 
 use crate::draw::{InterfaceAttachment, InterfaceObject};
@@ -85,8 +83,8 @@ impl GlyphAtlasTexture {
     pub fn create_atlas_texture(&mut self, size: i32) -> Texture {
         janus::assert_gl!();
 
-        let texture = Texture::empty(size, size, ImageType::Bits8, ImageFormat::Rgba);
-        janus::texture::set_filter(TextureTarget::Flat, TextureFiltering::Nearest);
+        let texture = Texture::new_2d(size, size, 0, ImageType::Bits8, ImageFormat::Rgba);
+        texture.set_filtering_minmag(TextureFiltering::Nearest);
         self.view = Some(texture.view());
         texture
     }
@@ -109,13 +107,16 @@ impl GlyphAtlasTexture {
         janus::assert_gl!();
 
         let texture = self.view.expect("atlas texture uninitialized");
-        texture.upload_region(
-            glyph.offset_x as i32,
-            glyph.offset_y as i32,
-            glyph.size_x as i32,
-            glyph.size_y as i32,
-            &glyph.data,
-        );
+        texture
+            .upload_2d(
+                0,
+                glyph.offset_x as i32,
+                glyph.offset_y as i32,
+                glyph.size_x as i32,
+                glyph.size_y as i32,
+                &glyph.data,
+            )
+            .expect("glyph atlas is always a 2d texture");
     }
 
     pub const fn texture(&self) -> Option<TextureView> {

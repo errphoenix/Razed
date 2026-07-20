@@ -4,7 +4,10 @@ use ethel::{
     assets::{AssetMetadataRegistry, TextureId, TextureMetadata},
     state::data::{IndirectIndex, table::TableView},
 };
-use janus::texture::TextureKey;
+use janus::{
+    GpuResource,
+    texture::{TextureKind, TextureView},
+};
 use rendrs::batch::{Batch, BatchGroupIndex, BatchManager, BatchUnitIndex};
 
 use crate::{
@@ -267,7 +270,7 @@ impl<const LAYERS: usize> BatchingLayerCompositor<LAYERS> {
         registry: &AssetMetadataRegistry<TextureMetadata>,
     ) -> (BatchGroupIndex, BatchUnitIndex) {
         let mut quad_uv = [0., 0., 1., 1.];
-        let texture_key = if let Some(attachment) = element.attachment {
+        let texture = if let Some(attachment) = element.attachment {
             let texture = match attachment {
                 InterfaceAttachment::Texture(texture_id) => registry.get(texture_id),
                 InterfaceAttachment::TextureSection { texture_id, uv } => {
@@ -276,9 +279,11 @@ impl<const LAYERS: usize> BatchingLayerCompositor<LAYERS> {
                 }
             };
 
-            texture.and_then(|tex| tex.gl_object).unwrap_or_default()
+            texture
+                .and_then(|tex| tex.view)
+                .unwrap_or(TextureView::null(TextureKind::Dim2D))
         } else {
-            TextureKey::default()
+            TextureView::null(TextureKind::Dim2D)
         };
 
         let quad = Quad {
@@ -286,11 +291,11 @@ impl<const LAYERS: usize> BatchingLayerCompositor<LAYERS> {
             size: element.size,
             color: element.color,
             uv: quad_uv,
-            texture_unit: texture_key.0,
+            texture_id: texture.resource_id(),
         };
 
         let layer = self.layer_mut(element.layer as usize);
-        layer.insert(quad, texture_key)
+        layer.insert(quad, texture)
     }
 
     pub fn layer(&self, index: usize) -> &BatchManager<Quad> {
@@ -325,5 +330,5 @@ pub struct Quad {
     pub size: glam::Vec2,
     pub color: glam::Vec4,
     pub uv: [f32; 4],
-    pub texture_unit: u32,
+    pub texture_id: u32,
 }
