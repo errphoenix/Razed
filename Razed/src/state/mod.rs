@@ -74,7 +74,7 @@ pub struct State {
     pub glyph_pipe: Option<crossbeam::channel::Sender<GlyphRaster>>,
 
     pub textures_metadata_registry: AssetMetadataRegistry<TextureMetadata>,
-    pub texture_registry_pipe: RegistryPipe,
+    pub texture_registry_pipe: RegistryPipe<crate::assets::Texture>,
 
     camera: camera::Orbital,
 

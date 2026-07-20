@@ -17,7 +17,7 @@ use ethel::{
 use gui::text::{GlyphAtlasTexture, GlyphRaster};
 use janus::{
     sync::TriCell,
-    texture::{ImageFormat, ImageType, TextureFiltering},
+    texture::{ImageFormat, ImageType, Tex, TextureFiltering},
 };
 use rendrs::pipeline::{Pass, RenderPool, RenderTarget, RenderTargetDescriptor, RenderTargetId};
 
@@ -32,6 +32,7 @@ use crate::{
     },
 };
 
+#[allow(unused)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RenderGroup {
     Generic,
@@ -309,7 +310,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
                 for i in 0..rendrs::BATCH_UNITS {
                     let unit = command.texture_units[i];
-                    let has_texture = unit.is_some_and(|tex| tex.0 != 0);
+                    let has_texture = unit.is_some_and(|tex| tex.texture_id() != 0);
                     texture_masks[i] = has_texture as u32;
                 }
 
@@ -409,6 +410,7 @@ impl Renderer {
                 ImageFormat::Rgb,
                 ImageType::Bits8,
                 TextureFiltering::Nearest,
+                0,
                 1.0,
             ),
             resolution,

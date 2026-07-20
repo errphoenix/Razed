@@ -4,7 +4,7 @@ use gui::{
     ItemAlignment, LayoutOptions, LayoutPosition, Point, Rectangle, TextContents, TextNode,
     TextParams, Value, Wrap, style::FlexDirection,
 };
-use janus::texture::TextureKey;
+use janus::texture::{Tex, TextureView};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Hash)]
@@ -12,7 +12,7 @@ pub struct UiRenderCommandBasic {
     pub vertex_count: u32,
     pub instance_count: u32,
     pub instance_offset: u32,
-    pub texture_units: [Option<TextureKey>; rendrs::BATCH_UNITS],
+    pub texture_units: [Option<TextureView>; rendrs::BATCH_UNITS],
 }
 impl UiRenderCommandBasic {
     pub fn bind_texture_units(&self) {
@@ -21,10 +21,9 @@ impl UiRenderCommandBasic {
         self.texture_units
             .iter()
             .enumerate()
-            .filter_map(|(i, key)| key.and_then(|key| Some((i, key))))
-            .for_each(|(index, key)| {
-                use janus::texture::TextureTarget;
-                janus::texture::bind_without_meta(TextureTarget::Flat, key, index as u32);
+            .filter_map(|(i, tex)| tex.and_then(|tex| Some((i, tex))))
+            .for_each(|(index, texture)| {
+                texture.bind(index as u32);
             });
     }
 }
