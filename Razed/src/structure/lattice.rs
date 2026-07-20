@@ -315,7 +315,7 @@ impl LatticeSystem {
         lattice
             .constraints
             .iter()
-            .for_each(|(&[a, b], (&edge, (&compliance, &rest_length)))| {
+            .for_each(|(&[a, b], (&compliance, &rest_length))| {
                 let a = self.node_id_buffer[a as usize];
                 let b = self.node_id_buffer[b as usize];
 
