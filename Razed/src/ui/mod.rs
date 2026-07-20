@@ -6,28 +6,6 @@ use gui::{
 };
 use janus::texture::{Tex, TextureView};
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Hash)]
-pub struct UiRenderCommandBasic {
-    pub vertex_count: u32,
-    pub instance_count: u32,
-    pub instance_offset: u32,
-    pub texture_units: [Option<TextureView>; rendrs::BATCH_UNITS],
-}
-impl UiRenderCommandBasic {
-    pub fn bind_texture_units(&self) {
-        janus::assert_gl!();
-
-        self.texture_units
-            .iter()
-            .enumerate()
-            .filter_map(|(i, tex)| tex.and_then(|tex| Some((i, tex))))
-            .for_each(|(index, texture)| {
-                texture.bind(index as u32);
-            });
-    }
-}
-
 pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
     let mut system = InterfaceSystem::new(resolution);
 

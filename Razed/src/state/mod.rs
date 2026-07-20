@@ -22,7 +22,6 @@ use crate::{
         debris::MotionAccumulator,
         lattice::{LatticeSystem, NodesRowTableView},
     },
-    ui::UiRenderCommandBasic,
 };
 use ::physics::xpbd::{RawXpbdLattice, XpbdOptions, XpbdSolver};
 use ethel::{
@@ -225,7 +224,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                     quads.blit_section(buf_idx, batch.data(), quad_offset as usize);
                     let count = batch.data().len() as u32;
 
-                    let command = UiRenderCommandBasic {
+                    let command = gui::render::UiRenderCommandBasic {
                         vertex_count: QUAD_VERTEX_COUNT,
                         instance_count: count,
                         instance_offset: quad_offset,

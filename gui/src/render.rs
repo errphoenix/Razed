@@ -1,4 +1,96 @@
-use ethel::shader::{GlslStruct, GlslUniform, ShaderKind, ShaderProgram};
+use ethel::{
+    render::buffer::TriBuffer,
+    shader::{GlslStruct, GlslUniform, ShaderKind, ShaderProgram},
+};
+use janus::texture::{Tex, TextureView};
+use rendrs::pipeline::DrawPass;
+
+use crate::draw::Quad;
+
+pub type UiDataBuffer = TriBuffer<Quad>;
+pub type UiCommandsBuffer = TriBuffer<UiRenderCommandBasic>;
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Hash)]
+pub struct UiRenderCommandBasic {
+    pub vertex_count: u32,
+    pub instance_count: u32,
+    pub instance_offset: u32,
+    pub texture_units: [Option<TextureView>; rendrs::BATCH_UNITS],
+}
+impl UiRenderCommandBasic {
+    pub fn bind_texture_units(&self) {
+        janus::assert_gl!();
+
+        self.texture_units
+            .iter()
+            .enumerate()
+            .filter_map(|(i, tex)| tex.and_then(|tex| Some((i, tex))))
+            .for_each(|(index, texture)| {
+                texture.bind(index as u32);
+            });
+    }
+}
+
+pub type UiDrawPass = DrawPass<UiDrawPassCtxWrapper, 0, 0>;
+
+#[derive(Debug)]
+pub struct UiDrawPassCtx<'data> {
+    pub ui_shader: &'data ShaderUiBasic,
+    pub data: &'data UiDataBuffer,
+    pub commands: &'data UiCommandsBuffer,
+}
+
+rendrs::context_wrapper!(for<'ctx> UiDrawPassCtx);
+
+pub const fn pass(shader: &ShaderUiBasic) -> UiDrawPass {
+    let handle_view = shader.handle().view();
+    UiDrawPass::new(handle_view, [], [], |section, ctx| {
+        const SSBO_INDEX: u32 = SSBO_INDEX_POD_ELEMENTS;
+        let section = section.as_index();
+
+        unsafe {
+            janus::gl::Disable(janus::gl::DEPTH_TEST);
+        }
+
+        let commands = ctx.commands.view_section(section);
+        ctx.data.bind_shader_storage(section, SSBO_INDEX, 0);
+
+        let mut texture_masks = [0u32; rendrs::BATCH_UNITS];
+        for command in commands.iter() {
+            if command.instance_count == 0 {
+                continue;
+            }
+
+            command.bind_texture_units();
+            let offset = command.instance_offset;
+            for i in 0..rendrs::BATCH_UNITS {
+                let unit = command.texture_units[i];
+                let has_texture = unit.is_some_and(|tex| tex.texture_id() != 0);
+                texture_masks[i] = has_texture as u32;
+            }
+
+            let ui_shader = ctx.ui_shader;
+            ui_shader.uniform_texture_masks_uintv(texture_masks);
+            ui_shader.uniform_instance_offset_uintv([offset]);
+
+            let count = command.vertex_count;
+            let instance_count = command.instance_count;
+            unsafe {
+                janus::gl::DrawArraysInstanced(
+                    janus::gl::TRIANGLE_STRIP,
+                    0,
+                    count as i32,
+                    instance_count as i32,
+                );
+            }
+        }
+
+        unsafe {
+            janus::gl::Enable(janus::gl::DEPTH_TEST);
+        }
+    })
+}
 
 ethel::shader_glsl_struct! {
     struct QuadElement {

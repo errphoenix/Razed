@@ -1,13 +1,12 @@
 use std::sync::{Arc, atomic::AtomicU32};
 
 use crate::render;
-use crate::ui::UiRenderCommandBasic;
 use ethel::{
     DrawCommand, layout_buffer, layout_mesh_buffer,
     render::buffer::{PartitionedTriBuffer, TriBuffer},
     state::data::{DirectIndex, IndirectIndex},
 };
-use gui::draw::Quad;
+use gui::render::{UiCommandsBuffer, UiDataBuffer};
 
 use crate::structure::fragment::ANCHORS_COUNT as FRAGMENT_ANCHORS_COUNT;
 
@@ -177,7 +176,7 @@ pub struct FrameDataBuffers {
     pub fragment_commands: TriBuffer<DrawCommand>,
     pub debris_commands: TriBuffer<DrawCommand>,
     pub generic_commands: TriBuffer<DrawCommand>,
-    pub interface_commands: TriBuffer<UiRenderCommandBasic>,
+    pub interface_commands: UiCommandsBuffer,
 
     pub generic_objects: PartitionedTriBuffer<RENDERABLE_STORAGE_PARTS>,
     pub fragments: PartitionedTriBuffer<FRAGMENTS_STORAGE_PARTS>,
@@ -191,7 +190,7 @@ pub struct FrameDataBuffers {
     #[cfg(feature = "devmode")]
     pub lines_debug: PartitionedTriBuffer<2>,
 
-    pub interface_storage: TriBuffer<Quad>,
+    pub interface_storage: UiDataBuffer,
 }
 
 impl FrameDataBuffers {

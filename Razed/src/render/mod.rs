@@ -14,7 +14,10 @@ use ethel::{
     render::{Resolution, command::DrawGroups},
     state::camera::ViewPoint,
 };
-use gui::text::{GlyphAtlasTexture, GlyphRaster};
+use gui::{
+    render::UiDrawPassCtx,
+    text::{GlyphAtlasTexture, GlyphRaster},
+};
 use janus::{
     sync::TriCell,
     texture::{ImageFormat, ImageType, MipLevels, Tex, TextureFiltering},
@@ -75,6 +78,7 @@ pub struct RenderPipeline {
     debris_draw_pass: debris_draw::DebrisDrawPass,
     debug_lattice_draw_pass: debug_lattice_draw::DebugLatticeDrawPass,
     debug_cage_draw_pass: debug_cage_draw::DebugCageDrawPass,
+    interface_draw_pass: gui::render::UiDrawPass,
 
     #[cfg(feature = "devmode")]
     debug_lines_draw_pass: debug_lines_draw::DebugLinesDrawPass,
@@ -85,6 +89,7 @@ impl RenderPipeline {
         self.debris_draw_pass.revalidate(render_pool);
         self.debug_lattice_draw_pass.revalidate(render_pool);
         self.debug_cage_draw_pass.revalidate(render_pool);
+        self.interface_draw_pass.revalidate_framebuffer(render_pool);
 
         #[cfg(feature = "devmode")]
         self.debug_lines_draw_pass.revalidate(render_pool);
@@ -97,7 +102,7 @@ pub struct RenderShaders {
     fragments: fragments_draw::ShaderFragment,
     debris: debris_draw::ShaderDebris,
     cage: debug_cage_draw::ShaderDebugCage,
-    interface: gui::shaders::ShaderUiBasic,
+    interface: gui::render::ShaderUiBasic,
     fd_preprocess: fd_preprocess::ComputeShaderProcessCommand,
 
     #[cfg(feature = "devmode")]
@@ -281,57 +286,16 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 .execute(section, render_pool, &ctx);
         }
 
-        unsafe {
-            janus::gl::Disable(janus::gl::DEPTH_TEST);
-        }
-
-        // draw dispatch - interface
+        // interface draw pass
         {
-            self.shaders.interface.bind();
-
-            const QUAD_SSBO_INDEX: u32 = gui::shaders::SSBO_INDEX_POD_ELEMENTS;
-
-            let quads = &frame_data.interface_storage;
-            let commands = &frame_data
-                .interface_commands
-                .view_section(section.as_index());
-
-            quads.bind_shader_storage(section.as_index(), QUAD_SSBO_INDEX, 0);
-
-            let mut texture_masks = [0u32; rendrs::BATCH_UNITS];
-
-            for command in commands.iter() {
-                if command.instance_count == 0 {
-                    continue;
-                }
-
-                command.bind_texture_units();
-                let offset = command.instance_offset;
-
-                for i in 0..rendrs::BATCH_UNITS {
-                    let unit = command.texture_units[i];
-                    let has_texture = unit.is_some_and(|tex| tex.texture_id() != 0);
-                    texture_masks[i] = has_texture as u32;
-                }
-
-                let ui_shader = &self.shaders.interface;
-                ui_shader.uniform_texture_masks_uintv(texture_masks);
-                ui_shader.uniform_instance_offset_uintv([offset]);
-
-                let count = command.vertex_count;
-                let instance_count = command.instance_count;
-                unsafe {
-                    janus::gl::DrawArraysInstanced(
-                        janus::gl::TRIANGLE_STRIP,
-                        0,
-                        count as i32,
-                        instance_count as i32,
-                    );
-                }
-            }
-        }
-        unsafe {
-            janus::gl::Enable(janus::gl::DEPTH_TEST);
+            let ctx = UiDrawPassCtx {
+                ui_shader: &self.shaders.interface,
+                data: &frame_data.interface_storage,
+                commands: &frame_data.interface_commands,
+            };
+            self.pipeline()
+                .interface_draw_pass
+                .execute(section, render_pool, &ctx);
         }
 
         // debug lattice draw pass
@@ -370,6 +334,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             debris_draw_pass: debris_draw::pass(&self.shaders.debris),
             debug_lattice_draw_pass: debug_lattice_draw::pass(&self.shaders.lattice),
             debug_cage_draw_pass: debug_cage_draw::pass(&self.shaders.cage),
+            interface_draw_pass: gui::render::pass(&self.shaders.interface),
 
             #[cfg(feature = "devmode")]
             debug_lines_draw_pass: debug_lines_draw::pass(&self.shaders.lines),
@@ -388,7 +353,7 @@ impl Renderer {
         self.shaders.fragments = fragments_draw::ShaderFragment::new_compiled();
         self.shaders.debris = debris_draw::ShaderDebris::new_compiled();
         self.shaders.cage = debug_cage_draw::ShaderDebugCage::new_compiled();
-        self.shaders.interface = gui::shaders::ShaderUiBasic::new_compiled();
+        self.shaders.interface = gui::render::ShaderUiBasic::new_compiled();
         self.shaders.fd_preprocess = fd_preprocess::ComputeShaderProcessCommand::new_compiled();
 
         #[cfg(feature = "devmode")]
