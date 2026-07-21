@@ -91,13 +91,11 @@ ethel::shader_glsl! {
                 discard;
             }
 
-            vec3 normal = fs_normal;
+            vec3 normal = normalize(fs_normal);
 
             // basic directional light (camera source)
             vec3 light_dir = -camera_forward;
-            float diffuse = dot(light_dir, normal);
-            diffuse *= diffuse;
-
+            float diffuse = max(dot(light_dir, normal), 0.0);
             float light_factor = LIGHT_AMBIENT + diffuse;
 
             outColor = vec4(fs_color.rgb * light_factor, 1.0);
