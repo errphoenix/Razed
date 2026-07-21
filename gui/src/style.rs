@@ -26,6 +26,7 @@ impl TryFrom<ItemAlignment> for taffy::AlignItems {
 pub enum ContentAlignment {
     #[default]
     Auto,
+    Stretch,
 
     Start,
     Center,
@@ -47,6 +48,7 @@ impl TryFrom<ContentAlignment> for taffy::AlignContent {
             ContentAlignment::SpaceEvenly => Ok(taffy::AlignContent::SpaceEvenly),
             ContentAlignment::SpaceAround => Ok(taffy::AlignContent::SpaceAround),
             ContentAlignment::SpaceBetween => Ok(taffy::AlignContent::SpaceBetween),
+            ContentAlignment::Stretch => Ok(taffy::AlignContent::Stretch),
         }
     }
 }

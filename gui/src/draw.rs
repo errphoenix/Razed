@@ -107,8 +107,8 @@ impl InterfaceAggregator<'_> {
 
         text_composer.set_buffer_size(Some(size.x), Some(size.y));
         text_composer.set_font_metrics(metrics);
-        text_composer.set_text(text_buf);
         text_composer.set_font(font);
+        text_composer.set_text(text_buf);
 
         let anchor = self.commons.feedback_anchor[common_handle];
         let layer = self.commons.layer[common_handle];

@@ -708,8 +708,8 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
 
                         self.text_composer.set_buffer_size(width, height);
                         self.text_composer.set_font_metrics(metrics);
-                        self.text_composer.set_text(text_buf);
                         self.text_composer.set_font(font);
+                        self.text_composer.set_text(text_buf);
                         let measurement = self.text_composer.measure();
 
                         self.texts.measure[tdid] = measurement;
