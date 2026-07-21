@@ -155,18 +155,7 @@ ethel::shader_glsl! {
             };
 
             lib {
-                ethel::shader_glsl_lib! {
-                    mat3 cofactor3 [ m: mat3 ] => "
-                        vec3 a = m[0];
-                        vec3 b = m[1];
-                        vec3 c = m[2];
-                        return mat3(
-                            cross(b, c),
-                            cross(c, a),
-                            cross(a, b)
-                        );
-                    "
-                };
+                shader_commons::LIB_MAT3_COFACTOR;
             };
 
             src() "

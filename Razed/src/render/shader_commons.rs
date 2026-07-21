@@ -84,3 +84,35 @@ pub(super) const LIB_QUAT_ROT_VEC: GlslLib = ethel::shader_glsl_lib! {
         return r.xyz;
     "
 };
+
+pub(super) const LIB_QUAT_SLERP: GlslLib = ethel::shader_glsl_lib! {
+    vec4 slerpQuat [ q0: vec4, q1: vec4, t: float ] => "
+        float dotp = dot(normalize(q0), normalize(q1));
+
+        // non-orthogonal
+        if (abs(dotp) > 0.9999) {
+            if (t <= 0.5) {
+                return q0;
+            }
+            return q1;
+        }
+
+        float theta = acos(dotp);
+        vec4 B = ((q0 * sin((1.0 - t) * theta) + q1 * sin(t * theta)) / sin(theta));
+        B.w = 1.0;
+        return B;
+    "
+};
+
+pub(super) const LIB_MAT3_COFACTOR: GlslLib = ethel::shader_glsl_lib! {
+    mat3 cofactor3 [ m: mat3 ] => "
+        vec3 c0 = m[0];
+        vec3 c1 = m[1];
+        vec3 c2 = m[2];
+        return mat3(
+            cross(c1, c2),
+            cross(c2, c0),
+            cross(c0, c1)
+        );
+    "
+};
