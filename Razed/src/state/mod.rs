@@ -131,12 +131,17 @@ impl Default for State {
             textures_metadata_registry: AssetMetadataRegistry::new(),
             texture_registry_pipe: Default::default(),
             glyph_atlas: Default::default(),
+            render_frame_time: Default::default(),
             glyph_pipe: None,
         }
     }
 }
 
 impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
+    fn step_duration(&self) -> std::time::Duration {
+        std::time::Duration::from_millis(16)
+    }
+
     fn upload_gpu(
         &mut self,
         frame_boundary: &Cross<Producer, FrameDataBuffers>,

@@ -1,8 +1,8 @@
 use ethel::render::Resolution;
 use gui::{
-    ContainerLayout, ContentAlignment, CoreElementParams, ElementParams, InterfaceSystem,
-    ItemAlignment, LayoutOptions, LayoutPosition, Point, Rectangle, TextContents, TextNode,
-    TextParams, Value, Wrap, style::FlexDirection,
+    ButtonParams, ContainerLayout, ContentAlignment, CoreElementParams, ElementParams,
+    InterfaceSystem, ItemAlignment, LayoutOptions, LayoutPosition, PanelParams, Point, Rectangle,
+    TextContents, TextNode, TextParams, Value, Wrap, style::FlexDirection,
 };
 
 pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {

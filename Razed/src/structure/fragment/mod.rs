@@ -461,15 +461,6 @@ impl FragmentSystem {
             }
 
             let near_count = near_buf.len().min(PARENTS_COUNT);
-            // if n_count < MIN_CLUSTER_SIZE as usize {
-            //     tracing::event!(
-            //         name: "structure.fragment.build.query.skip_voxel",
-            //         tracing::Level::WARN,
-            //         "Skipping voxel {cell:?}: not enough {n_count} nearby nodes found."
-            //     );
-            //     continue;
-            // }
-
             let (parents, weights) = {
                 let mut parents = [IndirectIndex::default(); PARENTS_COUNT];
                 let mut weights = [0f32; PARENTS_COUNT];
