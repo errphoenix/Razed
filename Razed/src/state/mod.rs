@@ -244,9 +244,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 
                 let imap_deforms = self.deforms.data().handles();
                 let pod_deforms_positions = self.deforms.data().deformed_slice();
-                let pod_deforms_bind_pose = &self.deforms.data().pose_slice();
+                let pod_deforms_bind_pose = self.deforms.data().pose_slice();
                 let pod_anchors = self.fragments.data().anchors_slice();
-                let pod_anchor_weights = self.fragments.data().anchors_weights_slice();
                 let pod_bind_pose = self.fragments.data().bind_position_slice();
                 let pod_mesh_id = self.fragments.data().mesh_id_slice();
 
@@ -282,12 +281,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                         buf_idx,
                         LayoutFragmentData::PodAnchors as usize,
                         pod_anchors,
-                        0,
-                    );
-                    fragments.blit_part(
-                        buf_idx,
-                        LayoutFragmentData::PodAnchorsWeights as usize,
-                        pod_anchor_weights,
                         0,
                     );
                     fragments.blit_part(

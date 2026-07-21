@@ -25,7 +25,7 @@ use ethel::{
 use rendrs::pipeline::ComputePass;
 
 use crate::{
-    data::{LayoutDebrisData, LayoutFragmentData},
+    data::{self, LayoutDebrisData, LayoutFragmentData},
     render::shader_commons,
 };
 
@@ -42,10 +42,10 @@ pub struct FdPreprocessCtx<'data> {
     pub target: FdPreprocessTarget,
 
     pub fragment_commands: &'data TriBuffer<DrawArraysIndirectCommand>,
-    pub fragment_data: &'data PartitionedTriBuffer<8>,
+    pub fragment_data: &'data PartitionedTriBuffer<{ data::FRAGMENTS_STORAGE_PARTS }>,
 
     pub debris_commands: &'data TriBuffer<DrawArraysIndirectCommand>,
-    pub debris_data: &'data PartitionedTriBuffer<3>,
+    pub debris_data: &'data PartitionedTriBuffer<{ data::DEBRIS_STORAGE_PARTS }>,
 }
 
 rendrs::context_wrapper!(for<'data> FdPreprocessCtx);

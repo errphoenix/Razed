@@ -4,7 +4,6 @@ use gui::{
     ItemAlignment, LayoutOptions, LayoutPosition, Point, Rectangle, TextContents, TextNode,
     TextParams, Value, Wrap, style::FlexDirection,
 };
-use janus::texture::{Tex, TextureView};
 
 pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
     let mut system = InterfaceSystem::new(resolution);

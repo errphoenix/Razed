@@ -29,7 +29,7 @@ pub const DEBRIS_ALLOC: usize = 131072;
 pub const DEBRIS_STORAGE_PARTS: usize = 3;
 
 pub const FRAGMENTS_ALLOC: usize = 131072;
-pub const FRAGMENTS_STORAGE_PARTS: usize = 8;
+pub const FRAGMENTS_STORAGE_PARTS: usize = 6;
 pub const DEFORM_POINTS_ALLOC: usize = 181072;
 
 pub const MESH_BUFFER_LEN: usize = 2048;
@@ -101,35 +101,30 @@ layout_buffer! {
             bind 0;
             shader render::fragments_draw::SSBO_INDEX_POD_ANCHORS;
         };
-        enum PodAnchorsWeights: FRAGMENTS_ALLOC => {
-            type [f32; FRAGMENT_ANCHORS_COUNT];
-            bind 1;
-            shader render::fragments_draw::SSBO_INDEX_POD_WEIGHTS;
-        };
         enum PodBindPose: FRAGMENTS_ALLOC => {
             type glam::Vec4;
-            bind 2;
+            bind 1;
             shader render::fragments_draw::SSBO_INDEX_POD_BINDPOSE;
         };
         enum PodMeshId: FRAGMENTS_ALLOC => {
             type ethel::mesh::Id;
-            bind 3;
+            bind 2;
             shader render::fragments_draw::SSBO_INDEX_POD_MESHID;
         };
 
         enum IMapDeforms: DEFORM_POINTS_ALLOC => {
             type IndirectIndex;
-            bind 4;
+            bind 3;
             shader render::fragments_draw::SSBO_INDEX_IMAP_DEFORMS;
         };
         enum PodDeformsPositions: DEFORM_POINTS_ALLOC => {
             type [f32; 4];
-            bind 5;
+            bind 4;
             shader render::fragments_draw::SSBO_INDEX_POD_DEFORMS_POSITIONS;
         };
         enum PodDeformsBindPose: DEFORM_POINTS_ALLOC => {
             type [f32; 4];
-            bind 6;
+            bind 5;
             shader render::fragments_draw::SSBO_INDEX_POD_DEFORMS_BINDPOSE;
         };
     }

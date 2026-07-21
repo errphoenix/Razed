@@ -7,13 +7,13 @@ use ethel::{
 };
 use rendrs::pipeline::DrawPass;
 
-use crate::render::shader_commons;
+use crate::{data, render::shader_commons};
 
 pub type FragmentsDrawPass = DrawPass<FragmentsDrawCtxWrapper, 0, 0>;
 
 #[derive(Debug)]
 pub struct FragmentsDrawCtx<'data> {
-    pub fragments_data: &'data PartitionedTriBuffer<8>,
+    pub fragments_data: &'data PartitionedTriBuffer<{ data::FRAGMENTS_STORAGE_PARTS }>,
     pub fragments_commands: &'data TriBuffer<DrawArraysIndirectCommand>,
 }
 
@@ -33,28 +33,24 @@ macro_rules! ssbo_binding {
     (POD_Anchors) => {
         0
     };
-    (POD_Weights) => {
+    (POD_BindPose) => {
         1
     };
-    (POD_BindPose) => {
+    (POD_MeshID) => {
         2
     };
-    (POD_MeshID) => {
-        3
-    };
     (IMap_Deforms) => {
-        6
+        5
     };
     (POD_Deforms_Positions) => {
-        7
+        6
     };
     (POD_Deforms_BindPose) => {
-        8
+        7
     };
 }
 
 pub const SSBO_INDEX_POD_ANCHORS: u32 = ssbo_binding!(POD_Anchors);
-pub const SSBO_INDEX_POD_WEIGHTS: u32 = ssbo_binding!(POD_Weights);
 pub const SSBO_INDEX_POD_BINDPOSE: u32 = ssbo_binding!(POD_BindPose);
 pub const SSBO_INDEX_POD_MESHID: u32 = ssbo_binding!(POD_MeshID);
 pub const SSBO_INDEX_IMAP_DEFORMS: u32 = ssbo_binding!(IMap_Deforms);
@@ -131,11 +127,6 @@ ethel::shader_glsl! {
                 ethel::shader_glsl_ssbo! {
                     buf POD_Anchors => {
                         [dyn_array IndirectIndex: pod_anchors => each 8]
-                    }
-                }
-                ethel::shader_glsl_ssbo! {
-                    buf POD_Weights => {
-                        [dyn_array vec4: pod_weights => each 2]
                     }
                 }
                 ethel::shader_glsl_ssbo! {

@@ -4,13 +4,13 @@ use ethel::{
 };
 use rendrs::pipeline::DrawPass;
 
-use crate::data::LayoutFragmentData;
+use crate::data::{self, LayoutFragmentData};
 
 pub type DebugCageDrawPass = DrawPass<DebugCageDrawCtxWrapper, 0, 0>;
 
 #[derive(Debug)]
 pub struct DebugCageDrawCtx<'data> {
-    pub fragment_data: &'data PartitionedTriBuffer<8>,
+    pub fragment_data: &'data PartitionedTriBuffer<{ data::FRAGMENTS_STORAGE_PARTS }>,
     pub point_size: f32,
     pub cage_points_count: i32,
 }
