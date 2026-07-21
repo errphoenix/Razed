@@ -165,6 +165,21 @@ ethel::shader_glsl! {
                 }
             };
 
+            lib {
+                ethel::shader_glsl_lib! {
+                    mat3 cofactor3 [ m: mat3 ] => "
+                        vec3 a = m[0];
+                        vec3 b = m[1];
+                        vec3 c = m[2];
+                        return mat3(
+                            cross(b, c),
+                            cross(c, a),
+                            cross(a, b)
+                        );
+                    "
+                };
+            };
+
             src() "
             // account for degenerate 0
             uint fragment_id = gl_DrawID + 1;
@@ -283,8 +298,29 @@ ethel::shader_glsl! {
             vec3 displacement_delta = r_final - b_final;
             vec4 world = vec4(w_rest + displacement_delta, 1.0);
 
+            // derive normal
+            float b_idx = 1.0 / length(b100 - b000);
+            float b_idy = 1.0 / length(b010 - b000);
+            float b_idz = 1.0 / length(b001 - b000);
+            vec3 bl_xy0 = mix(p100 - p000, p110 - p010, ify);
+            vec3 bl_yx0 = mix(p010 - p000, p110 - p100, ifx);
+            vec3 bl_zx0 = mix(p001 - p000, p101 - p100, ifx);
+            vec3 bl_xy1 = mix(p101 - p001, p111 - p011, ify);
+            vec3 bl_yx1 = mix(p011 - p001, p111 - p101, ifx);
+            vec3 bl_zx1 = mix(p011 - p010, p111 - p110, ifx);
+            vec3 dPds = mix(bl_xy0, bl_xy1, ifz);
+            vec3 dPdt = mix(bl_yx0, bl_yx1, ifz);
+            vec3 dPdu = mix(bl_zx0, bl_zx1, ify);
+            mat3 J = mat3(dPds, dPdt, dPdu);
+            mat3 F = J * mat3(
+                vec3(b_idx, 0.0, 0.0),
+                vec3(0.0, b_idy, 0.0),
+                vec3(0.0, 0.0, b_idz)
+            );
+            vec3 d_normal = normalize(cofactor3(F) * normal);
+
             fs_world = world.xyz;
-            fs_normal = normal;
+            fs_normal = d_normal;
             fs_color = vec4(vec3(0.8), 1.0);
 
             gl_Position = projection * view * world;
