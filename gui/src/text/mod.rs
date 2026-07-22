@@ -317,9 +317,10 @@ impl TextComposer {
 
     pub fn set_alignment(&mut self, alignment: crate::ItemAlignment) {
         self.alignment = match alignment {
-            crate::ItemAlignment::Center | crate::ItemAlignment::Auto => Align::Center,
             crate::ItemAlignment::Start => Align::Left,
             crate::ItemAlignment::End => Align::Right,
+            crate::ItemAlignment::Stretch => Align::Justified,
+            _ => Align::Center,
         };
     }
 
@@ -339,10 +340,6 @@ impl TextComposer {
     }
 
     pub fn measure(&mut self) -> TextMeasurement {
-        self.buffer.layout_runs().enumerate().for_each(|(i, line)| {
-            println!("L{i}: {}", line.text);
-        });
-
         let width = self
             .buffer
             .layout_runs()
@@ -352,7 +349,6 @@ impl TextComposer {
         if let Some(last) = self.buffer.layout_runs().last() {
             height = last.line_top + last.line_height;
         }
-        self.buffer.lines.clear();
 
         TextMeasurement { width, height }
     }
@@ -365,7 +361,6 @@ impl TextComposer {
         glyph_atlas: &mut GlyphAtlas,
     ) {
         let font_sys = self.font_system.as_mut().expect("font_system is not set");
-        self.buffer.shape_until_scroll(font_sys, false);
         self.buffer.layout_runs().for_each(|run| {
             let baseline_y = y_offset + run.line_y;
             run.glyphs.iter().for_each(|glyph| {
@@ -399,7 +394,6 @@ impl TextComposer {
                 }
             });
         });
-        self.buffer.lines.clear();
     }
 
     pub fn elements(&mut self) -> Drain<'_, InterfaceObject> {

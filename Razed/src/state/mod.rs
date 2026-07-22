@@ -505,7 +505,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         }
 
         self.update_environment(delta);
-
         self.ui_update_layout();
         self.ui_process_input(input.cursor(), delta);
         self.ui_system.process_widget_states(delta);
@@ -639,6 +638,7 @@ impl State {
     }
 
     pub fn ui_update_layout(&mut self) {
+        self.ui_system.invalidate_layout_changes();
         self.ui_system.evaluate_layout();
         self.ui_system.synchronise_layout();
     }

@@ -134,7 +134,9 @@ ethel::table_spec! {
 
 ethel::table_spec! {
     struct InterfaceText {
+        root_id: WidgetId;
         contents: TextContents;
+        cached_text: StringHash;
         font_name: &'static str;
         color: glam::Vec4;
         metrics: FontMetrics;
@@ -714,15 +716,30 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
 
                         self.texts.measure[tdid] = measurement;
 
+                        const TEXT_LAYOUT_PADDING: f32 = 1.0;
                         return Size {
-                            width: measurement.width,
-                            height: measurement.height,
+                            width: measurement.width + TEXT_LAYOUT_PADDING,
+                            height: measurement.height + TEXT_LAYOUT_PADDING,
                         };
                     }
                     Size::zero()
                 },
             )
             .expect("failed to evaluate taffy layout");
+    }
+
+    pub fn invalidate_layout_changes(&mut self) {
+        let size = self.texts.len();
+        for i in 1..size {
+            self.text_resolve_buf.clear();
+            self.texts.contents[i].resolve(&self.environment, &mut self.text_resolve_buf);
+            let current = janus::hash_string(&self.text_resolve_buf);
+            if self.texts.cached_text[i] != current {
+                let root = self.texts.root_id[i];
+                self.mark_dirty(root);
+                self.texts.cached_text[i] = current;
+            }
+        }
     }
 
     pub fn bind_system_fonts(&mut self) {
@@ -739,6 +756,13 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             Ok(())
         } else {
             Err(WidgetError::ArchetypeAlreadyDefined(archetype))
+        }
+    }
+
+    pub fn mark_dirty(&mut self, id: WidgetId) {
+        if let Some(commons_id) = self.commons.solve_indirect(id.0) {
+            let taffy_id = self.commons.taffy_id[commons_id.as_index()];
+            self.layout.mark_dirty(taffy_id.0).expect("never fails");
         }
     }
 
@@ -785,7 +809,9 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         if let Some(commons_id) = self.commons.solve_indirect(id.0) {
             self.assert_null_archetype(commons_id)?;
             let text_element = (
+                id,
                 contents,
+                StringHash::default(),
                 font_name,
                 color,
                 metrics,
