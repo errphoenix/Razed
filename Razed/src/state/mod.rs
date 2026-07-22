@@ -70,9 +70,19 @@ pub struct PerfAverages {
     pub tps_average: AccumulationWindow<5, f32>,
     pub render_time_average: AccumulationWindow<5, f32>,
     pub simul_time_average: AccumulationWindow<5, f32>,
+    last_display: Instant,
 }
 impl PerfAverages {
-    pub const BUCKET_DURATION: Duration = Duration::from_millis(100);
+    pub const BUCKET_DURATION: Duration = Duration::from_millis(200);
+    pub const DISPLAY_INTERVAL: Duration = Duration::from_millis(1000);
+
+    pub fn update(&mut self) -> bool {
+        if self.last_display.elapsed() >= Self::DISPLAY_INTERVAL {
+            self.last_display = Instant::now();
+            return true;
+        }
+        false
+    }
 }
 impl Default for PerfAverages {
     fn default() -> Self {
@@ -81,6 +91,7 @@ impl Default for PerfAverages {
             tps_average: AccumulationWindow::new(Self::BUCKET_DURATION),
             render_time_average: AccumulationWindow::new(Self::BUCKET_DURATION),
             simul_time_average: AccumulationWindow::new(Self::BUCKET_DURATION),
+            last_display: Instant::now(),
         }
     }
 }
@@ -664,25 +675,27 @@ impl State {
     pub fn update_environment(&mut self) {
         use crate::ui::env_names::*;
 
-        let simul_time_avg = self.perf_avg.simul_time_average.average_per_millis();
-        let render_time_avg = self.perf_avg.render_time_average.average_per_millis();
-        let tps_avg = self.perf_avg.tps_average.average_per_millis();
-        let fps_avg = self.perf_avg.fps_average.average_per_millis();
-        let lattice_node_count = self.lattice.nodes().len();
-        let lattice_constr_count = self.lattice.links().len();
-        let fragment_count = self.fragments.data().len();
-        let cage_points_count = self.deforms.data().len();
-        let debris_count = self.debris.data().len();
+        if self.perf_avg.update() {
+            let simul_time_avg = self.perf_avg.simul_time_average.average_per_millis();
+            let render_time_avg = self.perf_avg.render_time_average.average_per_millis();
+            let tps_avg = self.perf_avg.tps_average.average_per_millis();
+            let fps_avg = self.perf_avg.fps_average.average_per_millis();
+            let lattice_node_count = self.lattice.nodes().len();
+            let lattice_constr_count = self.lattice.links().len();
+            let fragment_count = self.fragments.data().len();
+            let cage_points_count = self.deforms.data().len();
+            let debris_count = self.debris.data().len();
 
-        let env = self.ui_system.env_mut();
-        env.insert(DEBUG_PERF_FPS_AVG, fps_avg);
-        env.insert(DEBUG_PERF_LAST_SIMUL_FRAME_TIME_MILLIS, simul_time_avg);
-        env.insert(DEBUG_PERF_LAST_RENDER_FRAME_TIME_MILLIS, render_time_avg);
-        env.insert(DEBUG_COUNTER_LATTICE_NODES, lattice_node_count);
-        env.insert(DEBUG_COUNTER_LATTICE_CONSTRAINTS, lattice_constr_count);
-        env.insert(DEBUG_COUNTER_FRAGMENTS, fragment_count);
-        env.insert(DEBUG_COUNTER_CAGE_POINTS, cage_points_count);
-        env.insert(DEBUG_COUNTER_DEBRIS, debris_count);
+            let env = self.ui_system.env_mut();
+            env.insert(DEBUG_PERF_FPS_AVG, fps_avg as u32);
+            env.insert(DEBUG_PERF_LAST_SIMUL_FRAME_TIME_MILLIS, simul_time_avg);
+            env.insert(DEBUG_PERF_LAST_RENDER_FRAME_TIME_MILLIS, render_time_avg);
+            env.insert(DEBUG_COUNTER_LATTICE_NODES, lattice_node_count);
+            env.insert(DEBUG_COUNTER_LATTICE_CONSTRAINTS, lattice_constr_count);
+            env.insert(DEBUG_COUNTER_FRAGMENTS, fragment_count);
+            env.insert(DEBUG_COUNTER_CAGE_POINTS, cage_points_count);
+            env.insert(DEBUG_COUNTER_DEBRIS, debris_count);
+        }
     }
 
     pub fn ui_system(&self) -> &InterfaceSystem {
