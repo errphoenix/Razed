@@ -67,7 +67,7 @@ const GROUND_LEVEL: f32 = 0.0;
 #[derive(Clone, Copy, Debug)]
 pub struct PerfAverages {
     pub fps_average: AccumulationWindow<5, f32>,
-    pub tps_average: AccumulationWindow<5, f32>,
+    pub tps_average: AccumulationWindow<5, u32>,
     pub render_time_average: AccumulationWindow<5, f32>,
     pub simul_time_average: AccumulationWindow<5, f32>,
     last_display: Instant,
@@ -552,10 +552,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             let render_frame_time_millis = self.render_frame_time.get().as_millis();
             let simul_frame_time_millis = delta.as_millis();
             let fps = 1000.0 / render_frame_time_millis;
-            let tps = 1000.0 / simul_frame_time_millis;
 
             self.perf_avg.fps_average.register(fps, now);
-            self.perf_avg.tps_average.register(tps, now);
             self.perf_avg
                 .render_time_average
                 .register(render_frame_time_millis, now);
@@ -676,10 +674,10 @@ impl State {
         use crate::ui::env_names::*;
 
         if self.perf_avg.update() {
-            let simul_time_avg = self.perf_avg.simul_time_average.average_per_millis();
-            let render_time_avg = self.perf_avg.render_time_average.average_per_millis();
-            let tps_avg = self.perf_avg.tps_average.average_per_millis();
-            let fps_avg = self.perf_avg.fps_average.average_per_millis();
+            let render_time_avg = self.perf_avg.render_time_average.average();
+            let simul_time_avg = self.perf_avg.simul_time_average.average();
+            let fps_avg = self.perf_avg.fps_average.average();
+            let tps_avg = self.perf_avg.tps_average.average();
             let lattice_node_count = self.lattice.nodes().len();
             let lattice_constr_count = self.lattice.links().len();
             let fragment_count = self.fragments.data().len();
@@ -688,6 +686,7 @@ impl State {
 
             let env = self.ui_system.env_mut();
             env.insert(DEBUG_PERF_FPS_AVG, fps_avg as u32);
+            env.insert(DEBUG_PERF_TPS_AVG, tps_avg);
             env.insert(DEBUG_PERF_LAST_SIMUL_FRAME_TIME_MILLIS, simul_time_avg);
             env.insert(DEBUG_PERF_LAST_RENDER_FRAME_TIME_MILLIS, render_time_avg);
             env.insert(DEBUG_COUNTER_LATTICE_NODES, lattice_node_count);

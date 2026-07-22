@@ -46,7 +46,7 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
                     parent: Some(debug_panel),
                     children: None,
                     layout_options: LayoutOptions {
-                        align_self: ItemAlignment::Start,
+                        align_self: ItemAlignment::Stretch,
                         ..Default::default()
                     },
                     layer: 5,
@@ -64,7 +64,10 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
     debug_text(TextContents::from_nodes(&[
         TextNode::Static("FPS = "),
         TextNode::Variable(env_names::DEBUG_PERF_FPS_AVG),
-        TextNode::Static(" (average)"),
+    ]));
+    debug_text(TextContents::from_nodes(&[
+        TextNode::Static("TPS = "),
+        TextNode::Variable(env_names::DEBUG_PERF_TPS_AVG),
     ]));
     debug_text(TextContents::from_nodes(&[
         TextNode::Static("Last SIMUL. frame duration = "),
@@ -108,6 +111,7 @@ pub mod env_names {
     pub const DEBUG_PERF_LAST_RENDER_FRAME_TIME_MILLIS: StringHash =
         janus::hash_string("__debug.perf.last_render_frame_time.millis");
     pub const DEBUG_PERF_FPS_AVG: StringHash = janus::hash_string("__debug.perf.fps.avg");
+    pub const DEBUG_PERF_TPS_AVG: StringHash = janus::hash_string("__debug.perf.tps.avg");
 
     pub const DEBUG_COUNTER_LATTICE_NODES: StringHash =
         janus::hash_string("__debug.counter.lattice.nodes");
