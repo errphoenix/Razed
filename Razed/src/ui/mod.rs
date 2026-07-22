@@ -17,9 +17,9 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
                     container: ContainerLayout::Flexbox {
                         direction: FlexDirection::Column,
                         wrap: Wrap::Wrap,
-                        justify_content: ContentAlignment::SpaceEvenly,
-                        align_content: ContentAlignment::Start,
-                        align_items: ItemAlignment::Start,
+                        justify_content: ContentAlignment::Stretch,
+                        align_content: ContentAlignment::Stretch,
+                        align_items: ItemAlignment::Stretch,
                     },
                     layout_position: LayoutPosition::Absolute {
                         x: Some(Value::Absolute(8f32)),
@@ -47,18 +47,14 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
                     children: None,
                     layout_options: LayoutOptions {
                         align_self: ItemAlignment::Start,
-                        min_size: Some(Point {
-                            x: Value::Absolute(256f32),
-                            y: Value::Absolute(0f32),
-                        }),
                         ..Default::default()
                     },
                     layer: 5,
                 },
                 TextParams {
                     contents,
-                    font_size: 14f32,
-                    line_height: 16f32,
+                    font_size: 16f32,
+                    line_height: 18f32,
                     ..Default::default()
                 },
             ))
@@ -66,8 +62,18 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
     };
 
     debug_text(TextContents::from_nodes(&[
-        TextNode::Static("Last frame duration = "),
-        TextNode::Variable(env_names::DEBUG_PERF_LAST_FRAME_TIME_MILLIS),
+        TextNode::Static("FPS = "),
+        TextNode::Variable(env_names::DEBUG_PERF_FPS_AVG),
+        TextNode::Static(" (average)"),
+    ]));
+    debug_text(TextContents::from_nodes(&[
+        TextNode::Static("Last SIMUL. frame duration = "),
+        TextNode::Variable(env_names::DEBUG_PERF_LAST_SIMUL_FRAME_TIME_MILLIS),
+        TextNode::Static("ms"),
+    ]));
+    debug_text(TextContents::from_nodes(&[
+        TextNode::Static("Last RENDER frame duration = "),
+        TextNode::Variable(env_names::DEBUG_PERF_LAST_RENDER_FRAME_TIME_MILLIS),
         TextNode::Static("ms"),
     ]));
     debug_text(TextContents::from_nodes(&[
@@ -97,8 +103,11 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
 pub mod env_names {
     use janus::StringHash;
 
-    pub const DEBUG_PERF_LAST_FRAME_TIME_MILLIS: StringHash =
-        janus::hash_string("__debug.perf.last_frame_time.millis");
+    pub const DEBUG_PERF_LAST_SIMUL_FRAME_TIME_MILLIS: StringHash =
+        janus::hash_string("__debug.perf.last_simul_frame_time.millis");
+    pub const DEBUG_PERF_LAST_RENDER_FRAME_TIME_MILLIS: StringHash =
+        janus::hash_string("__debug.perf.last_render_frame_time.millis");
+    pub const DEBUG_PERF_FPS_AVG: StringHash = janus::hash_string("__debug.perf.fps.avg");
 
     pub const DEBUG_COUNTER_LATTICE_NODES: StringHash =
         janus::hash_string("__debug.counter.lattice.nodes");

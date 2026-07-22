@@ -19,6 +19,7 @@ use gui::{
     text::{GlyphAtlasTexture, GlyphRaster},
 };
 use janus::{
+    context::DeltaTime,
     sync::TriCell,
     texture::{ImageFormat, ImageType, MipLevels, Tex, TextureFiltering},
 };
@@ -89,7 +90,7 @@ impl RenderPipeline {
         self.debris_draw_pass.revalidate(render_pool);
         self.debug_lattice_draw_pass.revalidate(render_pool);
         self.debug_cage_draw_pass.revalidate(render_pool);
-        self.interface_draw_pass.revalidate_framebuffer(render_pool);
+        self.interface_draw_pass.revalidate(render_pool);
 
         #[cfg(feature = "devmode")]
         self.debug_lines_draw_pass.revalidate(render_pool);
@@ -111,6 +112,8 @@ pub struct RenderShaders {
 
 #[derive(Debug, Default)]
 pub struct Renderer {
+    last_frame_render: DeltaTime,
+
     // safe to unwrap during rendering
     pipeline: Option<RenderPipeline>,
 
@@ -132,8 +135,10 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         &mut self,
         screen: &mut janus::sync::Mirror<ethel::render::ScreenSpace>,
         view: &janus::sync::TriCell<ethel::state::camera::ViewPoint>,
-        _delta: janus::context::DeltaTime,
+        delta: janus::context::DeltaTime,
     ) {
+        self.last_frame_render = delta;
+
         {
             let last_resolution = screen.resolution();
             screen.sync().unwrap();
@@ -212,6 +217,10 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         frame_data: &FrameDataBuffers,
         section: ethel::render::buffer::StorageSection,
     ) {
+        let _ = frame_data
+            .render_frame_last_duration
+            .set_and_advance(self.last_frame_render);
+
         unsafe {
             janus::gl::Clear(janus::gl::COLOR_BUFFER_BIT | janus::gl::DEPTH_BUFFER_BIT);
         }

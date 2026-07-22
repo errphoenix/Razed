@@ -38,6 +38,7 @@ use ethel::{
             Column, IndirectIndex,
             hash::{Cell, FxSpatialHash, SpatialResolution},
         },
+        time::AccumulationWindow,
     },
 };
 use gui::{
@@ -47,6 +48,7 @@ use gui::{
 use janus::{
     context::DeltaTime,
     input::{Cursor, KeyEvent},
+    sync::TriCell,
 };
 use physics::rigid::RbVelocity;
 use tracing::{Level, event};
@@ -62,11 +64,35 @@ ethel::table_spec! {
 
 const GROUND_LEVEL: f32 = 0.0;
 
+#[derive(Clone, Copy, Debug)]
+pub struct PerfAverages {
+    pub fps_average: AccumulationWindow<5, f32>,
+    pub tps_average: AccumulationWindow<5, f32>,
+    pub render_time_average: AccumulationWindow<5, f32>,
+    pub simul_time_average: AccumulationWindow<5, f32>,
+}
+impl PerfAverages {
+    pub const BUCKET_DURATION: Duration = Duration::from_millis(100);
+}
+impl Default for PerfAverages {
+    fn default() -> Self {
+        Self {
+            fps_average: AccumulationWindow::new(Self::BUCKET_DURATION),
+            tps_average: AccumulationWindow::new(Self::BUCKET_DURATION),
+            render_time_average: AccumulationWindow::new(Self::BUCKET_DURATION),
+            simul_time_average: AccumulationWindow::new(Self::BUCKET_DURATION),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct State {
     local_keyev_buf: Vec<KeyEvent>,
 
     profiler: ethel::profile::Profiler,
+    render_frame_time: TriCell<DeltaTime>,
+
+    perf_avg: PerfAverages,
 
     ui_system: InterfaceSystem,
     pub glyph_atlas: GlyphAtlas,
@@ -132,6 +158,7 @@ impl Default for State {
             texture_registry_pipe: Default::default(),
             glyph_atlas: Default::default(),
             render_frame_time: Default::default(),
+            perf_avg: Default::default(),
             glyph_pipe: None,
         }
     }
@@ -213,6 +240,10 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             let elapsed = t00.elapsed().as_nanos();
             t0.store(elapsed as u64, Ordering::Relaxed);
             let buf_idx = section.as_index();
+
+            let _ = self
+                .render_frame_time
+                .set_and_advance(storage.render_frame_last_duration.get());
 
             // interface quads & commands upload
             {
@@ -498,13 +529,31 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
     ) {
         self.profiler.page();
 
+        let t0 = Instant::now();
         self.textures_metadata_registry.pipe_sync_commands();
 
         if screen.resolution().is_changed() {
             self.ui_system.set_resolution(screen.resolution());
         }
 
-        self.update_environment(delta);
+        {
+            let now = t0;
+            let render_frame_time_millis = self.render_frame_time.get().as_millis();
+            let simul_frame_time_millis = delta.as_millis();
+            let fps = 1000.0 / render_frame_time_millis;
+            let tps = 1000.0 / simul_frame_time_millis;
+
+            self.perf_avg.fps_average.register(fps, now);
+            self.perf_avg.tps_average.register(tps, now);
+            self.perf_avg
+                .render_time_average
+                .register(render_frame_time_millis, now);
+            self.perf_avg
+                .simul_time_average
+                .register(simul_frame_time_millis, now);
+        }
+
+        self.update_environment();
         self.ui_update_layout();
         self.ui_process_input(input.cursor(), delta);
         self.ui_system.process_widget_states(delta);
@@ -567,8 +616,10 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         }
 
         self.local_keyev_buf.clear();
-
         self.lattice.clear_damage_buffers();
+        let t1 = Instant::now();
+        self.profiler.log_explicit("on_new_frame", t1 - t0);
+
         self.profiler.capture_duration("lattice_sync_integ", || {
             let fragments = FragmentsRowTableView::from(self.fragments.data());
             self.lattice.pull_integrity_mass(&fragments);
@@ -610,10 +661,13 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 }
 
 impl State {
-    pub fn update_environment(&mut self, last_frame_time: DeltaTime) {
+    pub fn update_environment(&mut self) {
         use crate::ui::env_names::*;
 
-        let frame_time_millis = last_frame_time.as_millis();
+        let simul_time_avg = self.perf_avg.simul_time_average.average_per_millis();
+        let render_time_avg = self.perf_avg.render_time_average.average_per_millis();
+        let tps_avg = self.perf_avg.tps_average.average_per_millis();
+        let fps_avg = self.perf_avg.fps_average.average_per_millis();
         let lattice_node_count = self.lattice.nodes().len();
         let lattice_constr_count = self.lattice.links().len();
         let fragment_count = self.fragments.data().len();
@@ -621,7 +675,9 @@ impl State {
         let debris_count = self.debris.data().len();
 
         let env = self.ui_system.env_mut();
-        env.insert(DEBUG_PERF_LAST_FRAME_TIME_MILLIS, frame_time_millis);
+        env.insert(DEBUG_PERF_FPS_AVG, fps_avg);
+        env.insert(DEBUG_PERF_LAST_SIMUL_FRAME_TIME_MILLIS, simul_time_avg);
+        env.insert(DEBUG_PERF_LAST_RENDER_FRAME_TIME_MILLIS, render_time_avg);
         env.insert(DEBUG_COUNTER_LATTICE_NODES, lattice_node_count);
         env.insert(DEBUG_COUNTER_LATTICE_CONSTRAINTS, lattice_constr_count);
         env.insert(DEBUG_COUNTER_FRAGMENTS, fragment_count);
@@ -638,6 +694,10 @@ impl State {
     }
 
     pub fn ui_update_layout(&mut self) {
+        // todo: OPTIMIZE LAYOUTING IT COSTS 2MS RN FOR THE FEW TEXTS I HAVE
+        // REDUCE INVALIDATIONS. INCLUDE OPTION ON TEXTPARAMS TO NEVER INVALIDATE
+        // THE LAYOUT. MANUALLY PAD DEBUG TEXTS TO AVOID WRAPS.
+        // RESERVE TEXT LAYOUT CHANGES TO FEW, REALLY UNPREDICTABLE, TEXT ELEMENTS.
         self.ui_system.invalidate_layout_changes();
         self.ui_system.evaluate_layout();
         self.ui_system.synchronise_layout();

@@ -7,6 +7,7 @@ use ethel::{
     state::data::{DirectIndex, IndirectIndex},
 };
 use gui::render::{UiCommandsBuffer, UiDataBuffer};
+use janus::{context::DeltaTime, sync::TriCell};
 
 use crate::structure::fragment::ANCHORS_COUNT as FRAGMENT_ANCHORS_COUNT;
 
@@ -171,7 +172,6 @@ pub struct FrameDataBuffers {
     pub fragment_commands: TriBuffer<DrawCommand>,
     pub debris_commands: TriBuffer<DrawCommand>,
     pub generic_commands: TriBuffer<DrawCommand>,
-    pub interface_commands: UiCommandsBuffer,
 
     pub generic_objects: PartitionedTriBuffer<RENDERABLE_STORAGE_PARTS>,
     pub fragments: PartitionedTriBuffer<FRAGMENTS_STORAGE_PARTS>,
@@ -181,11 +181,13 @@ pub struct FrameDataBuffers {
 
     pub lattice_debug: PartitionedTriBuffer<LATTICE_STORAGE_PARTS>,
     pub lattice_constraint_count: Arc<AtomicU32>,
-
     #[cfg(feature = "devmode")]
     pub lines_debug: PartitionedTriBuffer<2>,
 
     pub interface_storage: UiDataBuffer,
+    pub interface_commands: UiCommandsBuffer,
+
+    pub render_frame_last_duration: TriCell<DeltaTime>,
 }
 
 impl FrameDataBuffers {
@@ -211,7 +213,6 @@ impl FrameDataBuffers {
             fragment_commands: TriBuffer::zeroed(FRAGMENT_COMMANDS_ALLOC),
             debris_commands: TriBuffer::zeroed(DEBRIS_COMMANDS_ALLOC),
             generic_commands: TriBuffer::zeroed(GENERIC_COMMANDS_ALLOC),
-            interface_commands: TriBuffer::zeroed(INTERFACE_COMMANDS_ALLOC),
 
             generic_objects: generic_objects_buffer,
             fragments: fragment_data,
@@ -221,11 +222,13 @@ impl FrameDataBuffers {
 
             lattice_debug: xpbd_visualiser,
             lattice_constraint_count: Arc::new(AtomicU32::new(0)),
-
             #[cfg(feature = "devmode")]
             lines_debug,
 
+            interface_commands: TriBuffer::zeroed(INTERFACE_COMMANDS_ALLOC),
             interface_storage: TriBuffer::zeroed(INTERFACE_INSTANCES_ALLOC),
+
+            render_frame_last_duration: TriCell::new(DeltaTime::default()),
         }
     }
 }
