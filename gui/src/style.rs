@@ -4,6 +4,8 @@ use taffy::prelude::*;
 pub enum ItemAlignment {
     #[default]
     Auto,
+    Stretch,
+    Baseline,
 
     Start,
     Center,
@@ -15,6 +17,8 @@ impl TryFrom<ItemAlignment> for taffy::AlignItems {
     fn try_from(value: ItemAlignment) -> Result<Self, ()> {
         match value {
             ItemAlignment::Auto => Err(()),
+            ItemAlignment::Stretch => Ok(taffy::AlignItems::Stretch),
+            ItemAlignment::Baseline => Ok(taffy::AlignItems::Baseline),
             ItemAlignment::Start => Ok(taffy::AlignItems::Start),
             ItemAlignment::Center => Ok(taffy::AlignItems::Center),
             ItemAlignment::End => Ok(taffy::AlignItems::End),
