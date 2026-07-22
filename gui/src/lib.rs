@@ -134,7 +134,6 @@ ethel::table_spec! {
 
 ethel::table_spec! {
     struct InterfaceText {
-        root_id: WidgetId;
         contents: TextContents;
         cached_text: StringHash;
         font_name: &'static str;
@@ -345,6 +344,11 @@ pub struct InterfaceSystem<const LAYERS: usize = 10> {
 
     environment: UiEnv,
     text_resolve_buf: String,
+
+    /// list of text elements that may invalidate
+    /// these will require a relayout if the contents
+    /// change, which is expensive
+    text_dynamic_list: Vec<WidgetId>,
 }
 /// Safety:
 /// TaffyTree is !Send due to internal implementation details related to raw
@@ -394,6 +398,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             font_library: FontLibrary::new(),
             environment,
             text_resolve_buf: String::new(),
+            text_dynamic_list: Vec::new(),
         }
     }
 
@@ -438,6 +443,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             font_library: FontLibrary::new(),
             environment,
             text_resolve_buf: String::new(),
+            text_dynamic_list: Vec::new(),
         }
     }
 
@@ -728,16 +734,22 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             .expect("failed to evaluate taffy layout");
     }
 
-    pub fn invalidate_layout_changes(&mut self) {
-        let size = self.texts.len();
-        for i in 1..size {
-            self.text_resolve_buf.clear();
-            self.texts.contents[i].resolve(&self.environment, &mut self.text_resolve_buf);
-            let current = janus::hash_string(&self.text_resolve_buf);
-            if self.texts.cached_text[i] != current {
-                let root = self.texts.root_id[i];
-                self.mark_dirty(root);
-                self.texts.cached_text[i] = current;
+    pub fn invalidate_text_changes(&mut self) {
+        self.text_dynamic_list
+            .retain(|&w_id| self.commons.solve_indirect(w_id.0).is_some());
+
+        for w_id in &self.text_dynamic_list {
+            let root = self.commons.solve_indirect(w_id.0).unwrap();
+            if let ComponentKind::Text(text_id) = self.commons.archetype[root.as_index()] {
+                let tdid = self.texts.solve_indirect(text_id).unwrap().as_index();
+                self.text_resolve_buf.clear();
+                self.texts.contents[tdid].resolve(&self.environment, &mut self.text_resolve_buf);
+                let current = janus::hash_string(&self.text_resolve_buf);
+                if self.texts.cached_text[tdid] != current {
+                    let taffy_id = self.commons.taffy_id[root.as_index()];
+                    self.layout.mark_dirty(taffy_id.0).unwrap();
+                    self.texts.cached_text[tdid] = current;
+                }
             }
         }
     }
@@ -805,11 +817,11 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         font_name: &'static str,
         color: glam::Vec4,
         metrics: FontMetrics,
+        never_invalidate: bool,
     ) -> Result<IndirectIndex, WidgetError> {
         if let Some(commons_id) = self.commons.solve_indirect(id.0) {
             self.assert_null_archetype(commons_id)?;
             let text_element = (
-                id,
                 contents,
                 StringHash::default(),
                 font_name,
@@ -819,6 +831,10 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             );
             let text_id = self.texts.insert(text_element);
             self.commons.archetype[commons_id.as_index()] = ComponentKind::Text(text_id);
+            if !never_invalidate {
+                self.text_dynamic_list.push(id);
+            }
+
             Ok(text_id)
         } else {
             Err(WidgetError::InvalidWidgetHandle(id.0.as_int()))
@@ -1033,6 +1049,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                             font_size: text.font_size,
                             line_height: text.line_height,
                         },
+                        text.never_invalidate,
                     )?;
                     (root_text_id, special_text_id)
                 };
@@ -1056,6 +1073,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                     font_size: text_params.font_size,
                     line_height: text_params.line_height,
                 },
+                text_params.never_invalidate,
             ),
             ElementParams::Image(_, image_params) => self.make_image(
                 root_id,
@@ -1139,6 +1157,7 @@ pub struct TextParams {
     pub color: glam::Vec4,
     pub font_size: f32,
     pub line_height: f32,
+    pub never_invalidate: bool,
 }
 impl TextParams {
     pub const DEFAULT_TEXT: TextContents = TextContents::literal("Invalid Text");
@@ -1146,7 +1165,7 @@ impl TextParams {
 
     pub const DEFAULT_COLOR: glam::Vec4 = glam::Vec4::ONE;
     pub const DEFAULT_FONT_SIZE: f32 = 11.0;
-    pub const DEFAULT_LINE_HEIGHT: f32 = 11.0;
+    pub const DEFAULT_LINE_HEIGHT: f32 = 14.0;
 }
 impl Default for TextParams {
     fn default() -> Self {
@@ -1156,6 +1175,7 @@ impl Default for TextParams {
             color: Self::DEFAULT_COLOR,
             font_size: Self::DEFAULT_FONT_SIZE,
             line_height: Self::DEFAULT_LINE_HEIGHT,
+            never_invalidate: true,
         }
     }
 }

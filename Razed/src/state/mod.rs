@@ -707,11 +707,7 @@ impl State {
     }
 
     pub fn ui_update_layout(&mut self) {
-        // todo: OPTIMIZE LAYOUTING IT COSTS 2MS RN FOR THE FEW TEXTS I HAVE
-        // REDUCE INVALIDATIONS. INCLUDE OPTION ON TEXTPARAMS TO NEVER INVALIDATE
-        // THE LAYOUT. MANUALLY PAD DEBUG TEXTS TO AVOID WRAPS.
-        // RESERVE TEXT LAYOUT CHANGES TO FEW, REALLY UNPREDICTABLE, TEXT ELEMENTS.
-        self.ui_system.invalidate_layout_changes();
+        self.ui_system.invalidate_text_changes();
         self.ui_system.evaluate_layout();
         self.ui_system.synchronise_layout();
     }

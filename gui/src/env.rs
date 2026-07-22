@@ -141,7 +141,7 @@ impl EnvValue {
             EnvValue::Null => write!(string, "null"),
             EnvValue::Boolean(boolean) => write!(string, "{boolean}"),
             EnvValue::Integer(int) => write!(string, "{int}"),
-            EnvValue::Float(float) => write!(string, "{float}"),
+            EnvValue::Float(float) => write!(string, "{float:.2}"),
             EnvValue::HashedLiteral(_) => {
                 write!(string, "{}", self.resolve_hashed_literal().unwrap())
             }
