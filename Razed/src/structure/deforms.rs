@@ -322,7 +322,7 @@ impl DeformSystem {
                 // we assume node_hash has been loaded with the nodes of
                 // lattice, thus all handles are valid.
                 let position = *unsafe { lattice.current_pos_unchecked(node) };
-                let ds = point.distance_squared(position);
+                let ds = point.distance(position);
 
                 binds[i] = position;
                 controllers[i] = ControlPoint {
