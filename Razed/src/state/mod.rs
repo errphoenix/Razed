@@ -1066,10 +1066,8 @@ impl State {
         let mut lattice_hash = FxSpatialHash::new(SpatialResolution::new(1.0));
         lattice_hash.dump_soa(lattice.current_pos, lattice.handles);
 
-        let deform_vox_options = grid
-            .options()
-            .with_cell_size(grid.options().cell_size * 2.0);
-        let mut deforms_vox = VoxelGrid::new(grid.generator, deform_vox_options);
+        let deform_vox_options = grid.options();
+        let mut deforms_vox = VoxelGrid::new(grid.generator, *deform_vox_options);
         deforms_vox.repopulate_defaults();
         let generated_len =
             self.deforms

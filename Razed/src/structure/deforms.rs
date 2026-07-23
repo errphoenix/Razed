@@ -234,7 +234,7 @@ impl DeformSystem {
                             acc + outer_product(real_pos - p_bar, bind_pos - b_bar) * weight
                         },
                     )
-                    + glam::Mat3::IDENTITY * 0.00001;
+                    + glam::Mat3::IDENTITY * 0.000005;
 
                 let rotation = decompose_rotation_svd(covariance);
                 *deform = rotation * (pose - b_bar) + p_bar;
