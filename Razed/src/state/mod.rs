@@ -515,6 +515,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         _view_point: &janus::sync::TriCell<camera::ViewPoint>,
         delta: janus::context::DeltaTime,
     ) {
+        self.perf_avg.tps_average.register(1, Instant::now());
+
         self.profiler.capture_duration("lattice_update", || {
             const WIND_FORCE: f32 = 0.0;
             self.lattice
@@ -677,7 +679,7 @@ impl State {
             let render_time_avg = self.perf_avg.render_time_average.average();
             let simul_time_avg = self.perf_avg.simul_time_average.average();
             let fps_avg = self.perf_avg.fps_average.average();
-            let tps_avg = self.perf_avg.tps_average.average();
+            let tps_total = self.perf_avg.tps_average.accumulated();
             let lattice_node_count = self.lattice.nodes().len();
             let lattice_constr_count = self.lattice.links().len();
             let fragment_count = self.fragments.data().len();
@@ -686,7 +688,7 @@ impl State {
 
             let env = self.ui_system.env_mut();
             env.insert(DEBUG_PERF_FPS_AVG, fps_avg as u32);
-            env.insert(DEBUG_PERF_TPS_AVG, tps_avg);
+            env.insert(DEBUG_PERF_TPS_TOTAL, tps_total);
             env.insert(DEBUG_PERF_LAST_SIMUL_FRAME_TIME_MILLIS, simul_time_avg);
             env.insert(DEBUG_PERF_LAST_RENDER_FRAME_TIME_MILLIS, render_time_avg);
             env.insert(DEBUG_COUNTER_LATTICE_NODES, lattice_node_count);
