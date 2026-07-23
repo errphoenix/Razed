@@ -277,24 +277,47 @@ ethel::shader_glsl! {
             vec4 world = vec4(w_rest + displacement_delta, 1.0);
 
             // derive normal
-            float b_idx = 1.0 / length(b100 - b000);
-            float b_idy = 1.0 / length(b010 - b000);
-            float b_idz = 1.0 / length(b001 - b000);
-            vec3 bl_xy0 = mix(p100 - p000, p110 - p010, ify);
-            vec3 bl_yx0 = mix(p010 - p000, p110 - p100, ifx);
-            vec3 bl_zx0 = mix(p001 - p000, p101 - p100, ifx);
-            vec3 bl_xy1 = mix(p101 - p001, p111 - p011, ify);
-            vec3 bl_yx1 = mix(p011 - p001, p111 - p101, ifx);
-            vec3 bl_zx1 = mix(p011 - p010, p111 - p110, ifx);
-            vec3 dPds = mix(bl_xy0, bl_xy1, ifz);
-            vec3 dPdt = mix(bl_yx0, bl_yx1, ifz);
-            vec3 dPdu = mix(bl_zx0, bl_zx1, ify);
-            mat3 J = mat3(dPds, dPdt, dPdu);
-            mat3 F = J * mat3(
-                vec3(b_idx, 0.0, 0.0),
-                vec3(0.0, b_idy, 0.0),
-                vec3(0.0, 0.0, b_idz)
+            vec3 e_x0 = p100 - p000;
+            vec3 e_x1 = p110 - p010;
+            vec3 e_x2 = p101 - p001;
+            vec3 e_x3 = p111 - p011;
+            vec3 e_y0 = p010 - p000;
+            vec3 e_y1 = p110 - p100;
+            vec3 e_y2 = p011 - p001;
+            vec3 e_y3 = p111 - p101;
+            vec3 e_z0 = p001 - p000;
+            vec3 e_z1 = p101 - p100;
+            vec3 e_z2 = p011 - p010;
+            vec3 e_z3 = p111 - p110;
+            vec3 tx = normalize(
+                mix(
+                    mix(e_x0, e_x1, ify),
+                    mix(e_x2, e_x3, ify),
+                    ifz
+                )
             );
+            vec3 ty = normalize(
+                mix(
+                    mix(e_y0, e_y1, ifx),
+                    mix(e_y2, e_y3, ifx),
+                    ifz
+                )
+            );
+            vec3 tz = normalize(
+                mix(
+                    mix(e_z0, e_z1, ifx),
+                    mix(e_z2, e_z3, ifx),
+                    ify
+                )
+            );
+
+            vec3 tangent = tx;
+            vec3 bitangent = normalize(ty - dot(ty, tangent) * tangent);
+            vec3 normal_tb = cross(tangent, bitangent);
+
+            mat3 tbn_local = mat3(tangent, bitangent, normal_tb);
+            mat3 tbn_bind = mat3(normalize(b100-b000),normalize(b010-b000),normalize(b001-b000));
+            mat3 F = tbn_local * inverse(tbn_bind);
             vec3 d_normal = normalize(cofactor3(F) * normal);
 
             fs_world = world.xyz;
