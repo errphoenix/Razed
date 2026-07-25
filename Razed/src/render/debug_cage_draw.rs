@@ -61,11 +61,13 @@ ethel::shader_glsl! {
                 }
             };
 
-            src() "
+            src() {
+                "
                 uint id = gl_VertexID + 1;
                 vec3 deform = pod_deforms[id].xyz;
                 gl_Position = projection * view * vec4(deform, 1.0);
-            "
+                ";
+            }
         ];
 
         unit ShaderKind::Pixel => [
@@ -75,9 +77,11 @@ ethel::shader_glsl! {
                 }
             };
 
-            src() "
+            src() {
+                "
                 out_Color = vec4(1.0, 0.0, 1.0, 1.0);
-            "
+                ";
+            }
         ];
     }
 }

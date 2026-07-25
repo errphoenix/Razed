@@ -21,7 +21,7 @@ use gui::{
 use janus::{
     context::DeltaTime,
     sync::TriCell,
-    texture::{ImageFormat, ImageType, MipLevels, Tex, TextureFiltering},
+    texture::{ImageFormat, ImageType, MipLevels, TextureFiltering},
 };
 use rendrs::pipeline::{Pass, RenderPool, RenderTarget, RenderTargetDescriptor, RenderTargetId};
 

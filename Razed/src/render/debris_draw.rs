@@ -94,7 +94,8 @@ ethel::shader_glsl! {
                 shader_commons::LIB_QUAT_ROT_VEC;
             };
 
-            src() "
+            src() {
+                "
                 // account for degenerate 0
                 uint debris_id = gl_DrawID + 1;
 
@@ -119,7 +120,8 @@ ethel::shader_glsl! {
                 fs_normal = normalize(normal * transpose(inverse(rot_m)));
 
                 gl_Position = projection * view * world;
-            "
+                ";
+            }
         ];
 
         unit ShaderKind::Pixel => [
@@ -135,24 +137,26 @@ ethel::shader_glsl! {
                 shader_commons::CONST_AMBIENT_LIGHT
             };
 
-            src() "
-            vec4 albedo = fs_color;
+            src() {
+                "
+                vec4 albedo = fs_color;
 
-            if (albedo.a < 0.1) {
-                discard;
+                if (albedo.a < 0.1) {
+                    discard;
+                }
+
+                vec3 normal = fs_normal;
+
+                // basic directional light (camera source)
+                vec3 light_dir = -camera_forward;
+                float diffuse = dot(light_dir, normal);
+                diffuse *= diffuse;
+
+                float light_factor = LIGHT_AMBIENT + diffuse;
+
+                outColor = vec4(fs_color.rgb * light_factor, fs_color.a);
+                ";
             }
-
-            vec3 normal = fs_normal;
-
-            // basic directional light (camera source)
-            vec3 light_dir = -camera_forward;
-            float diffuse = dot(light_dir, normal);
-            diffuse *= diffuse;
-
-            float light_factor = LIGHT_AMBIENT + diffuse;
-
-            outColor = vec4(fs_color.rgb * light_factor, fs_color.a);
-            "
         ];
     }
 }

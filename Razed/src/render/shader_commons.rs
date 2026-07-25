@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use ethel::shader::{Constant, GlslAttribute, GlslLib, GlslStruct};
 
 pub const ATTRIBS_PIXEL_MINIMAL: GlslAttribute = ethel::shader_glsl_attribs! {

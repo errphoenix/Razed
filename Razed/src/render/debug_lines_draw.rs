@@ -12,6 +12,7 @@ pub struct DebugLinesData {
     pub colors: Vec<glam::Vec4>,
 }
 
+#[allow(unused)]
 impl DebugLinesData {
     pub fn new() -> Self {
         Self::default()
@@ -132,7 +133,8 @@ ethel::shader_glsl! {
                 }
             };
 
-            src() "
+            src() {
+                "
                 uint point_id = gl_VertexID;
 
                 vec4 point = points[point_id];
@@ -141,7 +143,8 @@ ethel::shader_glsl! {
                 fs_color = color;
 
                 gl_Position = projection * view * vec4(point.xyz, 1.0);
-            "
+                ";
+            }
         ];
 
         unit ShaderKind::Pixel => [
@@ -152,9 +155,11 @@ ethel::shader_glsl! {
                 }
             };
 
-            src() "
+            src() {
+                "
                 out_Color = fs_color;
-            "
+                ";
+            }
         ];
     }
 }

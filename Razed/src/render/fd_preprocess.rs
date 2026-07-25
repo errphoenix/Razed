@@ -152,7 +152,8 @@ ethel::shader_glsl_compute! {
             }
         };
 
-        src() "
+        src() {
+            "
             uint g_wg_row = gl_NumWorkGroups.x * gl_WorkGroupSize.x;
             uvec2 g_wg_id = gl_GlobalInvocationID.xy;
             uint g_wg = g_wg_id.y * g_wg_row + g_wg_id.x;
@@ -165,6 +166,7 @@ ethel::shader_glsl_compute! {
             uint vertex_len = metadata[mesh_id].length;
 
             command_buffer[g_wg].count = vertex_len;
-        "
+            ";
+        }
     }
 }

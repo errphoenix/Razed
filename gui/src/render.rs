@@ -141,7 +141,8 @@ ethel::shader_glsl! {
                 }
             };
 
-            src() "
+            src() {
+                "
                 uint v_id = gl_VertexID;
                 uint instance = gl_InstanceID + instance_offset;
 
@@ -166,7 +167,8 @@ ethel::shader_glsl! {
                 screen_point = vertex.xy;
 
                 gl_Position = vertex;
-            "
+                ";
+            }
         ];
 
         unit ShaderKind::Pixel => [
@@ -186,7 +188,8 @@ ethel::shader_glsl! {
                 length 16, texture_masks: uint => u32;
             };
 
-            src() "
+            src() {
+                "
                 vec4 color = fs_color;
                 vec2 uv = tex_coord;
                 uint tex_index = texture_index;
@@ -194,7 +197,8 @@ ethel::shader_glsl! {
                 float tex_mask = float(texture_masks[tex_index]);
                 vec4 tex_color = texture(texture_map[tex_index], uv);
                 outColor = color * mix(vec4(1.0), tex_color, tex_mask);
-            "
+                ";
+            }
         ];
     }
 }

@@ -101,7 +101,8 @@ ethel::shader_glsl! {
                 }
             };
 
-            src() "
+            src() {
+                "
                 uint constraint_id = gl_InstanceID;
                 uint node_offset = gl_VertexID;
 
@@ -116,7 +117,8 @@ ethel::shader_glsl! {
 
                 vec3 position = pod_nodes[node_ii.index].xyz;
                 gl_Position = projection * view * vec4(position, 1.0);
-            "
+                ";
+            }
         ];
 
         unit ShaderKind::Pixel => [
@@ -127,9 +129,11 @@ ethel::shader_glsl! {
                 }
             };
 
-            src() "
+            src() {
+                "
                 out_Color = fs_color;
-            "
+                ";
+            }
         ];
     }
 }
