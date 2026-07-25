@@ -1,8 +1,8 @@
 use ethel::render::Resolution;
 use gui::{
-    ButtonParams, ContainerLayout, ContentAlignment, CoreElementParams, ElementParams,
-    InterfaceSystem, ItemAlignment, LayoutOptions, LayoutPosition, PanelParams, Point, Rectangle,
-    TextContents, TextNode, TextParams, Value, Wrap, style::FlexDirection,
+    ContainerLayout, ContentAlignment, CoreElementParams, ElementParams, InterfaceSystem,
+    ItemAlignment, LayoutOptions, LayoutPosition, Point, Rectangle, TextContents, TextNode,
+    TextParams, Value, Wrap, style::FlexDirection,
 };
 
 pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
@@ -99,12 +99,23 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
         TextNode::Static("Debris = "),
         TextNode::Variable(env_names::DEBUG_COUNTER_DEBRIS),
     ]));
+    debug_text(TextContents::from_nodes(&[
+        TextNode::Static("Sim::state = "),
+        TextNode::Variable(env_names::SIM_CTL_STATE),
+    ]));
+    debug_text(TextContents::from_nodes(&[
+        TextNode::Static("Sim::speed = "),
+        TextNode::Variable(env_names::SIM_CTL_SPEED),
+    ]));
 
     system
 }
 
 pub mod env_names {
     use janus::StringHash;
+
+    pub const SIM_CTL_STATE: StringHash = janus::hash_string("sim.control.state");
+    pub const SIM_CTL_SPEED: StringHash = janus::hash_string("sim.control.speed");
 
     pub const DEBUG_PERF_LAST_SIMUL_FRAME_TIME_MILLIS: StringHash =
         janus::hash_string("__debug.perf.last_simul_frame_time.millis");

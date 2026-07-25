@@ -96,8 +96,24 @@ impl Default for PerfAverages {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct SimCtl {
+    pub speed: f32,
+    pub running: bool,
+}
+impl Default for SimCtl {
+    fn default() -> Self {
+        Self {
+            speed: 1f32,
+            running: true,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct State {
+    sim_control: SimCtl,
+
     local_keyev_buf: Vec<KeyEvent>,
 
     profiler: ethel::profile::Profiler,
@@ -144,6 +160,7 @@ const CAMERA_PITCH_CLAMP: std::ops::Range<f32> =
 impl Default for State {
     fn default() -> Self {
         Self {
+            sim_control: SimCtl::default(),
             ui_system: crate::ui::initialize_default(Resolution::default()),
             lattice: LatticeSystem::new(XpbdSolver::new(
                 XpbdOptions::default().with_ground_level(Some(GROUND_LEVEL)),
@@ -515,13 +532,17 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         _view_point: &janus::sync::TriCell<camera::ViewPoint>,
         delta: janus::context::DeltaTime,
     ) {
+        if !self.sim_control.running {
+            return;
+        }
+
         self.perf_avg.tps_average.register(1, Instant::now());
+        let delta = delta * self.sim_control.speed;
 
         self.profiler.capture_duration("lattice_update", || {
             const WIND_FORCE: f32 = 0.0;
             self.lattice
                 .apply_forces_batched(glam::vec3(WIND_FORCE, -9.81, WIND_FORCE));
-
             self.lattice.update(delta);
         });
         self.profiler.capture_duration("debris_simulate", || {
@@ -541,6 +562,21 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         delta: janus::context::DeltaTime,
     ) {
         self.profiler.page();
+
+        {
+            // simulation control keys
+            const SIM_SPEED_STEP: f32 = 0.01;
+            if input.keys().key_pressed(janus::input::KeyCode::Home) {
+                self.sim_control.running = !self.sim_control.running;
+            }
+            if input.keys().key_down(janus::input::KeyCode::PageUp) {
+                self.sim_control.speed += SIM_SPEED_STEP;
+            }
+            if input.keys().key_down(janus::input::KeyCode::PageDown) {
+                self.sim_control.speed -= SIM_SPEED_STEP;
+                self.sim_control.speed = self.sim_control.speed.max(0.01);
+            }
+        }
 
         let t0 = Instant::now();
         self.textures_metadata_registry.pipe_sync_commands();
@@ -662,8 +698,11 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         });
 
         self.profiler.capture_duration("debris_sleep", || {
-            self.debris.accumulate_motion();
-            self.debris.freeze_old_debris(delta);
+            const SIM_SPEED_LOW_THRESHOLD: f32 = 0.75;
+            if self.sim_control.running || self.sim_control.speed < SIM_SPEED_LOW_THRESHOLD {
+                self.debris.accumulate_motion();
+                self.debris.freeze_old_debris(delta);
+            }
         });
         self.profiler.capture_duration("debris_hash", || {
             self.debris.hash_debris();
@@ -675,6 +714,7 @@ impl State {
     pub fn update_environment(&mut self) {
         use crate::ui::env_names::*;
 
+        let env = self.ui_system.env_mut();
         if self.perf_avg.update() {
             let render_time_avg = self.perf_avg.render_time_average.average();
             let simul_time_avg = self.perf_avg.simul_time_average.average();
@@ -686,7 +726,6 @@ impl State {
             let cage_points_count = self.deforms.data().len();
             let debris_count = self.debris.data().len();
 
-            let env = self.ui_system.env_mut();
             env.insert(DEBUG_PERF_FPS_AVG, fps_avg as u32);
             env.insert(DEBUG_PERF_TPS_TOTAL, tps_total);
             env.insert(DEBUG_PERF_LAST_SIMUL_FRAME_TIME_MILLIS, simul_time_avg);
@@ -697,6 +736,16 @@ impl State {
             env.insert(DEBUG_COUNTER_CAGE_POINTS, cage_points_count);
             env.insert(DEBUG_COUNTER_DEBRIS, debris_count);
         }
+
+        env.insert(
+            SIM_CTL_STATE,
+            if self.sim_control.running {
+                "running"
+            } else {
+                "paused"
+            },
+        );
+        env.insert(SIM_CTL_SPEED, self.sim_control.speed);
     }
 
     pub fn ui_system(&self) -> &InterfaceSystem {
