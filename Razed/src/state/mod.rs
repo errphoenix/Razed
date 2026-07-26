@@ -833,7 +833,8 @@ impl State {
 
     fn release_debris_bodies(&mut self) {
         let disabled_frags = self.fragments.frame_disabled_frags();
-        if disabled_frags.len() > 0 {
+        let count = self.fragments.frame_disabled_frags_count();
+        if count > 0 {
             struct DebrisData {
                 position: glam::Vec3,
                 velocity: glam::Vec3,
@@ -844,8 +845,7 @@ impl State {
                 mesh_id: ethel::mesh::Id,
             }
 
-            let mut buffer = Vec::<DebrisData>::with_capacity(disabled_frags.len());
-
+            let mut buffer = Vec::<DebrisData>::with_capacity(count);
             for &frag_index in disabled_frags {
                 if frag_index.as_int() == 0 {
                     continue;

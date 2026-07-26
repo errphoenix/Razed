@@ -6,10 +6,14 @@ use ethel::state::data::{
     table::TableView,
 };
 use glam::Vec4Swizzles;
+use rustc_hash::FxHashSet;
 
 use crate::{
     procedural::VoxelGrid,
-    structure::{DeformsRowTableView, lattice::NodesRowTableView},
+    structure::{
+        DeformsRowTableView,
+        lattice::{DamagedNode, NodesRowTableView},
+    },
 };
 
 const MIN_CLUSTER_SIZE: u32 = 3;
@@ -83,7 +87,7 @@ pub struct FragmentSystem {
     /// these are the fragments' direct indices (unstable)
     fragment_damage_frame: Vec<(DirectIndex, DamagedNode)>,
 
-    disabled_frags_frame: Vec<DirectIndex>,
+    disabled_frags_frame: FxHashSet<DirectIndex>,
 }
 
 impl Default for FragmentSystem {
@@ -104,7 +108,7 @@ impl FragmentSystem {
             node_map: vec![Vec::new()],
 
             fragment_damage_frame: Vec::new(),
-            disabled_frags_frame: Vec::new(),
+            disabled_frags_frame: FxHashSet::default(),
         }
     }
 
@@ -125,7 +129,7 @@ impl FragmentSystem {
             node_map,
 
             fragment_damage_frame: Vec::new(),
-            disabled_frags_frame: Vec::new(),
+            disabled_frags_frame: FxHashSet::default(),
         }
     }
 
@@ -246,7 +250,7 @@ impl FragmentSystem {
                     let w_t = weights.iter().sum::<f32>();
                     weights.iter_mut().for_each(|w| *w /= w_t);
 
-                    self.disabled_frags_frame.push(direct);
+                    self.disabled_frags_frame.insert(direct);
                 }
             }
         }
@@ -304,7 +308,7 @@ impl FragmentSystem {
 
                 let active_count = parents.iter().filter(|id| id.as_int() != 0).count();
                 if active_count < MIN_CLUSTER_SIZE as usize {
-                    self.disabled_frags_frame.push(frag_idx);
+                    self.disabled_frags_frame.insert(frag_idx);
                 }
             },
         );
@@ -326,8 +330,12 @@ impl FragmentSystem {
         &self.fragment_damage_frame
     }
 
-    pub fn frame_disabled_frags(&self) -> &[DirectIndex] {
-        &self.disabled_frags_frame
+    pub fn frame_disabled_frags_count(&self) -> usize {
+        self.disabled_frags_frame.len()
+    }
+
+    pub fn frame_disabled_frags(&self) -> impl Iterator<Item = &DirectIndex> {
+        self.disabled_frags_frame.iter()
     }
 
     const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 8;
