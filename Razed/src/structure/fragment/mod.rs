@@ -81,7 +81,7 @@ pub struct FragmentSystem {
 
     /// per-frame list of damaged fragments from nodes
     /// these are the fragments' direct indices (unstable)
-    fragment_damage_frame: Vec<(DirectIndex, IndirectIndex)>,
+    fragment_damage_frame: Vec<(DirectIndex, DamagedNode)>,
 
     disabled_frags_frame: Vec<DirectIndex>,
 }
@@ -254,9 +254,9 @@ impl FragmentSystem {
 
     /// Synchronise stable indirect indices `broken_ids` of constraints and
     /// [`degenerate_nodes`] with fragments state.
-    pub fn sync_lattice_damage(&mut self, broken_nodes: &[IndirectIndex]) {
+    pub fn sync_lattice_damage(&mut self, broken_nodes: &[DamagedNode]) {
         for &node in broken_nodes {
-            for &frag_id in &self.node_map[node.as_index()] {
+            for &frag_id in &self.node_map[node.id.as_index()] {
                 if frag_id.as_int() == 0 {
                     continue;
                 }
@@ -271,9 +271,19 @@ impl FragmentSystem {
         let parents = &mut self.fragments.parents;
         let weights = &mut self.fragments.parents_weights;
 
-        self.fragment_damage_frame
-            .drain(..)
-            .for_each(|(frag_idx, node_id)| {
+        self.fragment_damage_frame.drain(..).for_each(
+            |(
+                frag_idx,
+                DamagedNode {
+                    id: node_id,
+                    constraints_left,
+                },
+            )| {
+                if constraints_left == 0 {
+                    self.disabled_frags_frame.insert(frag_idx);
+                    return;
+                }
+
                 let parents = unsafe { parents.get_unchecked_mut(frag_idx.as_index()) };
                 let weights = unsafe { weights.get_unchecked_mut(frag_idx.as_index()) };
                 let mut empty_weight = 0.0;
@@ -296,7 +306,8 @@ impl FragmentSystem {
                 if active_count < MIN_CLUSTER_SIZE as usize {
                     self.disabled_frags_frame.push(frag_idx);
                 }
-            });
+            },
+        );
     }
 
     /// Return a slice containing the *direct indices* of all fragments
@@ -311,7 +322,7 @@ impl FragmentSystem {
     /// These are unstable and may be invalidated on the next frame; they are
     /// intended for use only during the same frame this was populated in and
     /// before any operation that might add/remove elements to the table.
-    pub fn frame_damaged_fragments(&self) -> &[(DirectIndex, IndirectIndex)] {
+    pub fn frame_damaged_fragments(&self) -> &[(DirectIndex, DamagedNode)] {
         &self.fragment_damage_frame
     }
 

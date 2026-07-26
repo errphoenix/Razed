@@ -3,7 +3,7 @@ use std::f32;
 use ethel::state::data::{Column, IndirectIndex};
 use janus::context::DeltaTime;
 use physics::xpbd::{Constraints, HasConstraints, HasNodes, Nodes, RawXpbdLattice, XpbdSolver};
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::structure::FragmentsRowTableView;
 
@@ -16,6 +16,8 @@ ethel::table_spec! {
         inv_mass: f32;
         forces: glam::Vec3;
         velocity: glam::Vec3;
+
+        constraint_count: u32;
     }
 }
 
@@ -60,20 +62,29 @@ impl HasConstraints for LinksRowTable {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct DamagedNode {
+    pub id: IndirectIndex,
+    pub constraints_left: u32,
+}
+
 #[derive(Debug, Default)]
 pub struct LatticeSystem {
+    // temporary mapping for lattice import
     node_id_buffer: Vec<IndirectIndex>,
 
     nodes: NodesRowTable,
     links: LinksRowTable,
-
     solver: XpbdSolver,
 
-    /// alltime accumulated set of dead node IDs; hashing avoids dedup op
-    damaged_nodes_data: Vec<IndirectIndex>,
-    damaged_nodes_hash: FxHashSet<IndirectIndex>,
+    /// transient frame data for damaged nodes that lost
+    /// any constraint
+    damaged_nodes_data: Vec<DamagedNode>,
+    // transient frame data for damaged nodes, also holds
+    // the index into damages_nodes_data and tracks constraints
+    // count for the node
+    damaged_nodes_hash: FxHashMap<IndirectIndex, u32>,
 }
-
 impl LatticeSystem {
     pub fn new(solver: XpbdSolver) -> Self {
         Self {
@@ -106,13 +117,30 @@ impl LatticeSystem {
     ///
     /// Requires a prior call to [`Self::register_dead_nodes`] during the
     /// same frame.
-    pub fn unique_damaged_nodes_frame(&self) -> &[IndirectIndex] {
+    pub fn unique_damaged_nodes_frame(&self) -> &[DamagedNode] {
         &self.damaged_nodes_data
     }
 
     pub fn clear_damage_buffers(&mut self) {
         self.damaged_nodes_data.clear();
         self.damaged_nodes_hash.clear();
+    }
+
+    fn register_node_damage(
+        vec: &mut Vec<DamagedNode>,
+        hash: &mut FxHashMap<IndirectIndex, u32>,
+        id: IndirectIndex,
+        constraints_count: u32,
+    ) {
+        let i = *hash.entry(id).or_insert_with(|| {
+            let i = vec.len();
+            vec.push(DamagedNode {
+                id,
+                constraints_left: 0,
+            });
+            i as u32
+        });
+        vec[i as usize].constraints_left = constraints_count;
     }
 
     pub fn register_dead_nodes(&mut self) {
@@ -127,12 +155,25 @@ impl LatticeSystem {
                     .relation_slice()
                     .get_unchecked(index.as_index())
             };
-            if self.damaged_nodes_hash.insert(node_a) {
-                self.damaged_nodes_data.push(node_a);
-            }
-            if self.damaged_nodes_hash.insert(node_b) {
-                self.damaged_nodes_data.push(node_b);
-            }
+
+            let (n_a, n_b) = {
+                let da = self.nodes.solve_indirect(node_a).unwrap();
+                let db = self.nodes.solve_indirect(node_b).unwrap();
+
+                let n_a = &mut self.nodes.constraint_count[da.as_index()];
+                *n_a -= 1;
+                let n_a = *n_a;
+                let n_b = &mut self.nodes.constraint_count[db.as_index()];
+                *n_b -= 1;
+                let n_b = *n_b;
+
+                (n_a, n_b)
+            };
+
+            let vec = &mut self.damaged_nodes_data;
+            let hash = &mut self.damaged_nodes_hash;
+            Self::register_node_damage(vec, hash, node_a, n_a);
+            Self::register_node_damage(vec, hash, node_b, n_b);
         }
     }
 
@@ -165,23 +206,25 @@ impl LatticeSystem {
 
         let handles = &self.nodes.handles;
         let phys_masses = &self.nodes.mass;
+        let constraints_count = &self.nodes.constraint_count;
         let inv_masses = &mut self.nodes.inv_mass;
 
         phys_masses
             .iter()
             .zip(inv_masses.iter_mut())
             .zip(handles)
+            .zip(constraints_count)
             .skip(1)
-            .for_each(|((m, m_inv), &id)| {
+            .for_each(|(((m, m_inv), &id), &c_count)| {
                 // this is an anchor node that must not have mass
                 if *m_inv == 0.0 {
                     return;
                 }
 
                 if *m < f32::EPSILON {
-                    if self.damaged_nodes_hash.insert(id) {
-                        self.damaged_nodes_data.push(id);
-                    }
+                    let vec = &mut self.damaged_nodes_data;
+                    let hash = &mut self.damaged_nodes_hash;
+                    Self::register_node_damage(vec, hash, id, c_count);
                     return;
                 }
                 *m_inv = 1.0 / *m
@@ -255,7 +298,7 @@ impl LatticeSystem {
 
     #[inline]
     pub fn apply_forces_batched(&mut self, force: glam::Vec3) {
-        let (_, _, m, _, f, _) = self.nodes_mut().split_mut();
+        let (_, _, m, _, f, _, _) = self.nodes_mut().split_mut();
         for (f, m) in f.join(m) {
             *f += force * *m;
         }
@@ -307,9 +350,15 @@ impl LatticeSystem {
         }
 
         lattice.nodes.iter().for_each(|(&pos, (&mass, &inv_mass))| {
-            let handle =
-                self.nodes
-                    .insert((pos, pos, mass, inv_mass, glam::Vec3::ZERO, glam::Vec3::ZERO));
+            let handle = self.nodes.insert((
+                pos,
+                pos,
+                mass,
+                inv_mass,
+                glam::Vec3::ZERO,
+                glam::Vec3::ZERO,
+                0,
+            ));
             self.node_id_buffer.push(handle);
         });
         lattice
@@ -318,6 +367,11 @@ impl LatticeSystem {
             .for_each(|(&[a, b], (&compliance, &rest_length))| {
                 let a = self.node_id_buffer[a as usize];
                 let b = self.node_id_buffer[b as usize];
+
+                let da = self.nodes.solve_indirect(a).unwrap();
+                let db = self.nodes.solve_indirect(a).unwrap();
+                self.nodes.constraint_count[da.as_index()] += 1;
+                self.nodes.constraint_count[db.as_index()] += 1;
 
                 self.links
                     .insert(([a, b], compliance, rest_length, 0f32, 0f32, 0f32, 0f32));
