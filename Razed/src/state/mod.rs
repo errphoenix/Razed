@@ -924,27 +924,11 @@ impl State {
     }
 
     fn process_fragment_damage(&mut self) {
-        // let deleted_points = self.deforms.deleted_points_frame();
-        // let deforms = DeformsRowTableView::from(self.deforms.data());
         let damaged_nodes = self.lattice.unique_damaged_nodes_frame();
-
         self.profiler.capture_duration("lattice_damage", || {
             self.fragments.clear_damage_buffer();
             self.fragments.sync_lattice_damage(damaged_nodes);
         });
-
-        // self.profiler
-        //     .capture_duration("fragment_damage_sync_cage", || {
-        //         self.fragments.sync_deform_damage(deleted_points, &deforms);
-        //     });
-    }
-
-    fn process_cage_damage(&mut self) {
-        let degenerate_nodes = self.lattice.frame_degenerate_nodes();
-        let lattice = NodesRowTableView::from(self.lattice.nodes());
-
-        self.deforms.clear_damage_buffers();
-        self.deforms.sync_lattice_damage(degenerate_nodes, &lattice);
     }
 
     fn spawn_debug_structure(&mut self, view_point: &ViewPoint) {

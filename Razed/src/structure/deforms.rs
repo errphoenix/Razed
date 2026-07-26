@@ -10,7 +10,6 @@ use rayon::iter::{
 use crate::{procedural::VoxelGrid, structure::lattice::NodesRowTableView};
 
 pub const CONTROL_POINTS_COUNT: usize = 4;
-pub const CONTROL_POINTS_MIN_THRESHOLD: usize = 1;
 
 ethel::table_spec! {
     struct Deforms {
@@ -86,76 +85,6 @@ impl DeformSystem {
     pub fn clear_damage_buffers(&mut self) {
         self.damaged_buffer.clear();
         self.deleted_points.clear();
-    }
-
-    pub fn sync_lattice_damage(
-        &mut self,
-        broken_nodes: &[IndirectIndex],
-        lattice: &NodesRowTableView,
-    ) {
-        broken_nodes.iter().for_each(|node| {
-            if let Some(deforms) = self.node_map.get_mut(node.as_index()) {
-                deforms.iter_mut().for_each(|deform| {
-                    if deform.as_int() != 0 {
-                        if let Some(direct) = self.data.solve_indirect(*deform) {
-                            for ControlPoint { id, weight } in
-                                &mut self.data.controllers[direct.as_index()]
-                            {
-                                if *id == *node {
-                                    *id = IndirectIndex::default();
-                                    *weight = 0.0;
-                                    self.damaged_buffer.push(direct);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                });
-            }
-        });
-
-        self.damaged_buffer.retain(|direct| {
-            let controllers = &mut self.data.controllers[direct.as_index()];
-            let binds = &mut self.data.binds[direct.as_index()];
-
-            // update bind pose to current position
-            let deformed = self.data.deformed[direct.as_index()];
-            self.data.pose[direct.as_index()] = deformed;
-
-            controllers.iter_mut().zip(binds.iter_mut()).for_each(
-                |(ControlPoint { id, weight }, bind)| {
-                    if id.as_int() != 0 {
-                        *bind = *lattice.current_pos(*id);
-                        let ds = deformed.distance_squared(*bind);
-                        *weight = 1.0 / (ds + f32::EPSILON);
-                    }
-                },
-            );
-
-            let w_t = controllers.iter_mut().fold(0f32, |s, ctl| s + ctl.weight);
-            controllers
-                .iter_mut()
-                .for_each(|ControlPoint { weight, .. }| *weight /= w_t);
-            let count = controllers
-                .iter()
-                .filter(|ctl| ctl.id.as_int() != 0)
-                .count();
-
-            count <= CONTROL_POINTS_MIN_THRESHOLD
-        });
-
-        // temporarily solve indices (direct to indirect)
-        self.damaged_buffer.iter_mut().for_each(|i| {
-            let indirect = self.data.handles()[i.as_index()];
-            *i = DirectIndex::from_index(indirect.as_index(), indirect.generation());
-        });
-
-        // use indirect to free
-        self.damaged_buffer.drain(..).for_each(|indirect| {
-            let ii = IndirectIndex::from_index(indirect.as_index(), indirect.generation());
-            self.data.free(ii);
-            self.deleted_points.push(ii);
-        });
     }
 
     pub fn deform(&mut self, lattice: &NodesRowTableView) {
