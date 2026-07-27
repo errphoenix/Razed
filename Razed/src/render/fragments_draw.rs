@@ -24,7 +24,9 @@ pub const fn pass(shader: &ShaderFragment) -> FragmentsDrawPass {
     FragmentsDrawPass::new(handle_view, [], [], |section, ctx| {
         let section = section.as_index();
         ctx.fragments_data.bind_shader_storage(section);
-        let commands = ctx.fragments_commands.view_section(section);
+        // SAFETY: safe access to the commands buffer is guaranteed by the
+        // correct triple-buffer section index
+        let commands = unsafe { ctx.fragments_commands.view_section(section) };
         GpuCommandDispatch::from_view(commands).dispatch();
     })
 }

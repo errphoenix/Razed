@@ -53,7 +53,9 @@ pub const fn pass(shader: &ShaderUiBasic) -> UiDrawPass {
             janus::gl::Disable(janus::gl::DEPTH_TEST);
         }
 
-        let commands = ctx.commands.view_section(section);
+        // SAFETY: safe access to the commands buffer is guaranteed by the
+        // correct triple-buffer section index
+        let commands = unsafe { ctx.commands.view_section(section) };
         ctx.data.bind_shader_storage(section, SSBO_INDEX, 0);
 
         let mut texture_masks = [0u32; rendrs::BATCH_UNITS];

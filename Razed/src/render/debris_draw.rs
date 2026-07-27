@@ -23,7 +23,9 @@ pub const fn pass(shader: &ShaderDebris) -> DebrisDrawPass {
     DebrisDrawPass::new(handle_view, [], [], |section, ctx| {
         let section = section.as_index();
         ctx.debris_data.bind_shader_storage(section);
-        let commands = ctx.debris_commands.view_section(section);
+        // SAFETY: safe access to the commands buffer is guaranteed by the
+        // correct triple-buffer section index
+        let commands = unsafe { ctx.debris_commands.view_section(section) };
         GpuCommandDispatch::from_view(commands).dispatch();
     })
 }

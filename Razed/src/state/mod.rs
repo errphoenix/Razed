@@ -285,7 +285,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 
                 let mut quad_offset = 0;
                 for (i, batch) in batches.enumerate() {
-                    quads.blit_section(buf_idx, batch.data(), quad_offset as usize);
                     let count = batch.data().len() as u32;
 
                     let command = gui::render::UiRenderCommandBasic {
@@ -295,7 +294,15 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                         texture_units: batch.textures(),
                     };
 
-                    commands.blit_section(buf_idx, &[command], i);
+                    // SAFETY: safety is guaranteed by using the correct
+                    // triple buffer section index.
+                    // This loop is the only place where the 2 buffers are
+                    // written to.
+                    unsafe {
+                        quads.blit_section(buf_idx, batch.data(), quad_offset as usize);
+                        commands.blit_section(buf_idx, &[command], i);
+                    }
+
                     quad_offset += count;
                 }
             }
@@ -805,12 +812,20 @@ impl State {
             RenderGroup::LatticeDebug => unimplemented!("lattice debug has no command buffer"),
         };
 
-        let mut data = buffer.view_section_mut(tri_section);
+        // SAFETY: safe access to the selected commands buffer is guaranteed
+        // by correct usage of the triple buffer section index
+        let mut data = unsafe { buffer.view_section_mut(tri_section) };
 
         let il0 = command_queue.index() as u32;
         let next = command_queue.upload_next_group(&mut data);
         let length = command_queue.index() as u32 - il0;
-        buffer.set_length(tri_section, length);
+        // SAFETY: safe access to the selected commands buffer is guaranteed
+        // by correct usage of the triple buffer section index.
+        // The set length is correct, as it is the length of the command queue
+        // that has just been blitted to the buffer.
+        unsafe {
+            buffer.set_length(tri_section, length);
+        }
 
         if let Some(next) = next {
             self.upload_gpu_commands(command_queue, next, frame_data, tri_section);

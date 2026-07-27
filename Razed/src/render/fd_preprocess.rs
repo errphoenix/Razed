@@ -60,7 +60,9 @@ pub const fn pass(shader: &ComputeShaderProcessCommand) -> FdPreprocessComputePa
 
         let wg_count = match ctx.target {
             FdPreprocessTarget::Fragments => {
-                let cmds = ctx.fragment_commands.view_section(section);
+                // SAFETY: safe access to the commands buffer is guaranteed by
+                // the correct triple-buffer section index
+                let cmds = unsafe { ctx.fragment_commands.view_section(section) };
                 ctx.fragment_data.bind_shader_storage_single(
                     section,
                     LayoutFragmentData::PodMeshId as usize,
@@ -71,7 +73,9 @@ pub const fn pass(shader: &ComputeShaderProcessCommand) -> FdPreprocessComputePa
                 cmds.length().div_ceil(WORKGROUP_INVOCATIONS)
             }
             FdPreprocessTarget::Debris => {
-                let cmds = ctx.debris_commands.view_section(section);
+                // SAFETY: safe access to the commands buffer is guaranteed by
+                // the correct triple-buffer section index
+                let cmds = unsafe { ctx.debris_commands.view_section(section) };
                 ctx.debris_data.bind_shader_storage_single(
                     section,
                     LayoutDebrisData::PodMeshId as usize,
