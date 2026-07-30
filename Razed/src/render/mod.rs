@@ -1,12 +1,5 @@
-pub mod debris_draw;
-pub mod debug_cage_draw;
-pub mod debug_lattice_draw;
-pub mod fd_preprocess;
-pub mod fragments_draw;
+pub mod pass;
 pub mod shader_commons;
-
-#[cfg(feature = "devmode")]
-pub mod debug_lines_draw;
 
 use std::sync::atomic::Ordering;
 
@@ -26,15 +19,8 @@ use janus::{
 use rendrs::pipeline::{Pass, RenderPool, RenderTarget, RenderTargetDescriptor, RenderTargetId};
 
 #[cfg(feature = "devmode")]
-use crate::render::debug_lines_draw::DebugLinesData;
-use crate::{
-    assets,
-    data::FrameDataBuffers,
-    render::{
-        debris_draw::DebrisDrawCtx, debug_cage_draw::DebugCageDrawCtx,
-        debug_lattice_draw::DebugLatticeDrawCtx, fragments_draw::FragmentsDrawCtx,
-    },
-};
+use crate::render::pass::debug_lines_draw::DebugLinesData;
+use crate::{assets, data::FrameDataBuffers};
 
 #[allow(unused)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -74,15 +60,15 @@ impl RenderTargetHandles {
 
 #[derive(Debug)]
 pub struct RenderPipeline {
-    fd_preprocess_pass: fd_preprocess::FdPreprocessComputePass,
-    fragments_draw_pass: fragments_draw::FragmentsDrawPass,
-    debris_draw_pass: debris_draw::DebrisDrawPass,
-    debug_lattice_draw_pass: debug_lattice_draw::DebugLatticeDrawPass,
-    debug_cage_draw_pass: debug_cage_draw::DebugCageDrawPass,
+    fd_preprocess_pass: pass::fd_preprocess::FdPreprocessComputePass,
+    fragments_draw_pass: pass::fragments_draw::FragmentsDrawPass,
+    debris_draw_pass: pass::debris_draw::DebrisDrawPass,
+    debug_lattice_draw_pass: pass::debug_lattice_draw::DebugLatticeDrawPass,
+    debug_cage_draw_pass: pass::debug_cage_draw::DebugCageDrawPass,
     interface_draw_pass: gui::render::UiDrawPass,
 
     #[cfg(feature = "devmode")]
-    debug_lines_draw_pass: debug_lines_draw::DebugLinesDrawPass,
+    debug_lines_draw_pass: pass::debug_lines_draw::DebugLinesDrawPass,
 }
 impl RenderPipeline {
     fn revalidate(&mut self, render_pool: &RenderPool) {
@@ -99,15 +85,15 @@ impl RenderPipeline {
 
 #[derive(Debug, Default)]
 pub struct RenderShaders {
-    lattice: debug_lattice_draw::ShaderDebugLattice,
-    fragments: fragments_draw::ShaderFragment,
-    debris: debris_draw::ShaderDebris,
-    cage: debug_cage_draw::ShaderDebugCage,
+    lattice: pass::debug_lattice_draw::ShaderDebugLattice,
+    fragments: pass::fragments_draw::ShaderFragment,
+    debris: pass::debris_draw::ShaderDebris,
+    cage: pass::debug_cage_draw::ShaderDebugCage,
     interface: gui::render::ShaderUiBasic,
-    fd_preprocess: fd_preprocess::ComputeShaderProcessCommand,
+    fd_preprocess: pass::fd_preprocess::ComputeShaderProcessCommand,
 
     #[cfg(feature = "devmode")]
-    lines: debug_lines_draw::ShaderDebugLines,
+    lines: pass::debug_lines_draw::ShaderDebugLines,
 }
 
 #[derive(Debug, Default)]
@@ -237,7 +223,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
             // command precompute pass
             {
-                use fd_preprocess::{FdPreprocessCtx, FdPreprocessTarget};
+                use pass::fd_preprocess::{FdPreprocessCtx, FdPreprocessTarget};
 
                 // fragments
                 let mut ctx = FdPreprocessCtx {
@@ -263,7 +249,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
             // fragments draw pass
             {
-                let ctx = FragmentsDrawCtx {
+                let ctx = pass::FragmentsDrawCtx {
                     fragments_data: frags_buf,
                     fragments_commands: frags_cmd,
                 };
@@ -273,7 +259,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             }
             // debris draw pass
             {
-                let ctx = DebrisDrawCtx {
+                let ctx = pass::DebrisDrawCtx {
                     debris_data: debris_buf,
                     debris_commands: debris_cmd,
                 };
@@ -285,7 +271,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         // cage draw pass
         {
             let cage_size = frame_data.cage_points_count.load(Ordering::Acquire);
-            let ctx = DebugCageDrawCtx {
+            let ctx = pass::DebugCageDrawCtx {
                 fragment_data: &frame_data.fragments,
                 point_size: 3.0,
                 cage_points_count: cage_size as i32,
@@ -310,7 +296,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         // debug lattice draw pass
         {
             let count = frame_data.lattice_constraint_count.load(Ordering::Acquire);
-            let ctx = DebugLatticeDrawCtx {
+            let ctx = pass::DebugLatticeDrawCtx {
                 lattice_data: &frame_data.lattice_debug,
                 constraints_count: count as i32,
             };
@@ -322,7 +308,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         // debug lines draw pass
         #[cfg(feature = "devmode")]
         {
-            use crate::render::debug_lines_draw::DebugLinesDrawCtx;
+            use crate::render::pass::debug_lines_draw::DebugLinesDrawCtx;
             let ctx = DebugLinesDrawCtx {
                 lines_data: &frame_data.lines_debug,
                 lines_buffer: &self.lines_debug_buffer,
@@ -338,15 +324,15 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         self.initialize_render_targets(resolution);
 
         self.pipeline = Some(RenderPipeline {
-            fd_preprocess_pass: fd_preprocess::pass(&self.shaders.fd_preprocess),
-            fragments_draw_pass: fragments_draw::pass(&self.shaders.fragments),
-            debris_draw_pass: debris_draw::pass(&self.shaders.debris),
-            debug_lattice_draw_pass: debug_lattice_draw::pass(&self.shaders.lattice),
-            debug_cage_draw_pass: debug_cage_draw::pass(&self.shaders.cage),
+            fd_preprocess_pass: pass::fd_preprocess::pass(&self.shaders.fd_preprocess),
+            fragments_draw_pass: pass::fragments_draw::pass(&self.shaders.fragments),
+            debris_draw_pass: pass::debris_draw::pass(&self.shaders.debris),
+            debug_lattice_draw_pass: pass::debug_lattice_draw::pass(&self.shaders.lattice),
+            debug_cage_draw_pass: pass::debug_cage_draw::pass(&self.shaders.cage),
             interface_draw_pass: gui::render::pass(&self.shaders.interface),
 
             #[cfg(feature = "devmode")]
-            debug_lines_draw_pass: debug_lines_draw::pass(&self.shaders.lines),
+            debug_lines_draw_pass: pass::debug_lines_draw::pass(&self.shaders.lines),
         });
     }
 }
@@ -358,16 +344,17 @@ impl Renderer {
     }
 
     fn initialize_shaders(&mut self) {
-        self.shaders.lattice = debug_lattice_draw::ShaderDebugLattice::new_compiled();
-        self.shaders.fragments = fragments_draw::ShaderFragment::new_compiled();
-        self.shaders.debris = debris_draw::ShaderDebris::new_compiled();
-        self.shaders.cage = debug_cage_draw::ShaderDebugCage::new_compiled();
+        self.shaders.lattice = pass::debug_lattice_draw::ShaderDebugLattice::new_compiled();
+        self.shaders.fragments = pass::fragments_draw::ShaderFragment::new_compiled();
+        self.shaders.debris = pass::debris_draw::ShaderDebris::new_compiled();
+        self.shaders.cage = pass::debug_cage_draw::ShaderDebugCage::new_compiled();
         self.shaders.interface = gui::render::ShaderUiBasic::new_compiled();
-        self.shaders.fd_preprocess = fd_preprocess::ComputeShaderProcessCommand::new_compiled();
+        self.shaders.fd_preprocess =
+            pass::fd_preprocess::ComputeShaderProcessCommand::new_compiled();
 
         #[cfg(feature = "devmode")]
         {
-            self.shaders.lines = debug_lines_draw::ShaderDebugLines::new_compiled();
+            self.shaders.lines = pass::debug_lines_draw::ShaderDebugLines::new_compiled();
         }
 
         let sampler_uniforms = std::array::from_fn(|i| i as i32);

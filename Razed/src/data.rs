@@ -73,24 +73,24 @@ layout_buffer! {
         enum Constraints: LATTICE_CONSTRAINT_ALLOC => {
             type [IndirectIndex; 2];
             bind 0;
-            shader render::debug_lattice_draw::SSBO_INDEX_POD_CONSTRAINTS;
+            shader render::pass::debug_lattice_draw::SSBO_INDEX_POD_CONSTRAINTS;
         };
 
         enum IMapNodes: LATTICE_NODE_ALLOC => {
             type IndirectIndex;
             bind 1;
-            shader render::debug_lattice_draw::SSBO_INDEX_IMAP_NODES;
+            shader render::pass::debug_lattice_draw::SSBO_INDEX_IMAP_NODES;
         };
         enum PodNodes: LATTICE_CONSTRAINT_ALLOC => {
             type [f32; 4];
             bind 2;
-            shader render::debug_lattice_draw::SSBO_INDEX_POD_NODES;
+            shader render::pass::debug_lattice_draw::SSBO_INDEX_POD_NODES;
         };
 
         enum I_Selected: 1 => {
             type DirectIndex;
             bind 3;
-            shader render::debug_lattice_draw::SSBO_INDEX_I_SELECTED;
+            shader render::pass::debug_lattice_draw::SSBO_INDEX_I_SELECTED;
         };
     }
 }
@@ -100,33 +100,33 @@ layout_buffer! {
         enum PodAnchors: FRAGMENTS_ALLOC => {
             type [IndirectIndex; FRAGMENT_ANCHORS_COUNT];
             bind 0;
-            shader render::fragments_draw::SSBO_INDEX_POD_ANCHORS;
+            shader render::pass::fragments_draw::SSBO_INDEX_POD_ANCHORS;
         };
         enum PodBindPose: FRAGMENTS_ALLOC => {
             type glam::Vec4;
             bind 1;
-            shader render::fragments_draw::SSBO_INDEX_POD_BINDPOSE;
+            shader render::pass::fragments_draw::SSBO_INDEX_POD_BINDPOSE;
         };
         enum PodMeshId: FRAGMENTS_ALLOC => {
             type ethel::mesh::Id;
             bind 2;
-            shader render::fragments_draw::SSBO_INDEX_POD_MESHID;
+            shader render::pass::fragments_draw::SSBO_INDEX_POD_MESHID;
         };
 
         enum IMapDeforms: DEFORM_POINTS_ALLOC => {
             type IndirectIndex;
             bind 3;
-            shader render::fragments_draw::SSBO_INDEX_IMAP_DEFORMS;
+            shader render::pass::fragments_draw::SSBO_INDEX_IMAP_DEFORMS;
         };
         enum PodDeformsPositions: DEFORM_POINTS_ALLOC => {
             type [f32; 4];
             bind 4;
-            shader render::fragments_draw::SSBO_INDEX_POD_DEFORMS_POSITIONS;
+            shader render::pass::fragments_draw::SSBO_INDEX_POD_DEFORMS_POSITIONS;
         };
         enum PodDeformsBindPose: DEFORM_POINTS_ALLOC => {
             type [f32; 4];
             bind 5;
-            shader render::fragments_draw::SSBO_INDEX_POD_DEFORMS_BINDPOSE;
+            shader render::pass::fragments_draw::SSBO_INDEX_POD_DEFORMS_BINDPOSE;
         };
     }
 }
@@ -136,17 +136,17 @@ layout_buffer! {
         enum PodPositions: DEBRIS_ALLOC => {
             type [f32; 4];
             bind 0;
-            shader render::debris_draw::SSBO_INDEX_POD_POSITIONS;
+            shader render::pass::debris_draw::SSBO_INDEX_POD_POSITIONS;
         };
         enum PodRotations: DEBRIS_ALLOC => {
             type [f32; 4];
             bind 1;
-            shader render::debris_draw::SSBO_INDEX_POD_ROTATIONS;
+            shader render::pass::debris_draw::SSBO_INDEX_POD_ROTATIONS;
         };
         enum PodMeshId: DEBRIS_ALLOC => {
             type ethel::mesh::Id;
             bind 2;
-            shader render::debris_draw::SSBO_INDEX_POD_MESHID;
+            shader render::pass::debris_draw::SSBO_INDEX_POD_MESHID;
         };
     }
 }
@@ -157,12 +157,12 @@ layout_buffer! {
         enum PodPoints: DEBUG_LINES_ALLOC => {
             type [f32; 4];
             bind 0;
-            shader render::debug_lines_draw::SSBO_INDEX_POD_POINTS;
+            shader render::pass::debug_lines_draw::SSBO_INDEX_POD_POINTS;
         };
         enum PodColors: DEBUG_LINES_ALLOC => {
             type [f32; 4];
             bind 1;
-            shader render::debug_lines_draw::SSBO_INDEX_POD_COLORS;
+            shader render::pass::debug_lines_draw::SSBO_INDEX_POD_COLORS;
         };
     }
 }

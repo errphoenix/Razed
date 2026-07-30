@@ -1,7 +1,7 @@
 use ethel::{
     StartupHandler,
     assets::Handle,
-    mesh::{MeshStaging, Vertex},
+    mesh::MeshStaging,
     state::data::hash::{FxSpatialHash, SpatialResolution},
 };
 use gui::text::{GlyphAtlas, GlyphAtlasTexture};

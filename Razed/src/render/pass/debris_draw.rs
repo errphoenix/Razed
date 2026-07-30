@@ -1,4 +1,4 @@
-use super::shader_commons;
+use crate::render::shader_commons;
 use ethel::{
     render::{
         buffer::{PartitionedTriBuffer, TriBuffer},
