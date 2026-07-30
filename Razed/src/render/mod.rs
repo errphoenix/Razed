@@ -1,3 +1,4 @@
+pub mod graphics;
 pub mod pass;
 pub mod shader_commons;
 
