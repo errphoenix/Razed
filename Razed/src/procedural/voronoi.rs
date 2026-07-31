@@ -112,17 +112,39 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
                 let p1 = mesh.vertices()[b as usize];
                 let p2 = mesh.vertices()[c as usize];
 
+                //TODO: add compute uv pass to polys crate
+                // after that, resume material implementation for
+                // fragments_draw pass
+
                 t_vb.push(ethel::mesh::Vertex {
-                    position: [p0.x, p0.y, p0.z, 1.0],
-                    normal: [n.x, n.y, n.z, 0.0],
+                    pos_x: p0.x,
+                    pos_y: p0.y,
+                    pos_z: p0.z,
+                    norm_x: n.x,
+                    norm_y: n.y,
+                    norm_z: n.z,
+                    uv_x: 0f32,
+                    uv_y: 0f32,
                 });
                 t_vb.push(ethel::mesh::Vertex {
-                    position: [p1.x, p1.y, p1.z, 1.0],
-                    normal: [n.x, n.y, n.z, 0.0],
+                    pos_x: p1.x,
+                    pos_y: p1.y,
+                    pos_z: p1.z,
+                    norm_x: n.x,
+                    norm_y: n.y,
+                    norm_z: n.z,
+                    uv_x: 0f32,
+                    uv_y: 0f32,
                 });
                 t_vb.push(ethel::mesh::Vertex {
-                    position: [p2.x, p2.y, p2.z, 1.0],
-                    normal: [n.x, n.y, n.z, 0.0],
+                    pos_x: p2.x,
+                    pos_y: p2.y,
+                    pos_z: p2.z,
+                    norm_x: n.x,
+                    norm_y: n.y,
+                    norm_z: n.z,
+                    uv_x: 0f32,
+                    uv_y: 0f32,
                 });
             }
 

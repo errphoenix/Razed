@@ -106,8 +106,20 @@ ethel::shader_glsl! {
                 uint offset = metadata.offset;
                 uint index = offset + gl_VertexID;
                 Vertex vertex = vertex_storage[index];
-                vec3 model = vertex.position.xyz;
-                vec3 normal = normalize(vertex.normal.xyz);
+                vec3 model = vec3(
+                    vertex.pos_x,
+                    vertex.pos_y,
+                    vertex.pos_z
+                );
+                vec3 normal = vec3(
+                    vertex.norm_x,
+                    vertex.norm_y,
+                    vertex.norm_z
+                );
+                vec2 uv = vec2(
+                    vertex.uv_x,
+                    vertex.uv_y
+                );
 
                 vec3 position = pod_positions[debris_id].xyz;
                 vec4 rotation = pod_rotations[debris_id];
