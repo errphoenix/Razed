@@ -2,10 +2,18 @@
 
 use ethel::shader::{Constant, GlslAttribute, GlslLib, GlslStruct};
 
+/// Minimal pixel shader attributes.
+///
+/// Includes the following input attributes:
+/// * `fs_world: vec3` the world position of the fragment
+/// * `fs_normal: vec3` the surface normal of the fragment
+/// * `fs_uv: vec2` the uv map coordinate of the fragment
+///
+/// And the `outColor: vec4` output for framebuffer color output.
 pub const ATTRIBS_PIXEL_MINIMAL: GlslAttribute = ethel::shader_glsl_attribs! {
     input fs_world: vec3;
     input fs_normal: vec3;
-    input fs_color: vec4;
+    input fs_uv: vec2;
     output outColor: vec4;
 };
 

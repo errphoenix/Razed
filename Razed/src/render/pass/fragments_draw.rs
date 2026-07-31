@@ -6,7 +6,7 @@ use ethel::{
     shader::{GlslUniform, ShaderKind, ShaderProgram},
 };
 use rendrs::{
-    graphics::material::{MaterialGroup, MaterialLocationRegistry},
+    graphics::material::{MaterialGroup, MaterialLocation, MaterialLocationRegistry},
     pipeline::DrawPass,
 };
 
@@ -90,6 +90,12 @@ ethel::shader_glsl! {
 
             uniform {
                 length 1, camera_forward: vec3 => glam::Vec3;
+                length 16, texture_map: sampler2DArray => i32;
+            };
+
+            type {
+                rendrs::graphics::material::shader::TYPE_MATERIAL_ENTRY_LOCATION
+                rendrs::graphics::material::shader::TYPE_MATERIAL_LOCATION
             };
 
             const {
@@ -98,20 +104,46 @@ ethel::shader_glsl! {
 
             src() {
                 "
-                vec4 albedo = fs_color;
+                const uint DEV_MATERIAL_GROUP = 0;
+                const float DIFFUSE_ALPHA_PAGE = 6.0;
+                const float NORMAL_EMISSIVE_PAGE = 7.0;
+                const float ORMD_PAGE = 8.0;
 
-                if (albedo.a < 0.1) {
-                    discard;
-                }
+                vec4 qDiffuseAlpha = texture(
+                    texture_map[DEV_MATERIAL_GROUP],
+                    vec3(fs_uv, DIFFUSE_ALPHA_PAGE)
+                );
+                vec4 qNormalEmissive = texture(
+                    texture_map[DEV_MATERIAL_GROUP],
+                    vec3(fs_uv, NORMAL_EMISSIVE_PAGE)
+                );
+                vec4 qOrmd = texture(
+                    texture_map[DEV_MATERIAL_GROUP],
+                    vec3(fs_uv, ORMD_PAGE)
+                );
 
-                vec3 normal = normalize(fs_normal);
+                vec3 diffuse = qDiffuseAlpha.rgb;
+                float alpha = qDiffuseAlpha.a;
+                vec3 normalMap = qNormalEmissive.rgb;
+                float emissive = qNormalEmissive.a;
+                float occlusion = qOrmd.r;
+                float roughness = qOrmd.g;
+                float metallic = qOrmd.b;
+                float displacement = qOrmd.a;
+
+                // if (alpha < 0.1) {
+                //     discard;
+                // }
+
+                vec3 vertexNormal = normalize(fs_normal);
+                vec3 normal = fs_normal; // mix with normal map
 
                 // basic directional light (camera source)
                 vec3 light_dir = -camera_forward;
-                float diffuse = max(dot(light_dir, normal), 0.0);
-                float light_factor = LIGHT_AMBIENT + diffuse;
+                float diffuseLight = max(dot(light_dir, normal), 0.0);
+                float light_factor = LIGHT_AMBIENT + diffuseLight;
 
-                outColor = vec4(fs_color.rgb * light_factor, 1.0);
+                outColor = vec4(diffuse * light_factor, 1.0);
                 ";
             }
         ];
@@ -121,7 +153,7 @@ ethel::shader_glsl! {
                 ethel::shader_glsl_attribs! {
                     output fs_world: vec3;
                     output fs_normal: vec3;
-                    output fs_color: vec4;
+                    output fs_uv: vec2;
                 }
             };
 
@@ -192,7 +224,8 @@ ethel::shader_glsl! {
                     vertex.norm_y,
                     vertex.norm_z
                 );
-                vec2 uv = vec2(
+                // pass uv to pixel shader
+                fs_uv = vec2(
                     vertex.uv_x,
                     vertex.uv_y
                 );
@@ -349,7 +382,6 @@ ethel::shader_glsl! {
 
                 fs_world = world.xyz;
                 fs_normal = d_normal;
-                fs_color = vec4(vec3(0.8), 1.0);
 
                 gl_Position = projection * view * world;
                 ";

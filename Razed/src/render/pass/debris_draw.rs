@@ -55,7 +55,7 @@ ethel::shader_glsl! {
                 ethel::shader_glsl_attribs! {
                     output fs_world: vec3;
                     output fs_normal: vec3;
-                    output fs_color: vec4;
+                    output fs_uv: vec2;
                 }
             };
 
@@ -116,7 +116,8 @@ ethel::shader_glsl! {
                     vertex.norm_y,
                     vertex.norm_z
                 );
-                vec2 uv = vec2(
+                // pass uv to pixel shader
+                fs_uv = vec2(
                     vertex.uv_x,
                     vertex.uv_y
                 );
@@ -128,7 +129,6 @@ ethel::shader_glsl! {
                 vec4 world = vec4(position + local, 1.0);
 
                 fs_world = world.xyz;
-                fs_color = vec4(vec3(0.8), 1.0);
 
                 mat3 rot_m = quatToMat(rotation);
                 fs_normal = normalize(normal * transpose(inverse(rot_m)));
@@ -153,22 +153,15 @@ ethel::shader_glsl! {
 
             src() {
                 "
-                vec4 albedo = fs_color;
-
-                if (albedo.a < 0.1) {
-                    discard;
-                }
-
+                vec3 albedo = vec3(1.0);
                 vec3 normal = fs_normal;
 
                 // basic directional light (camera source)
                 vec3 light_dir = -camera_forward;
-                float diffuse = dot(light_dir, normal);
-                diffuse *= diffuse;
+                float diffuseLight = max(dot(light_dir, normal), 0.0);
+                float light_factor = LIGHT_AMBIENT + diffuseLight;
 
-                float light_factor = LIGHT_AMBIENT + diffuse;
-
-                outColor = vec4(fs_color.rgb * light_factor, fs_color.a);
+                outColor = vec4(albedo * light_factor, 1.0);
                 ";
             }
         ];
