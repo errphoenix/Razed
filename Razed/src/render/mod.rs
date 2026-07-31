@@ -21,7 +21,7 @@ use rendrs::pipeline::{Pass, RenderPool, RenderTarget, RenderTargetDescriptor, R
 
 #[cfg(feature = "devmode")]
 use crate::render::pass::debug_lines_draw::DebugLinesData;
-use crate::{assets, data::FrameDataBuffers};
+use crate::{assets, data::FrameDataBuffers, render::graphics::Materials};
 
 #[allow(unused)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -100,6 +100,8 @@ pub struct RenderShaders {
 #[derive(Debug, Default)]
 pub struct Renderer {
     last_frame_render: DeltaTime,
+
+    materials: Materials,
 
     // safe to unwrap during rendering
     pipeline: Option<RenderPipeline>,
@@ -253,6 +255,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 let ctx = pass::FragmentsDrawCtx {
                     fragments_data: frags_buf,
                     fragments_commands: frags_cmd,
+                    material_registry: self.materials.locations(),
                 };
                 self.pipeline()
                     .fragments_draw_pass
@@ -324,9 +327,14 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         self.initialize_shaders();
         self.initialize_render_targets(resolution);
 
+        let texture_assets = &mut self.textures_master_registry;
+        self.materials.initialize(texture_assets);
+
+        let dev_materials = &self.materials.groups().dev;
+
         self.pipeline = Some(RenderPipeline {
             fd_preprocess_pass: pass::fd_preprocess::pass(&self.shaders.fd_preprocess),
-            fragments_draw_pass: pass::fragments_draw::pass(&self.shaders.fragments),
+            fragments_draw_pass: pass::fragments_draw::pass(&self.shaders.fragments, dev_materials),
             debris_draw_pass: pass::debris_draw::pass(&self.shaders.debris),
             debug_lattice_draw_pass: pass::debug_lattice_draw::pass(&self.shaders.lattice),
             debug_cage_draw_pass: pass::debug_cage_draw::pass(&self.shaders.cage),

@@ -5,30 +5,40 @@ use ethel::{
     },
     shader::{GlslUniform, ShaderKind, ShaderProgram},
 };
-use rendrs::pipeline::DrawPass;
+use rendrs::{
+    graphics::material::{MaterialGroup, MaterialLocationRegistry},
+    pipeline::DrawPass,
+};
 
 use crate::{data, render::shader_commons};
 
-pub type FragmentsDrawPass = DrawPass<FragmentsDrawCtxWrapper, 0, 0>;
+pub type FragmentsDrawPass = DrawPass<FragmentsDrawCtxWrapper, 1, 0>;
 
 #[derive(Debug)]
 pub struct FragmentsDrawCtx<'data> {
     pub fragments_data: &'data PartitionedTriBuffer<{ data::FRAGMENTS_STORAGE_PARTS }>,
     pub fragments_commands: &'data TriBuffer<DrawArraysIndirectCommand>,
+
+    pub material_registry: &'data MaterialLocationRegistry,
 }
 
 rendrs::context_wrapper!(for<'ctx> FragmentsDrawCtx);
 
-pub const fn pass(shader: &ShaderFragment) -> FragmentsDrawPass {
+pub const fn pass(shader: &ShaderFragment, dev_materials: &MaterialGroup) -> FragmentsDrawPass {
     let handle_view = shader.handle().view();
-    FragmentsDrawPass::new(handle_view, [], [], |section, ctx| {
-        let section = section.as_index();
-        ctx.fragments_data.bind_shader_storage(section);
-        // SAFETY: safe access to the commands buffer is guaranteed by the
-        // correct triple-buffer section index
-        let commands = unsafe { ctx.fragments_commands.view_section(section) };
-        GpuCommandDispatch::from_view(commands).dispatch();
-    })
+    FragmentsDrawPass::new(
+        handle_view,
+        [dev_materials.sampler()],
+        [],
+        |section, ctx| {
+            let section = section.as_index();
+            ctx.fragments_data.bind_shader_storage(section);
+            // SAFETY: safe access to the commands buffer is guaranteed by the
+            // correct triple-buffer section index
+            let commands = unsafe { ctx.fragments_commands.view_section(section) };
+            GpuCommandDispatch::from_view(commands).dispatch();
+        },
+    )
 }
 
 macro_rules! ssbo_binding {

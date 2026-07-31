@@ -1,3 +1,48 @@
+use rendrs::graphics::material::{MaterialGroup, MaterialLocationRegistry};
+
+use crate::assets::TextureRegistry;
+
+#[derive(Debug)]
+pub struct Groups {
+    pub dev: MaterialGroup,
+}
+
+#[derive(Debug, Default)]
+pub struct Materials {
+    location_registry: MaterialLocationRegistry,
+    pub groups: Option<Groups>,
+}
+impl Materials {
+    pub fn empty() -> Self {
+        Self {
+            location_registry: MaterialLocationRegistry::new(),
+            groups: None,
+        }
+    }
+
+    pub fn initialize(&mut self, texture_registry: &mut TextureRegistry) {
+        self.groups = Some(Groups {
+            dev: material_group_dev(0, texture_registry, &mut self.location_registry),
+        })
+    }
+
+    pub const fn groups_opt(&self) -> Option<&Groups> {
+        self.groups.as_ref()
+    }
+
+    pub fn groups(&self) -> &Groups {
+        self.groups.as_ref().unwrap()
+    }
+
+    pub const fn locations(&self) -> &MaterialLocationRegistry {
+        &self.location_registry
+    }
+
+    pub const fn locations_mut(&mut self) -> &mut MaterialLocationRegistry {
+        &mut self.location_registry
+    }
+}
+
 rendrs::material_groups! {
     group Dev {
         pages: 32;
