@@ -104,7 +104,7 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
         let mut t_vb = Vec::new();
 
         for mesh in &self.meshes {
-            for (i, face) in mesh.faces().iter().enumerate() {
+            for face in mesh.faces() {
                 let polys::TriFace { a, b, c } = face.indexed;
                 let n = face.normal;
 

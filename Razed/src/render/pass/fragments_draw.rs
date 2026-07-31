@@ -102,6 +102,10 @@ ethel::shader_glsl! {
                 shader_commons::CONST_AMBIENT_LIGHT
             };
 
+            lib {
+                rendrs::pack::DERIVE_COTANGENT;
+            };
+
             src() {
                 "
                 const uint DEV_MATERIAL_GROUP = 0;
@@ -131,12 +135,13 @@ ethel::shader_glsl! {
                 float metallic = qOrmd.b;
                 float displacement = qOrmd.a;
 
-                // if (alpha < 0.1) {
-                //     discard;
-                // }
+                if (alpha < 0.1) {
+                    discard;
+                }
 
-                vec3 vertexNormal = normalize(fs_normal);
-                vec3 normal = fs_normal; // mix with normal map
+                mat3 TBN = deriveCotangent(fs_normal, fs_world, fs_uv);
+                normalMap = normalMap * 2.0 - 1.0;
+                vec3 normal = normalize(TBN * normalMap);
 
                 // basic directional light (camera source)
                 vec3 light_dir = -camera_forward;
