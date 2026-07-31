@@ -104,7 +104,7 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
         let mut t_vb = Vec::new();
 
         for mesh in &self.meshes {
-            for face in mesh.faces() {
+            for (i, face) in mesh.faces().iter().enumerate() {
                 let polys::TriFace { a, b, c } = face.indexed;
                 let n = face.normal;
 
@@ -112,9 +112,10 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
                 let p1 = mesh.vertices()[b as usize];
                 let p2 = mesh.vertices()[c as usize];
 
-                //TODO: add compute uv pass to polys crate
-                // after that, resume material implementation for
-                // fragments_draw pass
+                const UV_SCALING: f32 = 1.0;
+                let uv0 = polys::compute_uv_cubic(p0, n, UV_SCALING);
+                let uv1 = polys::compute_uv_cubic(p1, n, UV_SCALING);
+                let uv2 = polys::compute_uv_cubic(p2, n, UV_SCALING);
 
                 t_vb.push(ethel::mesh::Vertex {
                     pos_x: p0.x,
@@ -123,8 +124,8 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
                     norm_x: n.x,
                     norm_y: n.y,
                     norm_z: n.z,
-                    uv_x: 0f32,
-                    uv_y: 0f32,
+                    uv_x: uv0.x,
+                    uv_y: uv0.y,
                 });
                 t_vb.push(ethel::mesh::Vertex {
                     pos_x: p1.x,
@@ -133,8 +134,8 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
                     norm_x: n.x,
                     norm_y: n.y,
                     norm_z: n.z,
-                    uv_x: 0f32,
-                    uv_y: 0f32,
+                    uv_x: uv1.x,
+                    uv_y: uv1.y,
                 });
                 t_vb.push(ethel::mesh::Vertex {
                     pos_x: p2.x,
@@ -143,8 +144,8 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
                     norm_x: n.x,
                     norm_y: n.y,
                     norm_z: n.z,
-                    uv_x: 0f32,
-                    uv_y: 0f32,
+                    uv_x: uv2.x,
+                    uv_y: uv2.y,
                 });
             }
 

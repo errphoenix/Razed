@@ -34,3 +34,14 @@ pub fn compute_normals<F: Face>(faces: &[F], normals: &mut [glam::Vec3], vertice
         *normal = normal.normalize();
     }
 }
+
+pub fn compute_uv_cubic(vertex: glam::Vec3, normal: glam::Vec3, uv_scaling: f32) -> glam::Vec2 {
+    let n = normal.abs();
+    if n.x >= n.y && n.x >= n.z {
+        glam::Vec2::new(vertex.y, vertex.z) * uv_scaling
+    } else if n.y >= n.x && n.y >= n.z {
+        glam::Vec2::new(vertex.x, vertex.z) * uv_scaling
+    } else {
+        glam::Vec2::new(vertex.x, vertex.y) * uv_scaling
+    }
+}
