@@ -147,6 +147,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         let view_mat = view.into_mat4().inverse();
         let proj = screen.projection();
         let ortho_proj = screen.orto_projection();
+        let cam_position = view.position;
         let cam_forward = view.forward();
 
         #[cfg(feature = "devmode")]
@@ -188,6 +189,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         frags.bind();
         frags.uniform_camera_forward_vec3v([cam_forward]);
+        frags.uniform_camera_position_vec3v([cam_position]);
         frags.uniform_projection_mat4v([*proj]);
         frags.uniform_view_mat4v([view_mat]);
 
@@ -354,7 +356,9 @@ impl Renderer {
 
     fn initialize_shaders(&mut self) {
         self.shaders.lattice = pass::debug_lattice_draw::ShaderDebugLattice::new_compiled();
-        self.shaders.fragments = pass::fragments_draw::ShaderFragment::new_compiled();
+        self.shaders.fragments = pass::fragments_draw::ShaderFragment::new_compiled_variant(
+            pass::ShaderFragmentVariants::WindowedAttenuation,
+        );
         self.shaders.debris = pass::debris_draw::ShaderDebris::new_compiled();
         self.shaders.cage = pass::debug_cage_draw::ShaderDebugCage::new_compiled();
         self.shaders.interface = gui::render::ShaderUiBasic::new_compiled();

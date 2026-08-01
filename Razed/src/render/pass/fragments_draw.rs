@@ -69,6 +69,8 @@ pub const SSBO_INDEX_IMAP_DEFORMS: u32 = ssbo_binding!(IMap_Deforms);
 pub const SSBO_INDEX_POD_DEFORMS_POSITIONS: u32 = ssbo_binding!(POD_Deforms_Positions);
 pub const SSBO_INDEX_POD_DEFORMS_BINDPOSE: u32 = ssbo_binding!(POD_Deforms_BindPose);
 
+use ShaderFragmentVariants::*;
+
 ethel::shader_glsl! {
     struct Fragment > [460] {
         common {
@@ -81,6 +83,10 @@ ethel::shader_glsl! {
                 ethel::mesh::GLSL_SSBO_INTEGRATION[0]
                 ethel::mesh::GLSL_SSBO_INTEGRATION[1]
             };
+
+            variants {
+                WindowedAttenuation;
+            };
         };
 
         unit ShaderKind::Pixel => [
@@ -90,6 +96,7 @@ ethel::shader_glsl! {
 
             uniform {
                 length 1, camera_forward: vec3 => glam::Vec3;
+                length 1, camera_position: vec3 => glam::Vec3;
                 length 16, texture_map: sampler2DArray => i32;
             };
 
@@ -104,6 +111,8 @@ ethel::shader_glsl! {
 
             lib {
                 rendrs::pack::DERIVE_COTANGENT;
+                >Default => rendrs::graphics::light::LIB_LIGHT_ATTENUATE_DISTANCE_FALLOFF;
+                >WindowedAttenuation => rendrs::graphics::light::LIB_LIGHT_ATTENUATE_ISQ_WINDOWED_CURVE;
             };
 
             src() {
@@ -143,12 +152,31 @@ ethel::shader_glsl! {
                 normalMap = normalMap * 2.0 - 1.0;
                 vec3 normal = normalize(TBN * normalMap);
 
-                // basic directional light (camera source)
-                vec3 light_dir = -camera_forward;
-                float diffuseLight = max(dot(light_dir, normal), 0.0);
-                float light_factor = LIGHT_AMBIENT + diffuseLight;
+                // camera source point light
+                const float LIGHT_MAX_DIST = 72.0;
+                vec3 light_dir = camera_position - fs_world;
+                float light_d = max(dot(normalize(light_dir), normal), 0.0);
 
-                outColor = vec4(diffuse * light_factor, 1.0);
+            ";
+            match {
+                _ => {
+                    "
+                    float light_dist = length(light_dir);
+                    light_d *= lightAttenuate(light_dist, LIGHT_MAX_DIST);
+                    ";
+                };
+                WindowedAttenuation => {
+                    "
+                    float light_dist_sq = dot(light_dir, light_dir);
+                    float light_dist = sqrt(light_dist_sq);
+                    light_d *= lightAttenuate(light_dist_sq, light_dist, LIGHT_MAX_DIST, 0.01);
+                    ";
+                };
+            }
+                "
+
+                float L = LIGHT_AMBIENT + light_d;
+                outColor = vec4(diffuse * L, 1.0);
                 ";
             }
         ];

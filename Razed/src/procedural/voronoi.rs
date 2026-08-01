@@ -112,7 +112,7 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
                 let p1 = mesh.vertices()[b as usize];
                 let p2 = mesh.vertices()[c as usize];
 
-                const UV_SCALING: f32 = 1.0;
+                const UV_SCALING: f32 = 0.5;
                 let uv0 = polys::compute_uv_cubic(p0, n, UV_SCALING);
                 let uv1 = polys::compute_uv_cubic(p1, n, UV_SCALING);
                 let uv2 = polys::compute_uv_cubic(p2, n, UV_SCALING);
