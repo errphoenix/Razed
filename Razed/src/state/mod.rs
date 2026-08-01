@@ -695,7 +695,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         // i.e. there must be no free operations on the fragment table until
         // after the release_debris_bodies function.
         self.process_fragment_damage();
-        self.deforms.delete_dead_points();
         self.release_debris_bodies();
         self.delete_disabled_fragments();
 
@@ -941,6 +940,9 @@ impl State {
     fn process_fragment_damage(&mut self) {
         let damaged_nodes = self.lattice.unique_damaged_nodes_frame();
         self.profiler.capture_duration("lattice_damage", || {
+            self.deforms.sync_lattice_damage(damaged_nodes);
+            self.deforms.delete_dead_points();
+
             self.fragments.clear_damage_buffer();
             self.fragments.sync_lattice_damage(damaged_nodes);
         });

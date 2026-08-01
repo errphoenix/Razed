@@ -7,7 +7,10 @@ use rayon::iter::{
     IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator,
 };
 
-use crate::{procedural::VoxelGrid, structure::lattice::NodesRowTableView};
+use crate::{
+    procedural::VoxelGrid,
+    structure::lattice::{DamagedNode, NodesRowTableView},
+};
 
 pub const CONTROL_POINTS_COUNT: usize = 4;
 
@@ -87,6 +90,16 @@ impl DeformSystem {
         self.deleted_points.clear();
     }
 
+    pub fn sync_lattice_damage(&mut self, damage: &[DamagedNode]) {
+        damage.iter().filter(|d| d.constraints_left == 0).for_each(
+            |&DamagedNode { id, .. }| {
+                let attached = &mut self.node_map[id.as_index()];
+                self.data.free_many(attached);
+                attached.clear();
+            },
+        );
+    }
+
     pub fn deform(&mut self, lattice: &NodesRowTableView) {
         fn outer_product(a: glam::Vec3, b: glam::Vec3) -> glam::Mat3 {
             glam::mat3(a * b.x, a * b.y, a * b.z)
@@ -141,7 +154,7 @@ impl DeformSystem {
 
                     let p_bar = controllers
                         .iter()
-                        .filter(|c| c.id.as_int() != 0)
+                        .filter(|c| c.id.as_int() != 0 && c.weight > 0.001)
                         .fold(glam::Vec3::ZERO, |acc, &ControlPoint { id, weight }| {
                             acc + lattice.current_pos(id) * weight
                         })
@@ -150,7 +163,7 @@ impl DeformSystem {
                     let covariance = controllers
                         .iter()
                         .zip(controller_binds)
-                        .filter(|(c, _)| c.id.as_int() != 0)
+                        .filter(|(c, _)| c.id.as_int() != 0 && c.weight > 0.001)
                         .fold(
                             glam::Mat3::ZERO,
                             |acc, (&ControlPoint { id, weight }, &bind_pos)| {
