@@ -11,7 +11,7 @@ use rustc_hash::FxHashSet;
 use crate::{
     procedural::VoxelGrid,
     structure::{
-        DeformsRowTableView,
+        CageRowTableView, CageSystem,
         lattice::{DamagedNode, NodesRowTableView},
     },
 };
@@ -26,12 +26,12 @@ ethel::table_spec! {
         parents: [IndirectIndex; PARENTS_COUNT];
         parents_weights: [f32; PARENTS_COUNT];
 
-        anchors: [IndirectIndex; ANCHORS_COUNT];
-        anchors_weights: [f32; ANCHORS_COUNT];
+        deformation_cage: IndirectIndex;
 
         // bind position at fragment creation
         // vec4 due to SSBO alignment requirements
         bind_position: glam::Vec4;
+        world_position: glam::Vec3;
 
         // lattice contribution coefficient
         health_coeff: f32;
@@ -39,8 +39,6 @@ ethel::table_spec! {
         mass_coeff: f32;
         // normalised integrity of fragment [0; 1]
         integrity: f32;
-
-        world_position: glam::Vec3;
 
         mesh_id: ethel::mesh::Id;
     }
@@ -189,71 +187,12 @@ impl FragmentSystem {
         self.fragment_damage_frame.clear();
     }
 
-    pub fn compute_world_positions(&mut self, deforms: &DeformsRowTableView) {
-        let length = self.fragments.len();
-        let anchors = &self.fragments.anchors;
-        let anchor_weights = &self.fragments.anchors_weights;
-        let bind = &self.fragments.bind_position;
-        let world_pos = &mut self.fragments.world_position;
-
-        let deform_pose = &deforms.pose;
-        let deform_now = &deforms.deformed;
-
-        for i in 1..length {
-            let mut pos = bind[i].xyz();
-            let anchors = anchors[i];
-            let weights = anchor_weights[i];
-
-            anchors.iter().zip(weights).for_each(|(i, w)| {
-                let direct = deforms.solve(*i);
-                let d_pose = deform_pose[direct.as_index()];
-                let d_now = deform_now[direct.as_index()];
-                let v = d_now - d_pose;
-                pos += v * w;
-            });
-
-            world_pos[i] = pos;
-        }
-    }
-
-    pub fn sync_deform_damage(
-        &mut self,
-        dead_points: &[IndirectIndex],
-        deforms: &DeformsRowTableView,
-    ) {
-        for deform in dead_points {
-            for &frag_id in &self.deform_map[deform.as_index()] {
-                if frag_id.as_int() == 0 {
-                    continue;
-                }
-
-                if let Some(direct) = self.fragments.solve_indirect(frag_id) {
-                    let fragment_world = self.fragments.world_position[direct.as_index()];
-                    let anchors = &mut self.fragments.anchors[direct.as_index()];
-                    let weights = &mut self.fragments.anchors_weights[direct.as_index()];
-
-                    anchors
-                        .iter_mut()
-                        .zip(weights.iter_mut())
-                        .for_each(|(anchor, weight)| {
-                            if *anchor == *deform {
-                                *anchor = IndirectIndex::default();
-                                *weight = 0f32;
-                            } else {
-                                let direct = deforms.solve(*anchor);
-                                let deform = deforms.deformed[direct.as_index()];
-                                let ds = fragment_world.distance_squared(deform);
-                                *weight = 1.0 / (ds + f32::EPSILON);
-                            }
-                        });
-
-                    let w_t = weights.iter().sum::<f32>();
-                    weights.iter_mut().for_each(|w| *w /= w_t);
-
-                    self.disabled_frags_frame.insert(direct);
-                }
-            }
-        }
+    pub fn compute_world_positions(&mut self, _cages: &CageRowTableView) {
+        // todo: this is used to spawn debris seamlessly at the last
+        // fragment position. computing an accurate position, especially
+        // with the new cage system, would require full ffd. this is a big
+        // waste of cpu cycles, so it would be better to move to calculating
+        // world-positions for debris spawning on demand.
     }
 
     /// Synchronise stable indirect indices `broken_ids` of constraints and
@@ -340,109 +279,20 @@ impl FragmentSystem {
 
     const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 8;
 
-    pub fn bind_deforms(
+    pub fn create_deformation_cages(
         &mut self,
-        deforms_hash: &FxSpatialHash<IndirectIndex>,
-        deforms: &DeformsRowTableView,
+        lattice_hash: &FxSpatialHash<IndirectIndex>,
+        lattice: &NodesRowTableView,
+        cage: &mut CageSystem,
     ) {
-        {
-            let deforms_len = deforms.size();
-            self.deform_map.resize_with(deforms_len, || Vec::new());
-        }
-
-        let mut near_buf = Vec::with_capacity(ANCHORS_COUNT);
-        let mut anchors = Vec::with_capacity(ANCHORS_COUNT);
-
         self.uninitialised.retain(|frag| {
             if let UninitFragmentStage::Unfinished { indirect } = frag.stage {
                 let fragment_world = frag.position;
-                let fragment_cell = deforms_hash.cell_at(fragment_world);
-
-                // locate anchors via octant query
-                {
-                    const OCTANT_QUERY: u32 = 32;
-                    let _ = deforms_hash.nearest_cells(
-                        fragment_cell,
-                        OCTANT_QUERY,
-                        Self::VOXEL_NEIGHBOR_QUERY_RADIUS,
-                        &mut near_buf,
-                        false,
-                    );
-
-                    let mut octant_closest = [None::<(Cell, f32)>; ANCHORS_COUNT];
-                    near_buf.drain(..).for_each(|cell| {
-                        let id = deforms_hash.get(cell).unwrap();
-                        let pos = deforms.pose(*id);
-                        let delta = pos - fragment_world;
-                        let dist_sq = delta.length_squared();
-
-                        // select quadrant
-                        let mut octant_index = 0;
-                        if delta.x >= 0.0 {
-                            octant_index |= 1;
-                        }
-                        if delta.y >= 0.0 {
-                            octant_index |= 2;
-                        }
-                        if delta.z >= 0.0 {
-                            octant_index |= 4;
-                        }
-
-                        // compare to existing value
-                        match octant_closest[octant_index] {
-                            Some((_, dist)) if dist_sq >= dist => {}
-                            _ => octant_closest[octant_index] = Some((cell, dist_sq)),
-                        }
-                    });
-
-                    for (i, octant) in octant_closest.iter().enumerate() {
-                        if let Some((cell, _)) = octant {
-                            anchors.push(*cell);
-                        } else {
-                            tracing::warn!(
-                                "Missing octant for fragment at index {i}: fallback to self"
-                            );
-
-                            anchors.push(fragment_cell)
-                        }
-                    }
-                }
-
-                let fragment_direct = self
-                    .fragments
-                    .solve_indirect(indirect)
-                    .expect("fragment indirect always valid");
-                let fragment_anchors = &mut self.fragments.anchors[fragment_direct.as_index()];
-                let fragment_weights =
-                    &mut self.fragments.anchors_weights[fragment_direct.as_index()];
-
-                anchors
-                    .drain(..)
-                    .zip(fragment_anchors.iter_mut())
-                    .zip(fragment_weights.iter_mut())
-                    .for_each(|((cell, anchor_id), anchor_weight)| {
-                        let deform = deforms_hash
-                            .get(cell)
-                            .copied()
-                            .expect("deforms hash neighbors are populated");
-                        let point = deforms.pose(deform);
-                        let ds = fragment_world.distance(*point);
-
-                        *anchor_id = deform;
-                        *anchor_weight = 1.0 / (ds + f32::EPSILON);
-                    });
-
-                let w_t = fragment_weights.iter().sum::<f32>();
-                fragment_weights.iter_mut().for_each(|w| *w /= w_t);
-
-                for anchor in fragment_anchors {
-                    self.deform_map[anchor.as_index()].push(indirect);
-                }
-
-                // remove fragment from intermediate buffer
+                let cage_id = cage.generate_cage(fragment_world, lattice_hash, lattice);
+                let direct = self.fragments.solve_indirect(indirect).unwrap();
+                self.fragments.deformation_cage[direct.as_index()] = cage_id;
                 false
             } else {
-                // keep other unfinished fragments
                 true
             }
         });
@@ -508,13 +358,12 @@ impl FragmentSystem {
             let handle = self.fragments.insert((
                 parents,
                 weights,
-                [IndirectIndex::default(); ANCHORS_COUNT],
-                [0f32; ANCHORS_COUNT],
+                IndirectIndex::default(),
                 position,
+                fragment_world,
                 50.0, // todo: health contribution
                 1.0,  // todo: debris rigid body
                 1.0,  // todo: damage and integrity
-                fragment_world,
                 fragment_mesh,
             ));
             frag.stage = UninitFragmentStage::Unfinished { indirect: handle };

@@ -14,22 +14,28 @@ pub const QUERY_LATTICE_ATTACH_MAX_RANGE: f32 = 16.0;
 
 ethel::table_spec! {
     struct Cage {
+        // calculated on gpu compute shader, used for ffd
+        rotation: glam::Quat;
+
         // vec4 for gpu alignment as this data is used in shaders
         // * local_points is used as the output of cage deformation
         //   compute, and ffd for fragments
         // * local_points_bind is used for ffd for fragments
-        local_points: [glam::Vec4; PER_CAGE_POINTS];
-        local_points_bind: [glam::Vec4; PER_CAGE_POINTS];
+        local_points: CagePoints;
+        local_points_bind: CagePoints;
 
         // no alignment requirements as this data is cpu-only
-        // this is all used to compute the covariant, it is cheap
-        // enough that it is fine to keep on the cpu
+        // for covariant computation
         point_barycenter_lattice: [glam::Vec3; PER_CAGE_POINTS];
         lattice_attachments: [PointLatticeAttachments; PER_CAGE_POINTS];
-        lattice_bind_points: [glam::Vec3; PER_CAGE_MAX_LATTICE_ATTACHMENTS];
         attached_lattice: [IndirectIndex; PER_CAGE_MAX_LATTICE_ATTACHMENTS];
+        lattice_bind_points: [glam::Vec3; PER_CAGE_MAX_LATTICE_ATTACHMENTS];
     }
 }
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct CagePoints(pub [glam::Vec4; PER_CAGE_POINTS]);
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -73,7 +79,7 @@ impl CageSystem {
         &mut self.data
     }
 
-    pub fn generate_cage_from_lattice(
+    pub fn generate_cage(
         &mut self,
         cage_center: glam::Vec3,
         lattice_hash: &FxSpatialHash<IndirectIndex>,
@@ -101,12 +107,13 @@ impl CageSystem {
             .map(|p| PointLatticeAttachments(p.lattice_attachments));
 
         self.data.insert((
-            points_pos,
-            points_pos,
+            glam::Quat::IDENTITY,
+            CagePoints(points_pos),
+            CagePoints(points_pos),
             points_barycenter,
             points_attachments,
-            cage_data.lattice_bind_pos,
             cage_data.attached_lattice,
+            cage_data.lattice_bind_pos,
         ))
     }
 

@@ -17,7 +17,7 @@ use crate::{
     procedural::{VoxelGrid, VoxelGridOptions},
     render::RenderGroup,
     structure::{
-        DebrisSystem, DeformSystem, DeformsRowTableView, FragmentSystem, FragmentsRowTableView,
+        CageRowTableView, CageSystem, DebrisSystem, FragmentSystem, FragmentsRowTableView,
         create_structure_lattice,
         debris::MotionAccumulator,
         lattice::{LatticeSystem, NodesRowTableView},
@@ -136,7 +136,7 @@ pub struct State {
     pub generic_objects: RenderableRowTable,
 
     lattice: LatticeSystem,
-    deforms: DeformSystem,
+    cage: CageSystem,
     fragments: FragmentSystem,
     debris: DebrisSystem,
 
@@ -172,7 +172,7 @@ impl Default for State {
             ),
             profiler: Profiler::default(),
             lattice_bind_pose: Default::default(),
-            deforms: Default::default(),
+            cage: Default::default(),
             fragments: Default::default(),
             debris: Default::default(),
             mesh_ids: Default::default(),
@@ -307,51 +307,37 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 }
             }
 
+            // cages upload
+            {
+                let cage_data = self.cage.data();
+                let imap_cages = cage_data.handles();
+                let pod_cage_locals = cage_data.local_points_slice();
+                let pod_cage_locals_bind = cage_data.local_points_bind_slice();
+                let pod_cage_rotations = cage_data.rotation_slice();
+
+                let tb_cages = &storage.cages;
+                tb_cages.blit_imap_cages(buf_idx, imap_cages, 0);
+                tb_cages.blit_pod_cages_localpoints(buf_idx, pod_cage_locals, 0);
+                tb_cages.blit_pod_cages_localpoints_bind(buf_idx, pod_cage_locals_bind, 0);
+                tb_cages.blit_pod_cages_rotations(buf_idx, pod_cage_rotations, 0);
+            }
+
             const VEC3_VEC4_PADDING: usize = 4;
 
             // fragments upload
             {
                 let fragments = &storage.fragments;
-
-                let imap_deforms = self.deforms.data().handles();
-                let pod_deforms_positions = self.deforms.data().deformed_slice();
-                let pod_deforms_bind_pose = self.deforms.data().pose_slice();
-                let pod_anchors = self.fragments.data().anchors_slice();
+                let pod_cage_ids = self.fragments.data().deformation_cage_slice();
                 let pod_bind_pose = self.fragments.data().bind_position_slice();
                 let pod_mesh_id = self.fragments.data().mesh_id_slice();
-
-                let deform_count = (pod_deforms_positions.len() - 1) as u32;
-                storage
-                    .cage_points_count
-                    .store(deform_count, Ordering::Relaxed);
 
                 // SAFETY: the use of LayoutFragmentData ensures we blit to a
                 // valid section of the partitioned buffer.
                 unsafe {
                     fragments.blit_part(
                         buf_idx,
-                        LayoutFragmentData::ImapDeforms as usize,
-                        imap_deforms,
-                        0,
-                    );
-                    fragments.blit_part_padded(
-                        buf_idx,
-                        LayoutFragmentData::PodDeformsPositions as usize,
-                        pod_deforms_positions,
-                        0,
-                        VEC3_VEC4_PADDING,
-                    );
-                    fragments.blit_part_padded(
-                        buf_idx,
-                        LayoutFragmentData::PodDeformsBindPose as usize,
-                        pod_deforms_bind_pose,
-                        0,
-                        VEC3_VEC4_PADDING,
-                    );
-                    fragments.blit_part(
-                        buf_idx,
-                        LayoutFragmentData::PodAnchors as usize,
-                        pod_anchors,
+                        LayoutFragmentData::PodCageIds as usize,
+                        pod_cage_ids,
                         0,
                     );
                     fragments.blit_part(
@@ -681,7 +667,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         });
 
         self.profiler.capture_duration("lattice_trivialities", || {
-            let deforms = DeformsRowTableView::from(self.deforms.data());
+            let deforms = CageRowTableView::from(self.cage.data());
             self.fragments.compute_world_positions(&deforms);
 
             // synchronizes lattice damage from xpbd-lattice solver
@@ -700,7 +686,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 
         self.profiler.capture_duration("cage_update", || {
             let lattice = NodesRowTableView::from(self.lattice.nodes());
-            self.deforms.deform(&lattice)
+            //self.deforms.deform(&lattice)
         });
 
         self.profiler.capture_duration("debris_sleep", || {
@@ -729,7 +715,7 @@ impl State {
             let lattice_node_count = self.lattice.nodes().len();
             let lattice_constr_count = self.lattice.links().len();
             let fragment_count = self.fragments.data().len();
-            let cage_points_count = self.deforms.data().len();
+            let cages_count = self.cage.data().len();
             let debris_count = self.debris.data().len();
 
             env.insert(DEBUG_PERF_FPS_AVG, fps_avg as u32);
@@ -739,7 +725,7 @@ impl State {
             env.insert(DEBUG_COUNTER_LATTICE_NODES, lattice_node_count);
             env.insert(DEBUG_COUNTER_LATTICE_CONSTRAINTS, lattice_constr_count);
             env.insert(DEBUG_COUNTER_FRAGMENTS, fragment_count);
-            env.insert(DEBUG_COUNTER_CAGE_POINTS, cage_points_count);
+            env.insert(DEBUG_COUNTER_CAGES, cages_count);
             env.insert(DEBUG_COUNTER_DEBRIS, debris_count);
         }
 
@@ -940,8 +926,8 @@ impl State {
     fn process_fragment_damage(&mut self) {
         let damaged_nodes = self.lattice.unique_damaged_nodes_frame();
         self.profiler.capture_duration("lattice_damage", || {
-            self.deforms.sync_lattice_damage(damaged_nodes);
-            self.deforms.delete_dead_points();
+            // self.deforms.sync_lattice_damage(damaged_nodes);
+            // self.deforms.delete_dead_points();
 
             self.fragments.clear_damage_buffer();
             self.fragments.sync_lattice_damage(damaged_nodes);
@@ -1118,22 +1104,6 @@ impl State {
         let mut lattice_hash = FxSpatialHash::new(SpatialResolution::new(1.0));
         lattice_hash.dump_soa(lattice.current_pos, lattice.handles);
 
-        let deform_vox_options = grid.options();
-        let mut deforms_vox = VoxelGrid::new(grid.generator, *deform_vox_options);
-        deforms_vox.repopulate_defaults();
-        let generated_len =
-            self.deforms
-                .generate_points(origin, &deforms_vox, &lattice_hash, &lattice);
-
-        let deforms = DeformsRowTableView::from_range(
-            self.deforms.data(),
-            generated_len.start,
-            generated_len.end - generated_len.start - 1,
-        );
-        let deforms_resolution = SpatialResolution::new(deform_vox_options.cell_size);
-        let mut deforms_hash = FxSpatialHash::new(deforms_resolution);
-        deforms_hash.dump_soa(deforms.pose, deforms.handles);
-
         // handle degenerate
         if self.frag_map.is_empty() {
             self.frag_map.push(0);
@@ -1156,6 +1126,7 @@ impl State {
         self.fragments.generate(origin, &abs_grid, &frag_meshmap);
 
         self.fragments.bind_lattice(&lattice_hash, &lattice);
-        self.fragments.bind_deforms(&deforms_hash, &deforms);
+        self.fragments
+            .create_deformation_cages(&lattice_hash, &lattice, &mut self.cage);
     }
 }

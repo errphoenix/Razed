@@ -92,8 +92,8 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
         TextNode::Variable(env_names::DEBUG_COUNTER_FRAGMENTS),
     ]));
     debug_text(TextContents::from_nodes(&[
-        TextNode::Static("Cage points = "),
-        TextNode::Variable(env_names::DEBUG_COUNTER_CAGE_POINTS),
+        TextNode::Static("Deform. Cages = "),
+        TextNode::Variable(env_names::DEBUG_COUNTER_CAGES),
     ]));
     debug_text(TextContents::from_nodes(&[
         TextNode::Static("Debris = "),
@@ -129,7 +129,6 @@ pub mod env_names {
     pub const DEBUG_COUNTER_LATTICE_CONSTRAINTS: StringHash =
         janus::hash_string("__debug.counter.lattice.constraints");
     pub const DEBUG_COUNTER_FRAGMENTS: StringHash = janus::hash_string("__debug.counter.fragments");
-    pub const DEBUG_COUNTER_CAGE_POINTS: StringHash =
-        janus::hash_string("__debug.counter.cage_points");
+    pub const DEBUG_COUNTER_CAGES: StringHash = janus::hash_string("__debug.counter.cages");
     pub const DEBUG_COUNTER_DEBRIS: StringHash = janus::hash_string("__debug.counter.debris");
 }

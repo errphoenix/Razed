@@ -1,10 +1,11 @@
 use std::sync::{Arc, atomic::AtomicU32};
 
-use crate::render;
+use crate::{render, structure::cage::CagePoints};
 use ethel::{
     DrawCommand, layout_buffer, layout_mesh_buffer,
     render::buffer::{PartitionedTriBuffer, TriBuffer},
     state::data::{DirectIndex, IndirectIndex},
+    typed_part_buffer,
 };
 use gui::render::{UiCommandsBuffer, UiDataBuffer};
 use janus::{context::DeltaTime, sync::TriCell};
@@ -30,8 +31,8 @@ pub const DEBRIS_ALLOC: usize = 131072;
 pub const DEBRIS_STORAGE_PARTS: usize = 3;
 
 pub const FRAGMENTS_ALLOC: usize = 131072;
-pub const FRAGMENTS_STORAGE_PARTS: usize = 6;
-pub const DEFORM_POINTS_ALLOC: usize = 181072;
+pub const FRAGMENTS_STORAGE_PARTS: usize = 3;
+pub const CAGES_ALLOC: usize = FRAGMENTS_ALLOC;
 
 pub const MESH_BUFFER_LEN: usize = 2048;
 pub const MESH_BUFFER_SIZE: usize = 65536;
@@ -97,7 +98,7 @@ layout_buffer! {
 
 layout_buffer! {
     const FragmentData: FRAGMENTS_STORAGE_PARTS, {
-        enum PodAnchors: FRAGMENTS_ALLOC => {
+        enum PodCageIds: FRAGMENTS_ALLOC => {
             type [IndirectIndex; FRAGMENT_ANCHORS_COUNT];
             bind 0;
             shader render::pass::fragments_draw::SSBO_INDEX_POD_ANCHORS;
@@ -112,21 +113,27 @@ layout_buffer! {
             bind 2;
             shader render::pass::fragments_draw::SSBO_INDEX_POD_MESHID;
         };
+    }
+}
 
-        enum IMapDeforms: DEFORM_POINTS_ALLOC => {
+typed_part_buffer! {
+    const CageData: 4, {
+        enum IMap_Cages: CAGES_ALLOC => {
             type IndirectIndex;
+            bind 0;
+        };
+        enum Pod_Cages_LocalPoints: CAGES_ALLOC => {
+            type CagePoints;
+            bind 1;
+        };
+        enum Pod_Cages_LocalPoints_Bind: CAGES_ALLOC => {
+            type CagePoints;
+            bind 2;
+        };
+        enum Pod_Cages_Rotations: CAGES_ALLOC => {
+            type glam::Quat;
             bind 3;
-            shader render::pass::fragments_draw::SSBO_INDEX_IMAP_DEFORMS;
-        };
-        enum PodDeformsPositions: DEFORM_POINTS_ALLOC => {
-            type [f32; 4];
-            bind 4;
-            shader render::pass::fragments_draw::SSBO_INDEX_POD_DEFORMS_POSITIONS;
-        };
-        enum PodDeformsBindPose: DEFORM_POINTS_ALLOC => {
-            type [f32; 4];
-            bind 5;
-            shader render::pass::fragments_draw::SSBO_INDEX_POD_DEFORMS_BINDPOSE;
+
         };
     }
 }
@@ -175,6 +182,7 @@ pub struct FrameDataBuffers {
 
     pub generic_objects: PartitionedTriBuffer<RENDERABLE_STORAGE_PARTS>,
     pub fragments: PartitionedTriBuffer<FRAGMENTS_STORAGE_PARTS>,
+    pub cages: CageDataPartitionedTriBuffer,
     pub debris: PartitionedTriBuffer<DEBRIS_STORAGE_PARTS>,
     pub debris_count: Arc<AtomicU32>,
     pub cage_points_count: Arc<AtomicU32>,
@@ -216,6 +224,7 @@ impl FrameDataBuffers {
 
             generic_objects: generic_objects_buffer,
             fragments: fragment_data,
+            cages: CageDataPartitionedTriBuffer::new(),
             debris: debris_data,
             debris_count: Arc::new(AtomicU32::new(0)),
             cage_points_count: Arc::new(AtomicU32::new(0)),

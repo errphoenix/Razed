@@ -120,11 +120,7 @@ impl DeformSystem {
                 let c0 = glam.x_axis;
                 let c1 = glam.y_axis;
                 let c2 = glam.z_axis;
-                nalgebra::Matrix3::from_columns(&[
-                    nalgebra::Vector3::new(c0.x, c0.y, c0.z),
-                    nalgebra::Vector3::new(c1.x, c1.y, c1.z),
-                    nalgebra::Vector3::new(c2.x, c2.y, c2.z),
-                ])
+                nalgebra::Matrix3::new(c0.x, c1.x, c2.x, c0.y, c1.y, c2.y, c0.z, c1.z, c2.z)
             }
 
             let nalg_cov = glam_to_nalg(cov);
