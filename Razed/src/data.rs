@@ -98,20 +98,20 @@ layout_buffer! {
 
 layout_buffer! {
     const FragmentData: FRAGMENTS_STORAGE_PARTS, {
-        enum PodCageIds: FRAGMENTS_ALLOC => {
-            type [IndirectIndex; FRAGMENT_ANCHORS_COUNT];
-            bind 0;
-            shader render::pass::fragments_draw::SSBO_INDEX_POD_ANCHORS;
-        };
         enum PodBindPose: FRAGMENTS_ALLOC => {
             type glam::Vec4;
-            bind 1;
+            bind 0;
             shader render::pass::fragments_draw::SSBO_INDEX_POD_BINDPOSE;
         };
         enum PodMeshId: FRAGMENTS_ALLOC => {
             type ethel::mesh::Id;
-            bind 2;
+            bind 1;
             shader render::pass::fragments_draw::SSBO_INDEX_POD_MESHID;
+        };
+        enum PodCageIds: FRAGMENTS_ALLOC => {
+            type [IndirectIndex; FRAGMENT_ANCHORS_COUNT];
+            bind 2;
+            shader render::pass::fragments_draw::SSBO_INDEX_POD_CAGEID;
         };
     }
 }
@@ -119,7 +119,7 @@ layout_buffer! {
 typed_part_buffer! {
     const CageData: 4, {
         enum IMap_Cages: CAGES_ALLOC => {
-            type IndirectIndex;
+            type DirectIndex;
             bind 0;
         };
         enum Pod_Cages_LocalPoints: CAGES_ALLOC => {

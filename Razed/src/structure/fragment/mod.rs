@@ -5,7 +5,6 @@ use ethel::state::data::{
     hash::{Cell, FxSpatialHash},
     table::TableView,
 };
-use glam::Vec4Swizzles;
 use rustc_hash::FxHashSet;
 
 use crate::{

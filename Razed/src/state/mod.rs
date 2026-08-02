@@ -26,6 +26,7 @@ use crate::{
 use ::physics::xpbd::{RawXpbdLattice, XpbdOptions, XpbdSolver};
 use ethel::{
     assets::{AssetMetadataRegistry, TextureMetadata, pipe::RegistryPipe},
+    data::SparseSlot,
     profile::Profiler,
     render::{
         Resolution, ScreenSpace,
@@ -310,7 +311,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             // cages upload
             {
                 let cage_data = self.cage.data();
-                let imap_cages = cage_data.handles();
+                let imap_cages = cage_data.slots_map();
                 let pod_cage_locals = cage_data.local_points_slice();
                 let pod_cage_locals_bind = cage_data.local_points_bind_slice();
                 let pod_cage_rotations = cage_data.rotation_slice();

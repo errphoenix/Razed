@@ -6,16 +6,20 @@ use ethel::{
     shader::{GlslUniform, ShaderKind, ShaderProgram},
 };
 use rendrs::{
-    graphics::material::{MaterialGroup, MaterialLocation, MaterialLocationRegistry},
+    graphics::material::{MaterialGroup, MaterialLocationRegistry},
     pipeline::DrawPass,
 };
 
-use crate::{data, render::shader_commons};
+use crate::{
+    data::{self, CageDataPartitionedTriBuffer},
+    render::shader_commons,
+};
 
 pub type FragmentsDrawPass = DrawPass<FragmentsDrawCtxWrapper, 1, 0>;
 
 #[derive(Debug)]
 pub struct FragmentsDrawCtx<'data> {
+    pub cages_data: &'data CageDataPartitionedTriBuffer,
     pub fragments_data: &'data PartitionedTriBuffer<{ data::FRAGMENTS_STORAGE_PARTS }>,
     pub fragments_commands: &'data TriBuffer<DrawArraysIndirectCommand>,
 
@@ -32,6 +36,16 @@ pub const fn pass(shader: &ShaderFragment, dev_materials: &MaterialGroup) -> Fra
         [],
         |section, ctx| {
             let section = section.as_index();
+
+            ctx.cages_data
+                .bind_ssbo_imap_cages(section, Some(SSBO_INDEX_IMAP_CAGES));
+            ctx.cages_data
+                .bind_ssbo_pod_cages_localpoints(section, Some(SSBO_INDEX_POD_CAGES_LOCALPOINTS));
+            ctx.cages_data.bind_ssbo_pod_cages_localpoints_bind(
+                section,
+                Some(SSBO_INDEX_POD_CAGES_LOCALPOINTS_BIND),
+            );
+
             ctx.fragments_data.bind_shader_storage(section);
             // SAFETY: safe access to the commands buffer is guaranteed by the
             // correct triple-buffer section index
@@ -42,32 +56,32 @@ pub const fn pass(shader: &ShaderFragment, dev_materials: &MaterialGroup) -> Fra
 }
 
 macro_rules! ssbo_binding {
-    (POD_Anchors) => {
+    (POD_BindPose) => {
         0
     };
-    (POD_BindPose) => {
+    (POD_MeshID) => {
         1
     };
-    (POD_MeshID) => {
+    (POD_CageID) => {
         2
     };
-    (IMap_Deforms) => {
+    (IMap_Cages) => {
+        3
+    };
+    (POD_Cages_LocalPoints) => {
+        4
+    };
+    (POD_Cages_LocalPoints_Bind) => {
         5
-    };
-    (POD_Deforms_Positions) => {
-        6
-    };
-    (POD_Deforms_BindPose) => {
-        7
     };
 }
 
-pub const SSBO_INDEX_POD_ANCHORS: u32 = ssbo_binding!(POD_Anchors);
 pub const SSBO_INDEX_POD_BINDPOSE: u32 = ssbo_binding!(POD_BindPose);
 pub const SSBO_INDEX_POD_MESHID: u32 = ssbo_binding!(POD_MeshID);
-pub const SSBO_INDEX_IMAP_DEFORMS: u32 = ssbo_binding!(IMap_Deforms);
-pub const SSBO_INDEX_POD_DEFORMS_POSITIONS: u32 = ssbo_binding!(POD_Deforms_Positions);
-pub const SSBO_INDEX_POD_DEFORMS_BINDPOSE: u32 = ssbo_binding!(POD_Deforms_BindPose);
+pub const SSBO_INDEX_POD_CAGEID: u32 = ssbo_binding!(POD_CageID);
+pub const SSBO_INDEX_IMAP_CAGES: u32 = ssbo_binding!(IMap_Cages);
+pub const SSBO_INDEX_POD_CAGES_LOCALPOINTS: u32 = ssbo_binding!(POD_Cages_LocalPoints);
+pub const SSBO_INDEX_POD_CAGES_LOCALPOINTS_BIND: u32 = ssbo_binding!(POD_Cages_LocalPoints_Bind);
 
 use ShaderFragmentVariants::*;
 
@@ -202,11 +216,6 @@ ethel::shader_glsl! {
 
             ssbo {
                 ethel::shader_glsl_ssbo! {
-                    buf POD_Anchors => {
-                        [dyn_array IndirectIndex: pod_anchors => each 8]
-                    }
-                }
-                ethel::shader_glsl_ssbo! {
                     buf POD_BindPose => {
                         [dyn_array vec4: pod_bind_pose]
                     }
@@ -217,18 +226,23 @@ ethel::shader_glsl! {
                     }
                 }
                 ethel::shader_glsl_ssbo! {
-                    buf IMap_Deforms => {
-                        [dyn_array IndirectIndex: imap_deforms]
+                    buf POD_CageID => {
+                        [dyn_array IndirectIndex: pod_cage_id]
                     }
                 }
                 ethel::shader_glsl_ssbo! {
-                    buf POD_Deforms_Positions => {
-                        [dyn_array vec4: pod_deforms_positions]
+                    buf IMap_Cages => {
+                        [dyn_array DirectIndex: imap_cages]
                     }
                 }
                 ethel::shader_glsl_ssbo! {
-                    buf POD_Deforms_BindPose => {
-                        [dyn_array vec4: pod_deforms_pose]
+                    buf POD_Cages_LocalPoints => {
+                        [dyn_array vec4: pod_cages_localpoints => each 8]
+                    }
+                }
+                ethel::shader_glsl_ssbo! {
+                    buf POD_Cages_LocalPoints_Bind => {
+                        [dyn_array vec4: pod_cages_localpoints_bind => each 8]
                     }
                 }
             };
@@ -267,17 +281,10 @@ ethel::shader_glsl! {
                 vec3 bind_pose = pod_bind_pose[fragment_id].xyz;
                 vec3 w_rest = bind_pose + model; // bind vertex
 
-                IndirectIndex[8] anchors = pod_anchors[fragment_id];
-
-                // gather anchor data (index, real pos, bind pos)
-                uint i0 = imap_deforms[anchors[0].index].index;
-                uint i1 = imap_deforms[anchors[1].index].index;
-                uint i2 = imap_deforms[anchors[2].index].index;
-                uint i3 = imap_deforms[anchors[3].index].index;
-                uint i4 = imap_deforms[anchors[4].index].index;
-                uint i5 = imap_deforms[anchors[5].index].index;
-                uint i6 = imap_deforms[anchors[6].index].index;
-                uint i7 = imap_deforms[anchors[7].index].index;
+                IndirectIndex cage_id = pod_cage_id[fragment_id];
+                DirectIndex cage_did = imap_cages[cage_id.index];
+                vec4[8] localpoints = pod_cages_localpoints[cage_did.index];
+                vec4[8] localpoints_bind = pod_cages_localpoints_bind[cage_did.index];
 
                 // anchor order is guaranteed to be:
                 // 0: -x, -y, -z,
@@ -289,35 +296,31 @@ ethel::shader_glsl! {
                 // 6: -x,  y,  z,
                 // 7:  x,  y,  z,
 
-                // bind-time positions
-                vec3 b000 = pod_deforms_pose[i0].xyz;
-                vec3 b100 = pod_deforms_pose[i1].xyz;
-                vec3 b010 = pod_deforms_pose[i2].xyz;
-                vec3 b110 = pod_deforms_pose[i3].xyz;
-                vec3 b001 = pod_deforms_pose[i4].xyz;
-                vec3 b101 = pod_deforms_pose[i5].xyz;
-                vec3 b011 = pod_deforms_pose[i6].xyz;
-                vec3 b111 = pod_deforms_pose[i7].xyz;
-
+                // bind-time localpoints
+                vec3 b000 = localpoints_bind[0].xyz;
+                vec3 b100 = localpoints_bind[1].xyz;
+                vec3 b010 = localpoints_bind[2].xyz;
+                vec3 b110 = localpoints_bind[3].xyz;
+                vec3 b001 = localpoints_bind[4].xyz;
+                vec3 b101 = localpoints_bind[5].xyz;
+                vec3 b011 = localpoints_bind[6].xyz;
+                vec3 b111 = localpoints_bind[7].xyz;
                 // real-time positions
-                vec3 p000 = pod_deforms_positions[i0].xyz;
-                vec3 p100 = pod_deforms_positions[i1].xyz;
-                vec3 p010 = pod_deforms_positions[i2].xyz;
-                vec3 p110 = pod_deforms_positions[i3].xyz;
-                vec3 p001 = pod_deforms_positions[i4].xyz;
-                vec3 p101 = pod_deforms_positions[i5].xyz;
-                vec3 p011 = pod_deforms_positions[i6].xyz;
-                vec3 p111 = pod_deforms_positions[i7].xyz;
+                vec3 p000 = localpoints[0].xyz;
+                vec3 p100 = localpoints[1].xyz;
+                vec3 p010 = localpoints[2].xyz;
+                vec3 p110 = localpoints[3].xyz;
+                vec3 p001 = localpoints[4].xyz;
+                vec3 p101 = localpoints[5].xyz;
+                vec3 p011 = localpoints[6].xyz;
+                vec3 p111 = localpoints[7].xyz;
 
-                // determine AABB of deformation cage
+                // determine AABB of deformation cage (bind)
                 const float M = 1000000.0;
                 vec3 cage_min = vec3( M);
                 vec3 cage_max = vec3(-M);
                 for (int i = 0; i < 8; i++) {
-                    uint anchor_i = anchors[i].index;
-                    uint cage_imap = imap_deforms[anchor_i].index;
-                    vec3 point = pod_deforms_pose[cage_imap].xyz;
-
+                    vec3 point = localpoints_bind[i].xyz;
                     cage_min.x = min(cage_min.x, point.x);
                     cage_min.y = min(cage_min.y, point.y);
                     cage_min.z = min(cage_min.z, point.z);
@@ -328,9 +331,9 @@ ethel::shader_glsl! {
                 float cdx = cage_max.x - cage_min.x;
                 float cdy = cage_max.y - cage_min.y;
                 float cdz = cage_max.z - cage_min.z;
-                float vdx = w_rest.x - cage_min.x;
-                float vdy = w_rest.y - cage_min.y;
-                float vdz = w_rest.z - cage_min.z;
+                float vdx = model.x - cage_min.x;
+                float vdy = model.y - cage_min.y;
+                float vdz = model.z - cage_min.z;
 
                 // axis-aligned interpolation factors
                 float ifx = vdx / cdx;
