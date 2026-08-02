@@ -90,55 +90,39 @@ impl CageSystem {
 
         let lattice = &self.data.attached_lattice;
         let attached_lattice = &self.data.lattice_attachments;
-        let lattice_bind_pos = &self.data.lattice_bind_points;
         let bind_barycenters = &self.data.point_barycenter_lattice;
         let covariants = &mut self.data.covariant;
 
-        covariants
-            .iter_mut()
-            .zip(lattice.iter().zip(lattice_bind_pos).zip(attached_lattice))
-            .zip(bind_barycenters)
-            .skip(1)
-            .for_each(
-                |((cov, ((lattice, lattice_bind_pos), attachments)), bind_barycenters)| {
-                    const EQUAL_WEIGHT_SUM: f32 = 1.0 * PER_CAGE_POINTS as f32;
+        for (cov, ((lattice_nodes, attachments), bind_barys)) in covariants.iter_mut().zip(
+            lattice
+                .iter()
+                .zip(attached_lattice)
+                .zip(bind_barycenters)
+                .skip(1),
+        ) {
+            const EQUAL_WEIGHT_SUM: f32 = 1.0 * PER_CAGE_POINTS as f32;
+            let mut current_barys = [glam::Vec3::ZERO; PER_CAGE_POINTS];
 
-                    let bbs = lattice_bind_pos.iter().sum::<glam::Vec3>() / EQUAL_WEIGHT_SUM;
+            for (i, attachment) in attachments.iter().enumerate() {
+                let mut bary = glam::Vec3::ZERO;
+                for &LatticeAttachment { index, weight } in &attachment.attached_nodes {
+                    let node_id = lattice_nodes[index as usize];
+                    let node_pos = *lattice_data.current_pos(node_id);
+                    bary += node_pos * weight;
+                }
+                current_barys[i] = bary / attachment.weight_sum;
+            }
 
-                    let mut real_barycenters = [glam::Vec3::ZERO; PER_CAGE_MAX_LATTICE_ATTACHMENTS];
-                    let rbs = attachments.iter().enumerate().fold(
-                        glam::Vec3::ZERO,
-                        |acc,
-                         (
-                            i,
-                            PointLatticeAttachments {
-                                attached_nodes,
-                                weight_sum,
-                            },
-                        )| {
-                            let mut barycenter = glam::Vec3::ZERO;
-                            for &LatticeAttachment { index, weight } in attached_nodes {
-                                let node_id = lattice[index as usize];
-                                let node_pos = *lattice_data.current_pos(node_id);
-                                barycenter += node_pos * weight;
-                            }
-                            barycenter /= *weight_sum;
-                            real_barycenters[i] = barycenter;
-                            acc + barycenter
-                        },
-                    ) / EQUAL_WEIGHT_SUM;
+            let b_cm = bind_barys.iter().sum::<glam::Vec3>() / EQUAL_WEIGHT_SUM;
+            let p_cm = current_barys.iter().sum::<glam::Vec3>() / EQUAL_WEIGHT_SUM;
 
-                    *cov = glam::Mat3::ZERO;
-                    bind_barycenters
-                        .iter()
-                        .zip(real_barycenters)
-                        .for_each(|(&bb, rb)| {
-                            let b = bb - bbs;
-                            let r = rb - rbs;
-                            *cov += outer_product(r, b);
-                        });
-                },
-            );
+            *cov = glam::Mat3::ZERO;
+            for i in 0..PER_CAGE_POINTS {
+                let b = bind_barys[i] - b_cm;
+                let p = current_barys[i] - p_cm;
+                *cov += outer_product(p, b);
+            }
+        }
     }
 
     pub fn generate_cage(

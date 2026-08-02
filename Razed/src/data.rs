@@ -117,7 +117,7 @@ layout_buffer! {
 }
 
 typed_part_buffer! {
-    const CageData: 4, {
+    const CageData: 5, {
         enum IMap_Cages: CAGES_ALLOC => {
             type DirectIndex;
             bind 0;
@@ -130,9 +130,15 @@ typed_part_buffer! {
             type CagePoints;
             bind 2;
         };
+
         enum Pod_Cages_Rotations: CAGES_ALLOC => {
             type glam::Quat;
             bind 3;
+
+        };
+        enum Pod_Cages_Covariants: CAGES_ALLOC => {
+            type glam::Mat3;
+            bind 4;
 
         };
     }

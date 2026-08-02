@@ -685,10 +685,11 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         self.release_debris_bodies();
         self.delete_disabled_fragments();
 
-        self.profiler.capture_duration("cage_update", || {
-            let lattice = NodesRowTableView::from(self.lattice.nodes());
-            //self.deforms.deform(&lattice)
-        });
+        self.profiler
+            .capture_duration("cage_compute_covariants", || {
+                let lattice = NodesRowTableView::from(self.lattice.nodes());
+                self.cage.compute_covariants(&lattice);
+            });
 
         self.profiler.capture_duration("debris_sleep", || {
             const SIM_SPEED_LOW_THRESHOLD: f32 = 0.75;
