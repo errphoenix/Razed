@@ -135,12 +135,16 @@ impl CageSystem {
                 near_buf,
                 false,
             );
-            near_buf.drain(..).enumerate().for_each(|(i, cell)| {
-                let id = *lattice_hash.get(cell).unwrap();
-                let position = lattice.current_pos(id);
-                attached_lattice[i] = id;
-                lattice_bind_pos[i] = *position;
-            });
+            near_buf
+                .drain(..)
+                .take(PER_CAGE_MAX_LATTICE_ATTACHMENTS)
+                .enumerate()
+                .for_each(|(i, cell)| {
+                    let id = *lattice_hash.get(cell).unwrap();
+                    let position = lattice.current_pos(id);
+                    attached_lattice[i] = id;
+                    lattice_bind_pos[i] = *position;
+                });
 
             (attached_lattice, lattice_bind_pos)
         };
