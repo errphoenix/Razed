@@ -1,6 +1,5 @@
 pub mod cage;
 pub mod debris;
-pub mod deforms;
 pub mod fragment;
 pub mod lattice;
 
@@ -12,7 +11,7 @@ pub use debris::{
 };
 
 #[allow(unused_imports)]
-pub use deforms::{DeformSystem, DeformsRowTable, DeformsRowTableView};
+pub use cage::{CageRowTable, CageRowTableView, CageSystem};
 
 #[allow(unused_imports)]
 pub use fragment::{FragmentSystem, FragmentsRowTable, FragmentsRowTableView};
