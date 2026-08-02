@@ -126,3 +126,14 @@ pub(super) const LIB_MAT3_COFACTOR: GlslLib = ethel::shader_glsl_lib! {
         );
     "
 };
+
+pub(super) const LIB_QUAT_FROM_ANGLE: GlslLib = ethel::shader_glsl_lib! {
+    vec4 quatFromAxisAngle [
+        axis  : vec3,
+        angle : float
+    ] => "
+        float half = angle * 0.5;
+        float s = sin(half);
+        return vec4(axis * s, cos(half));
+    "
+};

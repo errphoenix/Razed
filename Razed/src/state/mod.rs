@@ -315,12 +315,14 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 let pod_cage_locals = cage_data.local_points_slice();
                 let pod_cage_locals_bind = cage_data.local_points_bind_slice();
                 let pod_cage_rotations = cage_data.rotation_slice();
+                let pod_cage_covariants = cage_data.covariant_slice();
 
                 let tb_cages = &storage.cages;
                 tb_cages.blit_imap_cages(buf_idx, imap_cages, 0);
                 tb_cages.blit_pod_cages_localpoints(buf_idx, pod_cage_locals, 0);
                 tb_cages.blit_pod_cages_localpoints_bind(buf_idx, pod_cage_locals_bind, 0);
                 tb_cages.blit_pod_cages_rotations(buf_idx, pod_cage_rotations, 0);
+                tb_cages.blit_pod_cages_covariants(buf_idx, pod_cage_covariants, 0);
             }
 
             const VEC3_VEC4_PADDING: usize = 4;

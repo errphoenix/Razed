@@ -134,12 +134,12 @@ typed_part_buffer! {
         enum Pod_Cages_Rotations: CAGES_ALLOC => {
             type glam::Quat;
             bind 3;
-
+            shader render::pass::cage_rotate_compute::SSBO_INDEX_OUTPUT_ROTATIONS;
         };
         enum Pod_Cages_Covariants: CAGES_ALLOC => {
             type glam::Mat3;
             bind 4;
-
+            shader render::pass::cage_rotate_compute::SSBO_INDEX_INPUT_COVARIANTS;
         };
     }
 }
