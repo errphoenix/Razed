@@ -45,6 +45,10 @@ pub const fn pass(shader: &ShaderFragment, dev_materials: &MaterialGroup) -> Fra
                 section,
                 Some(SSBO_INDEX_POD_CAGES_LOCALPOINTS_BIND),
             );
+            ctx.cages_data.bind_ssbo_pod_cages_world_bind_reference(
+                section,
+                Some(SSBO_INDEX_POD_CAGES_WORLD_BIND_REFERENCE),
+            );
 
             ctx.fragments_data.bind_shader_storage(section);
             // SAFETY: safe access to the commands buffer is guaranteed by the
@@ -74,6 +78,9 @@ macro_rules! ssbo_binding {
     (POD_Cages_LocalPoints_Bind) => {
         5
     };
+    (POD_Cages_WorldBindReference) => {
+        6
+    };
 }
 
 pub const SSBO_INDEX_POD_BINDPOSE: u32 = ssbo_binding!(POD_BindPose);
@@ -82,6 +89,8 @@ pub const SSBO_INDEX_POD_CAGEID: u32 = ssbo_binding!(POD_CageID);
 pub const SSBO_INDEX_IMAP_CAGES: u32 = ssbo_binding!(IMap_Cages);
 pub const SSBO_INDEX_POD_CAGES_LOCALPOINTS: u32 = ssbo_binding!(POD_Cages_LocalPoints);
 pub const SSBO_INDEX_POD_CAGES_LOCALPOINTS_BIND: u32 = ssbo_binding!(POD_Cages_LocalPoints_Bind);
+pub const SSBO_INDEX_POD_CAGES_WORLD_BIND_REFERENCE: u32 =
+    ssbo_binding!(POD_Cages_WorldBindReference);
 
 use ShaderFragmentVariants::*;
 
@@ -167,7 +176,7 @@ ethel::shader_glsl! {
                 vec3 normal = normalize(TBN * normalMap);
 
                 // camera source point light
-                const float LIGHT_MAX_DIST = 72.0;
+                const float LIGHT_MAX_DIST = 128.0;
                 vec3 light_dir = camera_position - fs_world;
                 float light_d = max(dot(normalize(light_dir), normal), 0.0);
 
@@ -245,6 +254,11 @@ ethel::shader_glsl! {
                         [dyn_array vec4: pod_cages_localpoints_bind => each 8]
                     }
                 }
+                ethel::shader_glsl_ssbo! {
+                    buf POD_Cages_WorldBindReference => {
+                        [dyn_array float: pod_cages_world_bind_reference => each 3]
+                    }
+                }
             };
 
             lib {
@@ -285,6 +299,9 @@ ethel::shader_glsl! {
                 DirectIndex cage_did = imap_cages[cage_id.index];
                 vec4[8] localpoints = pod_cages_localpoints[cage_did.index];
                 vec4[8] localpoints_bind = pod_cages_localpoints_bind[cage_did.index];
+
+                float[3] cage_sref = pod_cages_world_bind_reference[cage_did.index];
+                vec3 cage_world_pos = vec3(cage_sref[0], cage_sref[1], cage_sref[2]);
 
                 // anchor order is guaranteed to be:
                 // 0: -x, -y, -z,
@@ -328,17 +345,12 @@ ethel::shader_glsl! {
                     cage_max.y = max(cage_max.y, point.y);
                     cage_max.z = max(cage_max.z, point.z);
                 }
-                float cdx = cage_max.x - cage_min.x;
-                float cdy = cage_max.y - cage_min.y;
-                float cdz = cage_max.z - cage_min.z;
-                float vdx = model.x - cage_min.x;
-                float vdy = model.y - cage_min.y;
-                float vdz = model.z - cage_min.z;
 
+                vec3 t = (model - cage_min) / (cage_max - cage_min);
                 // axis-aligned interpolation factors
-                float ifx = vdx / cdx;
-                float ify = vdy / cdy;
-                float ifz = vdz / cdz;
+                float ifx = clamp(t.x, 0.0, 1.0);
+                float ify = clamp(t.y, 0.0, 1.0);
+                float ifz = clamp(t.z, 0.0, 1.0);
 
                 // double cage trilinear interpolation:
                 // - isolate 4 points by interpolating ifx
@@ -369,8 +381,10 @@ ethel::shader_glsl! {
                 vec3 rc1 = mix(rc01, rc11, ify);
                 vec3 r_final = mix(rc0, rc1, ifz);
 
-                vec3 displacement_delta = r_final - b_final;
-                vec4 world = vec4(w_rest + displacement_delta, 1.0);
+                vec3 local_delta = r_final - b_final;
+                vec3 local_deformed = model + local_delta;
+
+                vec4 world = vec4(cage_world_pos + local_deformed, 1.0);
 
                 // derive normal
                 vec3 e_x0 = p100 - p000;

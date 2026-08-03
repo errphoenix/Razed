@@ -3,7 +3,6 @@ use ethel::data::{
     hash::{Cell, FxSpatialHash},
     table::TableView,
 };
-use glam::Vec4Swizzles;
 
 use crate::structure::lattice::NodesRowTableView;
 
@@ -18,6 +17,8 @@ ethel::table_spec! {
         // calculated on gpu compute shader, used for ffd
         rotation: [glam::Quat; PER_CAGE_POINTS];
         covariant: [glam::Mat4; PER_CAGE_POINTS];
+
+        world_bind_reference: [f32; 3];
 
         // vec4 for gpu alignment as this data is used in shaders
         // * local_points is used as the output of cage deformation
@@ -121,21 +122,27 @@ impl CageSystem {
         let lattice_binds = &self.data.lattice_bind_points;
         let point_attached_lattice = &self.data.point_lattice_attachments;
         let bind_barycenters = &self.data.point_barycenter_lattice_bind;
+        let cage_reference = &self.data.world_bind_reference;
         let real_barycenters = &mut self.data.point_barycenter_lattice_real;
         let covariants = &mut self.data.covariant;
 
         for (
             cov,
-            (((lattice_nodes, lattice_bind_points), attachments), (bind_barys, real_barys)),
+            (
+                (((lattice_nodes, lattice_bind_points), attachments), (bind_barys, real_barys)),
+                reference,
+            ),
         ) in covariants.iter_mut().zip(
             lattice
                 .iter()
                 .zip(lattice_binds)
                 .zip(point_attached_lattice)
                 .zip(bind_barycenters.iter().zip(real_barycenters))
+                .zip(cage_reference)
                 .skip(1),
         ) {
             let mut lattice_current_pos = [glam::Vec3::ZERO; PER_CAGE_MAX_LATTICE_ATTACHMENTS];
+            let bind_ref = glam::Vec3::from_array(*reference);
 
             for ((attachments, covariant), (bind_bary, real_bary)) in attachments
                 .iter()
@@ -145,7 +152,7 @@ impl CageSystem {
                 *real_bary = glam::Vec3::ZERO;
                 for &LatticeAttachment { index, weight } in &attachments.attached_nodes {
                     let node_id = lattice_nodes[index as usize];
-                    let node_pos = *lattice_data.current_pos(node_id);
+                    let node_pos = *lattice_data.current_pos(node_id) - bind_ref;
                     lattice_current_pos[index as usize] = node_pos;
                     *real_bary += node_pos * weight;
                 }
@@ -161,7 +168,7 @@ impl CageSystem {
 
                     cov3 += outer_product(real_com, bind_com) * weight;
                 }
-                cov3 += glam::Mat3::IDENTITY * 0.000005;
+                cov3 += glam::Mat3::IDENTITY * 0.00005;
 
                 *covariant = glam::Mat4::from_mat3(cov3);
             }
@@ -190,22 +197,25 @@ impl CageSystem {
             let local = p.world_point - cage_center;
             glam::vec4(local.x, local.y, local.z, 1.0)
         });
-        let points_barycenter_bind = cage_data.points.map(|p| p.lattice_barycenter);
+        let points_barycenter_bind = cage_data.points.map(|p| p.lattice_barycenter - cage_center);
         let points_attachments = cage_data.points.map(|p| PointLatticeAttachments {
             attached_nodes: p.lattice_attachments,
             weight_sum: p.weight_sum,
         });
+        let lattice_bind_pos = cage_data.lattice_bind_pos.map(|p| p - cage_center);
+        let cage_reference = cage_center.to_array();
 
         self.data.insert((
             [glam::Quat::IDENTITY; PER_CAGE_POINTS],
             [glam::Mat4::IDENTITY; PER_CAGE_POINTS],
+            cage_reference,
             CagePoints(points_pos),
             CagePoints(points_pos),
             points_barycenter_bind,
             points_barycenter_bind,
             points_attachments,
             cage_data.attached_lattice,
-            cage_data.lattice_bind_pos,
+            lattice_bind_pos,
         ))
     }
 

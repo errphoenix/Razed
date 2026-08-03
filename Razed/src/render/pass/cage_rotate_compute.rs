@@ -97,9 +97,9 @@ ethel::shader_glsl_compute! {
 
             vec4 rotation = out_rotations[cage_id][point_id];
 
-            if (length(rotation) < EPS) {
-                rotation = vec4(0.0, 0.0, 0.0, 1.0);
-            }
+            // if (length(rotation) < EPS) {
+            //     rotation = vec4(0.0, 0.0, 0.0, 1.0);
+            // }
 
             for (uint i = 0; i < ITERATIONS; ++i) {
                 mat3 R = quatToMat(rotation);

@@ -117,7 +117,7 @@ layout_buffer! {
 }
 
 typed_part_buffer! {
-    const CageData: 5, {
+    const CageData: 6, {
         enum IMap_Cages: CAGES_ALLOC => {
             type DirectIndex;
             bind 0;
@@ -146,6 +146,11 @@ typed_part_buffer! {
                 [glam::Mat4::IDENTITY; crate::structure::cage::PER_CAGE_POINTS]
             };
             shader render::pass::cage_rotate_compute::SSBO_INDEX_INPUT_COVARIANTS;
+        };
+
+        enum Pod_Cages_World_Bind_Reference: CAGES_ALLOC => {
+            type [f32; 3];
+            bind 5;
         };
     }
 }

@@ -11,8 +11,8 @@ use std::{
 
 use crate::{
     data::{
-        FrameDataBuffers, LayoutDebrisData, LayoutFragmentData, LayoutRenderableData,
-        LayoutXpbdDebugData,
+        FrameDataBuffers, LayoutCageData, LayoutDebrisData, LayoutFragmentData,
+        LayoutRenderableData, LayoutXpbdDebugData,
     },
     procedural::{VoxelGrid, VoxelGridOptions},
     render::RenderGroup,
@@ -330,6 +330,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 let pod_cage_locals_bind = cage_data.local_points_bind_slice();
                 let pod_cage_rotations = cage_data.rotation_slice();
                 let pod_cage_covariants = cage_data.covariant_slice();
+                let pod_cage_references = cage_data.world_bind_reference_slice();
 
                 storage
                     .cage_points_count
@@ -341,6 +342,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 tb_cages.blit_pod_cages_localpoints_bind(buf_idx, pod_cage_locals_bind, 0);
                 //tb_cages.blit_pod_cages_rotations(buf_idx, pod_cage_rotations, 0);
                 tb_cages.blit_pod_cages_covariants(buf_idx, pod_cage_covariants, 0);
+                tb_cages.blit_pod_cages_world_bind_reference(buf_idx, pod_cage_references, 0);
 
                 let output_rotations = tb_cages.view_pod_cages_rotations(buf_idx);
                 let out_rotations_len = output_rotations.len().min(cage_data.rotation.capacity());
