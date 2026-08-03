@@ -1,4 +1,4 @@
-use ethel::shader::{Constant, GlslUniform, ShaderProgram};
+use ethel::shader::{Constant, GlslLib, GlslUniform, ShaderProgram};
 use rendrs::pipeline::ComputePass;
 
 use crate::data::CageDataPartitionedTriBuffer;
@@ -71,9 +71,8 @@ ethel::shader_glsl_compute! {
         };
 
         lib {
-            crate::render::shader_commons::LIB_QUAT_CONVERT_MAT;
-            crate::render::shader_commons::LIB_QUAT_FROM_ANGLE;
-            crate::render::shader_commons::LIB_QUAT_MUL_QUAT;
+            crate::render::shader_commons::LIB_MAT3_CONVERT_QUAT;
+            LIB_SVD_EXTRACT_ROTATION;
         };
 
         src() {
@@ -95,47 +94,151 @@ ethel::shader_glsl_compute! {
                 covariant4[2].xyz
             );
 
-            vec4 rotation = out_rotations[cage_id][point_id];
+            mat3 rotation = svdExtractRotation(covariant);
+            vec4 q = matToQuat(rotation);
+            q = vec4(0.0, 0.0, 0.0, 1.0);
 
-            // if (length(rotation) < EPS) {
-            //     rotation = vec4(0.0, 0.0, 0.0, 1.0);
-            // }
-
-            for (uint i = 0; i < ITERATIONS; ++i) {
-                mat3 R = quatToMat(rotation);
-
-                vec3 cov0 = covariant[0];
-                vec3 cov1 = covariant[1];
-                vec3 cov2 = covariant[2];
-                vec3 rot0 = R[0];
-                vec3 rot1 = R[1];
-                vec3 rot2 = R[2];
-
-                vec3 tau = cross(rot0, cov0) + cross(rot1, cov1) + cross(rot2, cov2);
-
-                float tau_len = length(tau);
-                if (tau_len < EPS) {
-                    break;
-                }
-
-                float w = 1.0 / (
-                    abs(dot(rot0, cov0))
-                    + abs(dot(rot1, cov1))
-                    + abs(dot(rot2, cov2))
-                    + EPS
-                );
-
-                vec3 omega = tau * w;
-                float angle = length(omega);
-                if (angle < EPS) break;
-
-                vec3 axis = omega / angle;
-                vec4 drot = quatFromAxisAngle(axis, angle);
-                rotation = normalize(mulQuat(rotation, drot));
-            }
-
-            out_rotations[cage_id][point_id] = rotation;
+            out_rotations[cage_id][point_id] = q;
             ";
         }
     }
 }
+
+/// SVD decomposition utility based on McAdams / Sifakis
+///
+/// Cretes a `svdExtractRotation` function taking in a single mat3 covariance
+/// matrix, returning the mat3 rotation matrix.
+pub const LIB_SVD_EXTRACT_ROTATION: GlslLib = ethel::shader_glsl_lib! {
+    mat3 svdExtractRotation [
+        A : mat3
+    ] => "
+        mat3 ATA = transpose(A) * A;
+        mat3 V = mat3(1.0);
+
+        for (int sweep = 0; sweep < 6; ++sweep) {
+            float num = ATA[0][1];
+            if (abs(num) > 1e-6) {
+                float tau = (ATA[1][1] - ATA[0][0]) / (2.0 * num);
+                float sign_tau = tau >= 0.0 ? 1.0 : -1.0;
+                float t = (abs(tau) < 1e-7) ? 1.0 : (sign_tau / (abs(tau) + sqrt(1.0 + tau*tau)));
+                float c = 1.0 / sqrt(1.0 + t*t);
+                float s = t * c;
+
+                vec3 v0 = V[0];
+                vec3 v1 = V[1];
+                V[0] = c * v0 - s * v1;
+                V[1] = s * v0 + c * v1;
+
+                float a00 = ATA[0][0];
+                float a11 = ATA[1][1];
+                ATA[0][0] = c*c*a00 - 2.0*s*c*num + s*s*a11;
+                ATA[1][1] = s*s*a00 + 2.0*s*c*num + c*c*a11;
+                ATA[0][1] = 0.0;
+                ATA[1][0] = 0.0;
+
+                float a02 = ATA[0][2];
+                float a12 = ATA[1][2];
+                ATA[0][2] = c*a02 - s*a12;
+                ATA[1][2] = s*a02 + c*a12;
+                ATA[2][0] = ATA[0][2];
+                ATA[2][1] = ATA[1][2];
+            }
+
+            num = ATA[0][2];
+            if (abs(num) > 1e-6) {
+                float tau = (ATA[2][2] - ATA[0][0]) / (2.0 * num);
+                float sign_tau = tau >= 0.0 ? 1.0 : -1.0;
+                float t = (abs(tau) < 1e-7) ? 1.0 : (sign_tau / (abs(tau) + sqrt(1.0 + tau*tau)));
+                float c = 1.0 / sqrt(1.0 + t*t);
+                float s = t * c;
+
+                vec3 v0 = V[0];
+                vec3 v2 = V[2];
+                V[0] = c * v0 - s * v2;
+                V[2] = s * v0 + c * v2;
+
+                float a00 = ATA[0][0];
+                float a22 = ATA[2][2];
+                ATA[0][0] = c*c*a00 - 2.0*s*c*num + s*s*a22;
+                ATA[2][2] = s*s*a00 + 2.0*s*c*num + c*c*a22;
+                ATA[0][2] = 0.0;
+                ATA[2][0] = 0.0;
+
+                float a01 = ATA[0][1];
+                float a21 = ATA[2][1];
+                ATA[0][1] = c*a01 - s*a21;
+                ATA[2][1] = s*a01 + c*a21;
+                ATA[1][0] = ATA[0][1];
+                ATA[1][2] = ATA[2][1];
+            }
+
+            num = ATA[1][2];
+            if (abs(num) > 1e-6) {
+                float tau = (ATA[2][2] - ATA[1][1]) / (2.0 * num);
+                float sign_tau = tau >= 0.0 ? 1.0 : -1.0;
+                float t = (abs(tau) < 1e-7) ? 1.0 : (sign_tau / (abs(tau) + sqrt(1.0 + tau*tau)));
+                float c = 1.0 / sqrt(1.0 + t*t);
+                float s = t * c;
+
+                vec3 v1 = V[1];
+                vec3 v2 = V[2];
+                V[1] = c * v1 - s * v2;
+                V[2] = s * v1 + c * v2;
+
+                float a11 = ATA[1][1];
+                float a22 = ATA[2][2];
+                ATA[1][1] = c*c*a11 - 2.0*s*c*num + s*s*a22;
+                ATA[2][2] = s*s*a11 + 2.0*s*c*num + c*c*a22;
+                ATA[1][2] = 0.0;
+                ATA[2][1] = 0.0;
+
+                float a10 = ATA[1][0];
+                float a20 = ATA[2][0];
+                ATA[1][0] = c*a10 - s*a20;
+                ATA[2][0] = s*a10 + c*a20;
+                ATA[0][1] = ATA[1][0];
+                ATA[0][2] = ATA[2][0];
+            }
+        }
+
+        mat3 USig = A * V;
+        vec3 u0 = USig[0];
+        vec3 u1 = USig[1];
+        vec3 u2 = USig[2];
+        float sig0 = length(u0);
+        float sig1 = length(u1);
+        float sig2 = length(u2);
+
+        u0 = (sig0 > 1e-5) ? (u0 / sig0) : vec3(0.0);
+        u1 = (sig1 > 1e-5) ? (u1 / sig1) : vec3(0.0);
+        u2 = (sig2 > 1e-5) ? (u2 / sig2) : vec3(0.0);
+
+        if (sig0 <= 1e-5) u0 = cross(u1, u2);
+        if (sig1 <= 1e-5) u1 = cross(u2, u0);
+        if (sig2 <= 1e-5) u2 = cross(u0, u1);
+
+        if (length(u0) <= 1e-5) {
+            u0 = vec3(1.0, 0.0, 0.0);
+            u1 = vec3(0.0, 1.0, 0.0);
+            u2 = vec3(0.0, 0.0, 1.0);
+        } else if (length(u1) <= 1e-5) {
+            vec3 temp = (abs(u0.x) > 0.9) ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+            u1 = normalize(cross(u0, temp));
+            u2 = cross(u0, u1);
+        }
+
+        mat3 U = mat3(u0, u1, u2);
+
+        if (determinant(A) < 0.0) {
+            if (sig0 <= sig1 && sig0 <= sig2) {
+                U[0] = -U[0];
+            } else if (sig1 <= sig0 && sig1 <= sig2) {
+                U[1] = -U[1];
+            } else {
+                U[2] = -U[2];
+            }
+        }
+
+        return U * transpose(V);
+    "
+};
