@@ -317,6 +317,10 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 let pod_cage_rotations = cage_data.rotation_slice();
                 let pod_cage_covariants = cage_data.covariant_slice();
 
+                storage
+                    .cage_points_count
+                    .store(cage_data.len() as u32, Ordering::Release);
+
                 let tb_cages = &storage.cages;
                 tb_cages.blit_imap_cages(buf_idx, imap_cages, 0);
                 tb_cages.blit_pod_cages_localpoints(buf_idx, pod_cage_locals, 0);
@@ -689,6 +693,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 
         self.profiler
             .capture_duration("cage_compute_covariants", || {
+                self.cage.apply_rotations();
                 let lattice = NodesRowTableView::from(self.lattice.nodes());
                 self.cage.compute_covariants(&lattice);
             });

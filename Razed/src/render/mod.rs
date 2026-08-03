@@ -61,15 +61,16 @@ impl RenderTargetHandles {
 
 #[derive(Debug)]
 pub struct RenderPipeline {
-    fd_preprocess_pass: pass::fd_preprocess::FdPreprocessComputePass,
-    fragments_draw_pass: pass::fragments_draw::FragmentsDrawPass,
-    debris_draw_pass: pass::debris_draw::DebrisDrawPass,
-    debug_lattice_draw_pass: pass::debug_lattice_draw::DebugLatticeDrawPass,
-    //debug_cage_draw_pass: pass::debug_cage_draw::DebugCageDrawPass,
+    cage_rotation_compute_pass: pass::CageRotateComputePass,
+    fd_preprocess_pass: pass::FdPreprocessComputePass,
+    fragments_draw_pass: pass::FragmentsDrawPass,
+    debris_draw_pass: pass::DebrisDrawPass,
+    debug_lattice_draw_pass: pass::DebugLatticeDrawPass,
+    //debug_cage_draw_pass: pass::DebugCageDrawPass,
     interface_draw_pass: gui::render::UiDrawPass,
 
     #[cfg(feature = "devmode")]
-    debug_lines_draw_pass: pass::debug_lines_draw::DebugLinesDrawPass,
+    debug_lines_draw_pass: pass::DebugLinesDrawPass,
 }
 impl RenderPipeline {
     fn revalidate(&mut self, render_pool: &RenderPool) {
@@ -86,15 +87,16 @@ impl RenderPipeline {
 
 #[derive(Debug, Default)]
 pub struct RenderShaders {
-    lattice: pass::debug_lattice_draw::ShaderDebugLattice,
-    fragments: pass::fragments_draw::ShaderFragment,
-    debris: pass::debris_draw::ShaderDebris,
+    lattice: pass::ShaderDebugLattice,
+    fragments: pass::ShaderFragment,
+    debris: pass::ShaderDebris,
     //cage: pass::debug_cage_draw::ShaderDebugCage,
     interface: gui::render::ShaderUiBasic,
-    fd_preprocess: pass::fd_preprocess::ComputeShaderProcessCommand,
+    cage_rotate: pass::ComputeShaderCageRotate,
+    fd_preprocess: pass::ComputeShaderProcessCommand,
 
     #[cfg(feature = "devmode")]
-    lines: pass::debug_lines_draw::ShaderDebugLines,
+    lines: pass::ShaderDebugLines,
 }
 
 #[derive(Debug, Default)]
@@ -212,11 +214,33 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             .render_frame_last_duration
             .set_and_advance(self.last_frame_render);
 
+        let render_pool = &self.render_pool;
+
+        // cage extract rotations compute pass
+        {
+            use pass::cage_rotate_compute::CageRotateComputeCtx;
+
+            let cage_count = frame_data.cage_points_count.load(Ordering::Acquire);
+            let ctx = CageRotateComputeCtx {
+                total_cage_count: cage_count,
+                cage_data: &frame_data.cages,
+            };
+
+            self.shaders.cage_rotate.bind();
+            self.shaders
+                .cage_rotate
+                .uniform_total_element_count_uintv([cage_count]);
+
+            self.pipeline()
+                .cage_rotation_compute_pass
+                .execute(section, render_pool, &ctx);
+        }
+        // there is no barrier here: an ssbo barrier is set after
+        // fd_preprocess, which does not depend on this pass
+
         unsafe {
             janus::gl::Clear(janus::gl::COLOR_BUFFER_BIT | janus::gl::DEPTH_BUFFER_BIT);
         }
-
-        let render_pool = &self.render_pool;
 
         // fragments & debris (preprocess + draw)
         {
@@ -341,6 +365,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             fragments_draw_pass: pass::fragments_draw::pass(&self.shaders.fragments, dev_materials),
             debris_draw_pass: pass::debris_draw::pass(&self.shaders.debris),
             debug_lattice_draw_pass: pass::debug_lattice_draw::pass(&self.shaders.lattice),
+            cage_rotation_compute_pass: pass::cage_rotate_compute::pass(&self.shaders.cage_rotate),
             //debug_cage_draw_pass: pass::debug_cage_draw::pass(&self.shaders.cage),
             interface_draw_pass: gui::render::pass(&self.shaders.interface),
 
@@ -357,19 +382,19 @@ impl Renderer {
     }
 
     fn initialize_shaders(&mut self) {
-        self.shaders.lattice = pass::debug_lattice_draw::ShaderDebugLattice::new_compiled();
-        self.shaders.fragments = pass::fragments_draw::ShaderFragment::new_compiled_variant(
+        self.shaders.lattice = pass::ShaderDebugLattice::new_compiled();
+        self.shaders.fragments = pass::ShaderFragment::new_compiled_variant(
             pass::ShaderFragmentVariants::WindowedAttenuation,
         );
-        self.shaders.debris = pass::debris_draw::ShaderDebris::new_compiled();
+        self.shaders.debris = pass::ShaderDebris::new_compiled();
+        self.shaders.cage_rotate = pass::ComputeShaderCageRotate::new_compiled();
         //self.shaders.cage = pass::debug_cage_draw::ShaderDebugCage::new_compiled();
         self.shaders.interface = gui::render::ShaderUiBasic::new_compiled();
-        self.shaders.fd_preprocess =
-            pass::fd_preprocess::ComputeShaderProcessCommand::new_compiled();
+        self.shaders.fd_preprocess = pass::ComputeShaderProcessCommand::new_compiled();
 
         #[cfg(feature = "devmode")]
         {
-            self.shaders.lines = pass::debug_lines_draw::ShaderDebugLines::new_compiled();
+            self.shaders.lines = pass::ShaderDebugLines::new_compiled();
         }
 
         let sampler_uniforms = std::array::from_fn(|i| i as i32);

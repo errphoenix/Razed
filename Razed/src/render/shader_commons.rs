@@ -132,8 +132,8 @@ pub(super) const LIB_QUAT_FROM_ANGLE: GlslLib = ethel::shader_glsl_lib! {
         axis  : vec3,
         angle : float
     ] => "
-        float half = angle * 0.5;
-        float s = sin(half);
-        return vec4(axis * s, cos(half));
+        float half_angle = angle * 0.5;
+        float s = sin(half_angle);
+        return vec4(axis * s, cos(half_angle));
     "
 };

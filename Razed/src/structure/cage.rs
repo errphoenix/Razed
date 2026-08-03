@@ -3,6 +3,7 @@ use ethel::data::{
     hash::{Cell, FxSpatialHash},
     table::TableView,
 };
+use glam::Vec4Swizzles;
 
 use crate::structure::lattice::NodesRowTableView;
 
@@ -81,6 +82,21 @@ impl CageSystem {
 
     pub fn data_mut(&mut self) -> &mut CageRowTable {
         &mut self.data
+    }
+
+    pub fn apply_rotations(&mut self) {
+        let bind_points = &self.data.local_points_bind;
+        let rotations = &self.data.rotation;
+        let points = &mut self.data.local_points;
+
+        println!("{rotations:?}");
+
+        for ((p, b), r) in points.iter_mut().zip(bind_points).zip(rotations) {
+            p.0.iter_mut().zip(b.0.iter()).for_each(|(p, &b)| {
+                let rotated = r.mul_vec3(b.xyz());
+                *p = glam::vec4(rotated.x, rotated.y, rotated.z, 1.0);
+            });
+        }
     }
 
     pub fn compute_covariants(&mut self, lattice_data: &NodesRowTableView) {

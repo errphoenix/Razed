@@ -83,9 +83,7 @@ ethel::shader_glsl_compute! {
             const float EPS = 1e-9;
 
             mat3 covariant = in_covariants[id];
-
             vec4 rotation = out_rotations[id];
-
             for (uint i = 0; i < ITERATIONS; ++i) {
                 mat3 R = quatToMat(rotation);
 
@@ -99,7 +97,7 @@ ethel::shader_glsl_compute! {
                 vec3 tau = cross(rot0, cov0) + cross(rot1, cov1) + cross(rot2, cov2);
 
                 float tau_len = length(tau);
-                if (tau_len < eps) {
+                if (tau_len < EPS) {
                     break;
                 }
 
@@ -107,12 +105,12 @@ ethel::shader_glsl_compute! {
                     abs(dot(rot0, cov0))
                     + abs(dot(rot1, cov1))
                     + abs(dot(rot2, cov2))
-                    + eps
+                    + EPS
                 );
 
                 vec3 omega = tau * w;
                 float angle = length(omega);
-                if (angle < eps) break;
+                if (angle < EPS) break;
 
                 vec3 axis = omega / angle;
                 vec4 drot = quatFromAxisAngle(axis, angle);
