@@ -311,20 +311,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             // cages synchronise (upload points & covariants, pull rotations)
             {
                 let cage_data = self.cage.data();
-                let tb_cages = &storage.cages;
-                let pod_cage_rotations = cage_data.rotation_slice();
-                let output_rotations = tb_cages.view_pod_cages_rotations(buf_idx);
-                let out_rotations_len = output_rotations.len().min(cage_data.rotation.capacity());
-
-                let dbgl = out_rotations_len.min(100);
-                println!("CPU ROTATIONS: {:?}", &pod_cage_rotations[..dbgl]);
-                println!(
-                    "GPU ROTATIONS: {:?}",
-                    &(output_rotations.as_slice()[..dbgl])
-                );
-                println!();
-
-                let cage_data = self.cage.data();
                 let imap_cages = cage_data.slots_map();
                 let pod_cage_locals = cage_data.local_points_slice();
                 let pod_cage_locals_bind = cage_data.local_points_bind_slice();

@@ -142,6 +142,11 @@ impl CageSystem {
                 .skip(1),
         ) {
             let mut lattice_current_pos = [glam::Vec3::ZERO; PER_CAGE_MAX_LATTICE_ATTACHMENTS];
+            for (i, &node) in lattice_nodes.iter().enumerate() {
+                let node_pos = *lattice_data.current_pos(node);
+                lattice_current_pos[i] = node_pos;
+            }
+
             let bind_ref = glam::Vec3::from_array(*reference);
 
             for ((attachments, covariant), (bind_bary, real_bary)) in attachments
@@ -151,16 +156,15 @@ impl CageSystem {
             {
                 *real_bary = glam::Vec3::ZERO;
                 for &LatticeAttachment { index, weight } in &attachments.attached_nodes {
-                    let node_id = lattice_nodes[index as usize];
-                    let node_pos = *lattice_data.current_pos(node_id) - bind_ref;
-                    lattice_current_pos[index as usize] = node_pos;
+                    let node_pos = lattice_current_pos[index as usize];
                     *real_bary += node_pos * weight;
                 }
                 *real_bary /= attachments.weight_sum;
+                *real_bary -= bind_ref;
 
                 let mut cov3 = glam::Mat3::ZERO;
                 for &LatticeAttachment { index, weight } in &attachments.attached_nodes {
-                    let node_real_pos = lattice_current_pos[index as usize];
+                    let node_real_pos = lattice_current_pos[index as usize] - bind_ref;
                     let node_bind_pos = lattice_bind_points[index as usize];
 
                     let real_com = node_real_pos - *real_bary;
@@ -297,8 +301,15 @@ impl CageSystem {
     ) -> CagePointData {
         // sort lattice nodes near cage by proximity to this cage point
         // we only work on the N nearest points that are related to the cage
-        let mut sorted_lattice_points = lattice_points.clone();
-        sorted_lattice_points.sort_by(|a, b| {
+        let mut sorted_lattice_points = {
+            let mut i = 0;
+            lattice_points.map(|p| {
+                let e = (i, p);
+                i += 1;
+                e
+            })
+        };
+        sorted_lattice_points.sort_by(|(_, a), (_, b)| {
             let da = a.distance_squared(point);
             let db = b.distance_squared(point);
             da.total_cmp(&db).reverse()
@@ -313,12 +324,12 @@ impl CageSystem {
             .iter()
             .take(PER_POINT_LATTICE_ATTACHMENTS)
             .enumerate()
-            .for_each(|(i, &pos)| {
+            .for_each(|(i, &(original_index, pos))| {
                 let distance = point.distance(pos);
                 let weight = 1.0 / (distance + 0.0001);
                 lattice_weights_sum += weight;
                 attachments[i] = LatticeAttachment {
-                    index: i as u32,
+                    index: original_index as u32,
                     weight,
                 };
             });
@@ -335,6 +346,7 @@ impl CageSystem {
                 let pos = lattice_points[index as usize];
                 lattice_barycenter += pos * weight;
             });
+        lattice_barycenter /= lattice_weights_sum;
 
         CagePointData {
             world_point: point,

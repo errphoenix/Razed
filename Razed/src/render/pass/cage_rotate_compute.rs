@@ -79,8 +79,8 @@ ethel::shader_glsl_compute! {
         src() {
             "
             uint id = gl_GlobalInvocationID.x;
-            uint cage_id = uint(floor(id / CAGE_SIZE));
-            uint point_id = uint(mod(id, CAGE_SIZE));
+            uint cage_id = id / CAGE_SIZE;
+            uint point_id = id % CAGE_SIZE;
 
             if (cage_id >= total_cage_count) {
                 return;
