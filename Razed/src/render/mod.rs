@@ -229,7 +229,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             self.shaders.cage_rotate.bind();
             self.shaders
                 .cage_rotate
-                .uniform_total_element_count_uintv([cage_count]);
+                .uniform_total_cage_count_uintv([cage_count]);
 
             self.pipeline()
                 .cage_rotation_compute_pass

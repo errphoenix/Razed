@@ -308,8 +308,22 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 }
             }
 
-            // cages upload
+            // cages synchronise (upload points & covariants, pull rotations)
             {
+                let cage_data = self.cage.data();
+                let tb_cages = &storage.cages;
+                let pod_cage_rotations = cage_data.rotation_slice();
+                let output_rotations = tb_cages.view_pod_cages_rotations(buf_idx);
+                let out_rotations_len = output_rotations.len().min(cage_data.rotation.capacity());
+
+                let dbgl = out_rotations_len.min(100);
+                println!("CPU ROTATIONS: {:?}", &pod_cage_rotations[..dbgl]);
+                println!(
+                    "GPU ROTATIONS: {:?}",
+                    &(output_rotations.as_slice()[..dbgl])
+                );
+                println!();
+
                 let cage_data = self.cage.data();
                 let imap_cages = cage_data.slots_map();
                 let pod_cage_locals = cage_data.local_points_slice();
@@ -325,8 +339,18 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 tb_cages.blit_imap_cages(buf_idx, imap_cages, 0);
                 tb_cages.blit_pod_cages_localpoints(buf_idx, pod_cage_locals, 0);
                 tb_cages.blit_pod_cages_localpoints_bind(buf_idx, pod_cage_locals_bind, 0);
-                tb_cages.blit_pod_cages_rotations(buf_idx, pod_cage_rotations, 0);
+                //tb_cages.blit_pod_cages_rotations(buf_idx, pod_cage_rotations, 0);
                 tb_cages.blit_pod_cages_covariants(buf_idx, pod_cage_covariants, 0);
+
+                let output_rotations = tb_cages.view_pod_cages_rotations(buf_idx);
+                let out_rotations_len = output_rotations.len().min(cage_data.rotation.capacity());
+
+                const CAGE_SIZE: usize = crate::structure::cage::PER_CAGE_POINTS;
+                unsafe {
+                    let src = output_rotations.as_slice().as_ptr();
+                    let dst = pod_cage_rotations.as_ptr() as *mut [glam::Quat; CAGE_SIZE];
+                    std::ptr::copy_nonoverlapping(src, dst, out_rotations_len);
+                }
             }
 
             const VEC3_VEC4_PADDING: usize = 4;

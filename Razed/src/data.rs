@@ -132,13 +132,19 @@ typed_part_buffer! {
         };
 
         enum Pod_Cages_Rotations: CAGES_ALLOC => {
-            type glam::Quat;
+            type [glam::Quat; crate::structure::cage::PER_CAGE_POINTS];
             bind 3;
+            init with {
+                [glam::Quat::IDENTITY; crate::structure::cage::PER_CAGE_POINTS]
+            };
             shader render::pass::cage_rotate_compute::SSBO_INDEX_OUTPUT_ROTATIONS;
         };
         enum Pod_Cages_Covariants: CAGES_ALLOC => {
-            type glam::Mat3;
+            type [glam::Mat4; crate::structure::cage::PER_CAGE_POINTS];
             bind 4;
+            init with {
+                [glam::Mat4::IDENTITY; crate::structure::cage::PER_CAGE_POINTS]
+            };
             shader render::pass::cage_rotate_compute::SSBO_INDEX_INPUT_COVARIANTS;
         };
     }

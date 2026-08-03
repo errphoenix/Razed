@@ -22,7 +22,8 @@ pub const fn pass(shader: &ComputeShaderCageRotate) -> CageRotateComputePass {
         data.bind_ssbo_pod_cages_covariants(section, None);
         data.bind_ssbo_pod_cages_rotations(section, None);
 
-        let dispatch_count = ctx.total_cage_count.div_ceil(WORKGROUP_SIZE);
+        let rotations_count = ctx.total_cage_count * CONST_CAGE_SIZE.value();
+        let dispatch_count = rotations_count.div_ceil(WORKGROUP_SIZE);
         [dispatch_count, 1, 1]
     })
 }
@@ -36,7 +37,9 @@ macro_rules! ssbo_binding {
     };
 }
 
-pub const EXTRACT_ROTATION_ITER_COUNT: Constant<u32> = Constant::new("ITERATIONS", 4);
+pub const CONST_EXTRACT_ROTATION_ITER_COUNT: Constant<u32> = Constant::new("ITERATIONS", 4);
+pub const CONST_CAGE_SIZE: Constant<u32> =
+    Constant::new("CAGE_SIZE", crate::structure::cage::PER_CAGE_POINTS as u32);
 pub const WORKGROUP_SIZE: u32 = 64;
 pub const SSBO_INDEX_INPUT_COVARIANTS: u32 = ssbo_binding!(InCovariants);
 pub const SSBO_INDEX_OUTPUT_ROTATIONS: u32 = ssbo_binding!(OutRotations);
@@ -46,24 +49,25 @@ ethel::shader_glsl_compute! {
         workgroup [64, 1, 1];
 
         uniform {
-            length 1, total_element_count: uint => u32;
+            length 1, total_cage_count: uint => u32;
         };
 
         ssbo {
             ethel::shader_glsl_ssbo! {
                 buf InCovariants => {
-                    [dyn_array mat3: in_covariants]
+                    [dyn_array mat4: in_covariants => each 8]
                 }
             }
             ethel::shader_glsl_ssbo! {
                 buf OutRotations => {
-                    [dyn_array vec4: out_rotations]
+                    [dyn_array vec4: out_rotations => each 8]
                 }
             }
         };
 
         const {
-            EXTRACT_ROTATION_ITER_COUNT
+            CONST_EXTRACT_ROTATION_ITER_COUNT
+            CONST_CAGE_SIZE
         };
 
         lib {
@@ -74,16 +78,29 @@ ethel::shader_glsl_compute! {
 
         src() {
             "
-            uint id = gl_GlobalInvocationID.x + 1;
+            uint id = gl_GlobalInvocationID.x;
+            uint cage_id = uint(floor(id / CAGE_SIZE));
+            uint point_id = uint(mod(id, CAGE_SIZE));
 
-            if (id >= total_element_count) {
+            if (cage_id >= total_cage_count) {
                 return;
             }
 
-            const float EPS = 1e-9;
+            const float EPS = 0.0001;
 
-            mat3 covariant = in_covariants[id];
-            vec4 rotation = out_rotations[id];
+            mat4 covariant4 = in_covariants[cage_id][point_id];
+            mat3 covariant = mat3(
+                covariant4[0].xyz,
+                covariant4[1].xyz,
+                covariant4[2].xyz
+            );
+
+            vec4 rotation = out_rotations[cage_id][point_id];
+
+            if (length(rotation) < EPS) {
+                rotation = vec4(0.0, 0.0, 0.0, 1.0);
+            }
+
             for (uint i = 0; i < ITERATIONS; ++i) {
                 mat3 R = quatToMat(rotation);
 
@@ -117,7 +134,7 @@ ethel::shader_glsl_compute! {
                 rotation = normalize(mulQuat(rotation, drot));
             }
 
-            out_rotations[id] = rotation;
+            out_rotations[cage_id][point_id] = rotation;
             ";
         }
     }
