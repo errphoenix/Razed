@@ -137,3 +137,42 @@ pub(super) const LIB_QUAT_FROM_ANGLE: GlslLib = ethel::shader_glsl_lib! {
         return vec4(axis * s, cos(half_angle));
     "
 };
+
+/// Utility function to convert a 3x3 matrix to a normalized quaternion.
+///
+/// Creates a single `matToQuat` function, which takes in a `mat3` value and
+/// returns a `vec4` quaternion.
+pub const LIB_MAT3_CONVERT_QUAT: GlslLib = ethel::shader_glsl_lib! {
+    vec4 matToQuat [
+        m : mat3
+    ] => "
+        float tr = m[0][0] + m[1][1] + m[2][2];
+        vec4 q;
+        if (tr > 0.0) {
+            float S = sqrt(tr + 1.0) * 2.0;
+            q.w = 0.25 * S;
+            q.x = (m[1][2] - m[2][1]) / S;
+            q.y = (m[2][0] - m[0][2]) / S;
+            q.z = (m[0][1] - m[1][0]) / S;
+        } else if ((m[0][0] > m[1][1]) && (m[0][0] > m[2][2])) {
+            float S = sqrt(1.0 + m[0][0] - m[1][1] - m[2][2]) * 2.0;
+            q.w = (m[1][2] - m[2][1]) / S;
+            q.x = 0.25 * S;
+            q.y = (m[0][1] + m[1][0]) / S;
+            q.z = (m[2][0] + m[0][2]) / S;
+        } else if (m[1][1] > m[2][2]) {
+            float S = sqrt(1.0 + m[1][1] - m[0][0] - m[2][2]) * 2.0;
+            q.w = (m[2][0] - m[0][2]) / S;
+            q.x = (m[0][1] + m[1][0]) / S;
+            q.y = 0.25 * S;
+            q.z = (m[1][2] + m[2][1]) / S;
+        } else {
+            float S = sqrt(1.0 + m[2][2] - m[0][0] - m[1][1]) * 2.0;
+            q.w = (m[0][1] - m[1][0]) / S;
+            q.x = (m[2][0] + m[0][2]) / S;
+            q.y = (m[1][2] + m[2][1]) / S;
+            q.z = 0.25 * S;
+        }
+        return normalize(q);
+    "
+};

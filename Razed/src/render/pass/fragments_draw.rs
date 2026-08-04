@@ -332,57 +332,31 @@ ethel::shader_glsl! {
                 vec3 p011 = localpoints[6].xyz;
                 vec3 p111 = localpoints[7].xyz;
 
-                // determine AABB of deformation cage (bind)
-                const float M = 1000000.0;
-                vec3 cage_min = vec3( M);
-                vec3 cage_max = vec3(-M);
-                for (int i = 0; i < 8; i++) {
-                    vec3 point = localpoints_bind[i].xyz;
-                    cage_min.x = min(cage_min.x, point.x);
-                    cage_min.y = min(cage_min.y, point.y);
-                    cage_min.z = min(cage_min.z, point.z);
-                    cage_max.x = max(cage_max.x, point.x);
-                    cage_max.y = max(cage_max.y, point.y);
-                    cage_max.z = max(cage_max.z, point.z);
+                mat3 bind_matrix = mat3(
+                    b100 - b000,
+                    b010 - b000,
+                    b001 - b000
+                );
+                float det = determinant(bind_matrix);
+                vec3 uvw;
+                if (abs(det) > 1e-6) {
+                    uvw = inverse(bind_matrix) * (model - b000);
+                } else {
+                    uvw = vec3(0.0);
                 }
 
-                vec3 t = (model - cage_min) / (cage_max - cage_min);
-                // axis-aligned interpolation factors
-                float ifx = clamp(t.x, 0.0, 1.0);
-                float ify = clamp(t.y, 0.0, 1.0);
-                float ifz = clamp(t.z, 0.0, 1.0);
+                float ifx = uvw.x;
+                float ify = uvw.y;
+                float ifz = uvw.z;
 
-                // double cage trilinear interpolation:
-                // - isolate 4 points by interpolating ifx
-                // - isolate 2 points by interpolating ify
-                // - isolate final point by interpolating ifz
-                //
-                // occurs for BIND cage, then REAL cage, to determine the delta
-                // between bind-time and real-time states.
-                //
-                // the delta is then used to apply the final displacement on
-                // the vertex, effectively applying the deformation.
-
-                // bind-time cage interp.
-                vec3 bc00 = mix(b000, b100, ifx);
-                vec3 bc01 = mix(b001, b101, ifx);
-                vec3 bc10 = mix(b010, b110, ifx);
-                vec3 bc11 = mix(b011, b111, ifx);
-                vec3 bc0 = mix(bc00, bc10, ify);
-                vec3 bc1 = mix(bc01, bc11, ify);
-                vec3 b_final = mix(bc0, bc1, ifz);
-
-                // real-time cage interp.
+                // real-time cage interpolation
                 vec3 rc00 = mix(p000, p100, ifx);
                 vec3 rc01 = mix(p001, p101, ifx);
                 vec3 rc10 = mix(p010, p110, ifx);
                 vec3 rc11 = mix(p011, p111, ifx);
                 vec3 rc0 = mix(rc00, rc10, ify);
                 vec3 rc1 = mix(rc01, rc11, ify);
-                vec3 r_final = mix(rc0, rc1, ifz);
-
-                vec3 local_delta = r_final - b_final;
-                vec3 local_deformed = model + local_delta;
+                vec3 local_deformed = mix(rc0, rc1, ifz);
 
                 vec4 world = vec4(cage_world_pos + local_deformed, 1.0);
 

@@ -21,7 +21,11 @@ use rendrs::pipeline::{Pass, RenderPool, RenderTarget, RenderTargetDescriptor, R
 
 #[cfg(feature = "devmode")]
 use crate::render::pass::debug_lines_draw::DebugLinesData;
-use crate::{assets, data::FrameDataBuffers, render::graphics::Materials};
+use crate::{
+    assets,
+    data::{FrameDataBuffers, LayoutFragmentData},
+    render::graphics::Materials,
+};
 
 #[allow(unused)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -66,7 +70,7 @@ pub struct RenderPipeline {
     fragments_draw_pass: pass::FragmentsDrawPass,
     debris_draw_pass: pass::DebrisDrawPass,
     debug_lattice_draw_pass: pass::DebugLatticeDrawPass,
-    //debug_cage_draw_pass: pass::DebugCageDrawPass,
+    debug_cage_draw_pass: pass::DebugCageDrawPass,
     interface_draw_pass: gui::render::UiDrawPass,
 
     #[cfg(feature = "devmode")]
@@ -77,7 +81,7 @@ impl RenderPipeline {
         self.fragments_draw_pass.revalidate(render_pool);
         self.debris_draw_pass.revalidate(render_pool);
         self.debug_lattice_draw_pass.revalidate(render_pool);
-        //self.debug_cage_draw_pass.revalidate(render_pool);
+        self.debug_cage_draw_pass.revalidate(render_pool);
         self.interface_draw_pass.revalidate(render_pool);
 
         #[cfg(feature = "devmode")]
@@ -90,7 +94,7 @@ pub struct RenderShaders {
     lattice: pass::ShaderDebugLattice,
     fragments: pass::ShaderFragment,
     debris: pass::ShaderDebris,
-    //cage: pass::debug_cage_draw::ShaderDebugCage,
+    cage: pass::debug_cage_draw::ShaderDebugCage,
     interface: gui::render::ShaderUiBasic,
     cage_rotate: pass::ComputeShaderCageRotate,
     fd_preprocess: pass::ComputeShaderProcessCommand,
@@ -159,7 +163,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             lattice,
             fragments: frags,
             debris,
-            //cage,
+            cage,
             interface,
             #[cfg(feature = "devmode")]
             lines,
@@ -173,9 +177,9 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         lattice.uniform_projection_mat4v([*proj]);
         lattice.uniform_view_mat4v([view_mat]);
 
-        // cage.bind();
-        // cage.uniform_projection_mat4v([*proj]);
-        // cage.uniform_view_mat4v([view_mat]);
+        cage.bind();
+        cage.uniform_projection_mat4v([*proj]);
+        cage.uniform_view_mat4v([view_mat]);
 
         #[cfg(feature = "devmode")]
         {
@@ -215,12 +219,12 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             .set_and_advance(self.last_frame_render);
 
         let render_pool = &self.render_pool;
+        let cage_count = frame_data.cage_points_count.load(Ordering::Acquire);
 
         // cage extract rotations compute pass
         {
             use pass::cage_rotate_compute::CageRotateComputeCtx;
 
-            let cage_count = frame_data.cage_points_count.load(Ordering::Acquire);
             let ctx = CageRotateComputeCtx {
                 total_cage_count: cage_count,
                 cage_data: &frame_data.cages,
@@ -301,17 +305,18 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             }
         }
         // cage draw pass
-        // {
-        //     let cage_size = frame_data.cage_points_count.load(Ordering::Acquire);
-        //     let ctx = pass::DebugCageDrawCtx {
-        //         fragment_data: &frame_data.fragments,
-        //         point_size: 3.0,
-        //         cage_points_count: cage_size as i32,
-        //     };
-        //     self.pipeline()
-        //         .debug_cage_draw_pass
-        //         .execute(section, render_pool, &ctx);
-        // }
+        {
+            println!("{cage_count}");
+            let ctx = pass::DebugCageDrawCtx {
+                fragments_data: &frame_data.fragments,
+                cage_data: &frame_data.cages,
+                point_size: 2.5,
+                cage_total_count: cage_count * 8,
+            };
+            self.pipeline()
+                .debug_cage_draw_pass
+                .execute(section, render_pool, &ctx);
+        }
 
         // interface draw pass
         {
@@ -366,7 +371,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             debris_draw_pass: pass::debris_draw::pass(&self.shaders.debris),
             debug_lattice_draw_pass: pass::debug_lattice_draw::pass(&self.shaders.lattice),
             cage_rotation_compute_pass: pass::cage_rotate_compute::pass(&self.shaders.cage_rotate),
-            //debug_cage_draw_pass: pass::debug_cage_draw::pass(&self.shaders.cage),
+            debug_cage_draw_pass: pass::debug_cage_draw::pass(&self.shaders.cage),
             interface_draw_pass: gui::render::pass(&self.shaders.interface),
 
             #[cfg(feature = "devmode")]
@@ -388,7 +393,7 @@ impl Renderer {
         );
         self.shaders.debris = pass::ShaderDebris::new_compiled();
         self.shaders.cage_rotate = pass::ComputeShaderCageRotate::new_compiled();
-        //self.shaders.cage = pass::debug_cage_draw::ShaderDebugCage::new_compiled();
+        self.shaders.cage = pass::debug_cage_draw::ShaderDebugCage::new_compiled();
         self.shaders.interface = gui::render::ShaderUiBasic::new_compiled();
         self.shaders.fd_preprocess = pass::ComputeShaderProcessCommand::new_compiled();
 

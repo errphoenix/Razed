@@ -115,7 +115,7 @@ pub const LIB_SVD_EXTRACT_ROTATION: GlslLib = ethel::shader_glsl_lib! {
         mat3 ATA = transpose(A) * A;
         mat3 V = mat3(1.0);
 
-        for (int sweep = 0; sweep < 6; ++sweep) {
+        for (int sweep = 0; sweep < 5; ++sweep) {
             float num = ATA[0][1];
             if (abs(num) > 1e-6) {
                 float tau = (ATA[1][1] - ATA[0][0]) / (2.0 * num);

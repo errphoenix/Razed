@@ -7,10 +7,10 @@ use ethel::data::{
 use crate::structure::lattice::NodesRowTableView;
 
 pub const PER_POINT_LATTICE_ATTACHMENTS: usize = 4;
-pub const PER_CAGE_MAX_LATTICE_ATTACHMENTS: usize = 8;
+pub const PER_CAGE_MAX_LATTICE_ATTACHMENTS: usize = 16;
 pub const PER_CAGE_POINTS: usize = 8;
-pub const CAGE_DIAG_EXTENT: f32 = 0.5;
-pub const QUERY_LATTICE_ATTACH_MAX_RANGE: f32 = 16.0;
+pub const CAGE_DIAG_EXTENT: f32 = 1.5;
+pub const QUERY_LATTICE_ATTACH_MAX_RANGE: f32 = 32.0;
 
 ethel::table_spec! {
     struct Cage {
@@ -159,7 +159,7 @@ impl CageSystem {
                     let node_pos = lattice_current_pos[index as usize];
                     *real_bary += node_pos * weight;
                 }
-                *real_bary /= attachments.weight_sum;
+                //*real_bary /= attachments.weight_sum;
                 *real_bary -= bind_ref;
 
                 let mut cov3 = glam::Mat3::ZERO;
@@ -312,7 +312,7 @@ impl CageSystem {
         sorted_lattice_points.sort_by(|(_, a), (_, b)| {
             let da = a.distance_squared(point);
             let db = b.distance_squared(point);
-            da.total_cmp(&db).reverse()
+            da.total_cmp(&db)
         });
 
         let mut attachments = [LatticeAttachment::default(); PER_POINT_LATTICE_ATTACHMENTS];
@@ -325,7 +325,7 @@ impl CageSystem {
             .take(PER_POINT_LATTICE_ATTACHMENTS)
             .enumerate()
             .for_each(|(i, &(original_index, pos))| {
-                let distance = point.distance(pos);
+                let distance = point.distance_squared(pos);
                 let weight = 1.0 / (distance + 0.0001);
                 lattice_weights_sum += weight;
                 attachments[i] = LatticeAttachment {
@@ -346,7 +346,7 @@ impl CageSystem {
                 let pos = lattice_points[index as usize];
                 lattice_barycenter += pos * weight;
             });
-        lattice_barycenter /= lattice_weights_sum;
+        //lattice_barycenter /= lattice_weights_sum;
 
         CagePointData {
             world_point: point,
