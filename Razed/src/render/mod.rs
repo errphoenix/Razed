@@ -21,10 +21,7 @@ use rendrs::pipeline::{Pass, RenderPool, RenderTarget, RenderTargetDescriptor, R
 
 #[cfg(feature = "devmode")]
 use crate::render::pass::debug_lines_draw::DebugLinesData;
-use crate::{
-    assets, data::FrameDataBuffers, render::graphics::Materials,
-    structure::cage::ComputeShaderCageDeform,
-};
+use crate::{assets, data::FrameDataBuffers, render::graphics::Materials};
 
 #[allow(unused)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -64,7 +61,7 @@ impl RenderTargetHandles {
 
 #[derive(Debug)]
 pub struct RenderPipeline {
-    cage_rotation_compute_pass: pass::CageRotateComputePass,
+    cage_deform_compute_pass: pass::CageDeformComputePass,
     fd_preprocess_pass: pass::FdPreprocessComputePass,
     fragments_draw_pass: pass::FragmentsDrawPass,
     debris_draw_pass: pass::DebrisDrawPass,
@@ -93,9 +90,9 @@ pub struct RenderShaders {
     lattice: pass::ShaderDebugLattice,
     fragments: pass::ShaderFragment,
     debris: pass::ShaderDebris,
-    cage: pass::debug_cage_draw::ShaderDebugCage,
+    cage_visual: pass::debug_cage_draw::ShaderDebugCage,
     interface: gui::render::ShaderUiBasic,
-    cage_rotate: pass::ComputeShaderCageRotate,
+    cage_deform: pass::ComputeShaderCageDeform,
     fd_preprocess: pass::ComputeShaderProcessCommand,
 
     #[cfg(feature = "devmode")]
@@ -162,7 +159,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             lattice,
             fragments: frags,
             debris,
-            cage,
+            cage_visual,
             interface,
             #[cfg(feature = "devmode")]
             lines,
@@ -176,9 +173,9 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         lattice.uniform_projection_mat4v([*proj]);
         lattice.uniform_view_mat4v([view_mat]);
 
-        cage.bind();
-        cage.uniform_projection_mat4v([*proj]);
-        cage.uniform_view_mat4v([view_mat]);
+        cage_visual.bind();
+        cage_visual.uniform_projection_mat4v([*proj]);
+        cage_visual.uniform_view_mat4v([view_mat]);
 
         #[cfg(feature = "devmode")]
         {
@@ -222,20 +219,20 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         // cage extract rotations compute pass
         {
-            use pass::cage_rotate_compute::CageRotateComputeCtx;
+            use pass::cage_deform_compute::CageDeformComputeCtx;
 
-            let ctx = CageRotateComputeCtx {
+            let ctx = CageDeformComputeCtx {
                 total_cage_count: cage_count,
                 cage_data: &frame_data.cages,
             };
 
-            self.shaders.cage_rotate.bind();
+            self.shaders.cage_deform.bind();
             self.shaders
-                .cage_rotate
+                .cage_deform
                 .uniform_total_cage_count_uintv([cage_count]);
 
             self.pipeline()
-                .cage_rotation_compute_pass
+                .cage_deform_compute_pass
                 .execute(section, render_pool, &ctx);
         }
         // there is no barrier here: an ssbo barrier is set after
@@ -368,8 +365,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             fragments_draw_pass: pass::fragments_draw::pass(&self.shaders.fragments, dev_materials),
             debris_draw_pass: pass::debris_draw::pass(&self.shaders.debris),
             debug_lattice_draw_pass: pass::debug_lattice_draw::pass(&self.shaders.lattice),
-            cage_rotation_compute_pass: pass::cage_rotate_compute::pass(&self.shaders.cage_rotate),
-            debug_cage_draw_pass: pass::debug_cage_draw::pass(&self.shaders.cage),
+            cage_deform_compute_pass: pass::cage_deform_compute::pass(&self.shaders.cage_deform),
+            debug_cage_draw_pass: pass::debug_cage_draw::pass(&self.shaders.cage_visual),
             interface_draw_pass: gui::render::pass(&self.shaders.interface),
 
             #[cfg(feature = "devmode")]
@@ -390,12 +387,10 @@ impl Renderer {
             pass::ShaderFragmentVariants::WindowedAttenuation,
         );
         self.shaders.debris = pass::ShaderDebris::new_compiled();
-        self.shaders.cage_rotate = pass::ComputeShaderCageRotate::new_compiled();
-        self.shaders.cage = pass::debug_cage_draw::ShaderDebugCage::new_compiled();
+        self.shaders.cage_deform = pass::ComputeShaderCageDeform::new_compiled();
+        self.shaders.cage_visual = pass::ShaderDebugCage::new_compiled();
         self.shaders.interface = gui::render::ShaderUiBasic::new_compiled();
         self.shaders.fd_preprocess = pass::ComputeShaderProcessCommand::new_compiled();
-
-        ComputeShaderCageDeform::new_compiled();
 
         #[cfg(feature = "devmode")]
         {

@@ -11,8 +11,8 @@ use std::{
 
 use crate::{
     data::{
-        FrameDataBuffers, LayoutCageData, LayoutDebrisData, LayoutFragmentData,
-        LayoutRenderableData, LayoutXpbdDebugData,
+        FrameDataBuffers, LayoutDebrisData, LayoutFragmentData, LayoutRenderableData,
+        LayoutXpbdDebugData,
     },
     procedural::{VoxelGrid, VoxelGridOptions},
     render::RenderGroup,
@@ -308,37 +308,37 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 }
             }
 
-            // cages synchronise (upload points & covariants, pull rotations)
+            // cage upload (only new)
             {
                 let cage_data = self.cage.data();
-                let imap_cages = cage_data.slots_map();
-                let pod_cage_locals = cage_data.local_points_slice();
-                let pod_cage_locals_bind = cage_data.local_points_bind_slice();
-                let pod_cage_rotations = cage_data.rotation_slice();
-                let pod_cage_covariants = cage_data.covariant_slice();
-                let pod_cage_references = cage_data.world_bind_reference_slice();
+                // let imap_cages = cage_data.slots_map();
+                // let pod_cage_locals = cage_data.local_points_slice();
+                // let pod_cage_locals_bind = cage_data.local_points_bind_slice();
+                // let pod_cage_rotations = cage_data.rotation_slice();
+                // let pod_cage_covariants = cage_data.covariant_slice();
+                // let pod_cage_references = cage_data.world_bind_reference_slice();
 
                 storage
                     .cage_points_count
                     .store(cage_data.len() as u32, Ordering::Release);
 
-                let tb_cages = &storage.cages;
-                tb_cages.blit_imap_cages(buf_idx, imap_cages, 0);
-                tb_cages.blit_pod_cages_localpoints(buf_idx, pod_cage_locals, 0);
-                tb_cages.blit_pod_cages_localpoints_bind(buf_idx, pod_cage_locals_bind, 0);
-                //tb_cages.blit_pod_cages_rotations(buf_idx, pod_cage_rotations, 0);
-                tb_cages.blit_pod_cages_covariants(buf_idx, pod_cage_covariants, 0);
-                tb_cages.blit_pod_cages_world_bind_reference(buf_idx, pod_cage_references, 0);
+                //let tb_cages = &storage.cages;
+                // tb_cages.blit_imap_cages(buf_idx, imap_cages, 0);
+                // tb_cages.blit_pod_cages_localpoints(buf_idx, pod_cage_locals, 0);
+                // tb_cages.blit_pod_cages_localpoints_bind(buf_idx, pod_cage_locals_bind, 0);
+                // //tb_cages.blit_pod_cages_rotations(buf_idx, pod_cage_rotations, 0);
+                // tb_cages.blit_pod_cages_covariants(buf_idx, pod_cage_covariants, 0);
+                // tb_cages.blit_pod_cages_world_bind_reference(buf_idx, pod_cage_references, 0);
 
-                let output_rotations = tb_cages.view_pod_cages_rotations(buf_idx);
-                let out_rotations_len = output_rotations.len().min(cage_data.rotation.capacity());
+                // let output_rotations = tb_cages.view_pod_cages_rotations(buf_idx);
+                // let out_rotations_len = output_rotations.len().min(cage_data.rotation.capacity());
 
-                const CAGE_SIZE: usize = crate::structure::cage::PER_CAGE_POINTS;
-                unsafe {
-                    let src = output_rotations.as_slice().as_ptr();
-                    let dst = pod_cage_rotations.as_ptr() as *mut [glam::Quat; CAGE_SIZE];
-                    std::ptr::copy_nonoverlapping(src, dst, out_rotations_len);
-                }
+                // const CAGE_SIZE: usize = crate::structure::cage::PER_CAGE_POINTS;
+                // unsafe {
+                //     let src = output_rotations.as_slice().as_ptr();
+                //     let dst = pod_cage_rotations.as_ptr() as *mut [glam::Quat; CAGE_SIZE];
+                //     std::ptr::copy_nonoverlapping(src, dst, out_rotations_len);
+                // }
             }
 
             const VEC3_VEC4_PADDING: usize = 4;
@@ -474,7 +474,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             {
                 let xpbd_dbg = &storage.lattice_debug;
                 let constraints = self.lattice.links().relation_slice();
-                let imap_nodes = self.lattice.nodes().handles();
+                let imap_nodes = self.lattice.nodes().slots_map();
                 let pod_nodes = self.lattice.nodes().current_pos_slice();
                 let selected_link = {
                     let handle = self.selection.unwrap_or_default();

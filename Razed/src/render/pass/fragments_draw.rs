@@ -11,7 +11,7 @@ use rendrs::{
 };
 
 use crate::{
-    data::{self, CageDataPartitionedTriBuffer},
+    data::{CagePartitionedBuffer, FRAGMENTS_STORAGE_PARTS},
     render::shader_commons,
 };
 
@@ -19,8 +19,8 @@ pub type FragmentsDrawPass = DrawPass<FragmentsDrawCtxWrapper, 1, 0>;
 
 #[derive(Debug)]
 pub struct FragmentsDrawCtx<'data> {
-    pub cages_data: &'data CageDataPartitionedTriBuffer,
-    pub fragments_data: &'data PartitionedTriBuffer<{ data::FRAGMENTS_STORAGE_PARTS }>,
+    pub cages_data: &'data CagePartitionedBuffer,
+    pub fragments_data: &'data PartitionedTriBuffer<{ FRAGMENTS_STORAGE_PARTS }>,
     pub fragments_commands: &'data TriBuffer<DrawArraysIndirectCommand>,
 
     pub material_registry: &'data MaterialLocationRegistry,
