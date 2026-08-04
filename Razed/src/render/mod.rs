@@ -306,7 +306,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         }
         // cage draw pass
         {
-            println!("{cage_count}");
             let ctx = pass::DebugCageDrawCtx {
                 fragments_data: &frame_data.fragments,
                 cage_data: &frame_data.cages,

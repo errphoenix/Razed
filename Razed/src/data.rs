@@ -5,7 +5,6 @@ use ethel::{
     DrawCommand, layout_buffer, layout_mesh_buffer,
     render::buffer::{PartitionedTriBuffer, TriBuffer},
     state::data::{DirectIndex, IndirectIndex},
-    typed_part_buffer,
 };
 use gui::render::{UiCommandsBuffer, UiDataBuffer};
 use janus::{context::DeltaTime, sync::TriCell};
@@ -116,7 +115,7 @@ layout_buffer! {
     }
 }
 
-typed_part_buffer! {
+ethel::typed_part_tribuffer! {
     const CageData: 6, {
         enum IMap_Cages: CAGES_ALLOC => {
             type DirectIndex;
@@ -218,21 +217,21 @@ pub struct FrameDataBuffers {
 impl FrameDataBuffers {
     pub fn new() -> Self {
         let generic_objects_buffer = PartitionedTriBuffer::new(LayoutRenderableData::create());
-        LayoutRenderableData::initialise_partitions(&generic_objects_buffer);
+        LayoutRenderableData::initialise_partitions_tri(&generic_objects_buffer);
 
         let xpbd_visualiser = PartitionedTriBuffer::new(LayoutXpbdDebugData::create());
-        LayoutXpbdDebugData::initialise_partitions(&xpbd_visualiser);
+        LayoutXpbdDebugData::initialise_partitions_tri(&xpbd_visualiser);
 
         let fragment_data = PartitionedTriBuffer::new(LayoutFragmentData::create());
-        LayoutFragmentData::initialise_partitions(&fragment_data);
+        LayoutFragmentData::initialise_partitions_tri(&fragment_data);
 
         let debris_data = PartitionedTriBuffer::new(LayoutDebrisData::create());
-        LayoutDebrisData::initialise_partitions(&debris_data);
+        LayoutDebrisData::initialise_partitions_tri(&debris_data);
 
         #[cfg(feature = "devmode")]
         let lines_debug = PartitionedTriBuffer::new(LayoutDebugLinesData::create());
         #[cfg(feature = "devmode")]
-        LayoutDebugLinesData::initialise_partitions(&debris_data);
+        LayoutDebugLinesData::initialise_partitions_tri(&debris_data);
 
         Self {
             fragment_commands: TriBuffer::zeroed(FRAGMENT_COMMANDS_ALLOC),

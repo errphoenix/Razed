@@ -96,7 +96,6 @@ ethel::shader_glsl_compute! {
 
             mat3 rotation = svdExtractRotation(covariant);
             vec4 q = matToQuat(rotation);
-            q = vec4(0.0, 0.0, 0.0, 1.0);
 
             out_rotations[cage_id][point_id] = q;
             ";

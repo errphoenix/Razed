@@ -33,13 +33,13 @@ ethel::shader_glsl_struct! {
     }
 }
 
-pub(super) const TYPE_MESH_METADATA: GlslStruct = ethel::mesh::MetadataGlslStruct::as_definition();
-pub(super) const TYPE_MESH_VERTEX: GlslStruct = ethel::mesh::VertexGlslStruct::as_definition();
+pub const TYPE_MESH_METADATA: GlslStruct = ethel::mesh::MetadataGlslStruct::as_definition();
+pub const TYPE_MESH_VERTEX: GlslStruct = ethel::mesh::VertexGlslStruct::as_definition();
 
-pub(super) const TYPE_INDEX_INDIRECT: GlslStruct = IndirectIndexGlslStruct::as_definition();
-pub(super) const TYPE_INDEX_DIRECT: GlslStruct = DirectIndexGlslStruct::as_definition();
+pub const TYPE_INDEX_INDIRECT: GlslStruct = IndirectIndexGlslStruct::as_definition();
+pub const TYPE_INDEX_DIRECT: GlslStruct = DirectIndexGlslStruct::as_definition();
 
-pub(super) const LIB_QUAT_CONVERT_MAT: GlslLib = ethel::shader_glsl_lib! {
+pub const LIB_QUAT_CONVERT_MAT: GlslLib = ethel::shader_glsl_lib! {
     mat3 quatToMat [ q: vec4 ] => "
         mat3 m = mat3(0.0);
 
@@ -72,7 +72,7 @@ pub(super) const LIB_QUAT_CONVERT_MAT: GlslLib = ethel::shader_glsl_lib! {
     "
 };
 
-pub(super) const LIB_QUAT_MUL_QUAT: GlslLib = ethel::shader_glsl_lib! {
+pub const LIB_QUAT_MUL_QUAT: GlslLib = ethel::shader_glsl_lib! {
     vec4 mulQuat [ q0: vec4, q1: vec4 ] => "
         vec4 r;
         r.x = (q0.w * q1.x) + (q0.x + q1.w) + (q0.y * q1.z) - (q0.z * q1.y);
@@ -83,8 +83,15 @@ pub(super) const LIB_QUAT_MUL_QUAT: GlslLib = ethel::shader_glsl_lib! {
     "
 };
 
+/// `Quaternion x Vector3` rotation utility function.
+///
+/// Creates the `rotateQuat` function, taking, in order, the `vec3` to rotate
+/// and then the quaternion rotation represented by a `vec4`.
+///
+/// Returns the rotated `vec3`, the given vector is not changed.
+///
 /// Depends on [`LIB_QUAT_MUL_QUAT`];
-pub(super) const LIB_QUAT_ROT_VEC: GlslLib = ethel::shader_glsl_lib! {
+pub const LIB_QUAT_ROT_VEC: GlslLib = ethel::shader_glsl_lib! {
     vec3 rotateQuat [ p: vec3, q: vec4 ] => "
         vec4 q_conj = vec4(-q.x, -q.y, -q.z, q.w);
         vec4 p4 = vec4(p, 1.0);
@@ -95,7 +102,7 @@ pub(super) const LIB_QUAT_ROT_VEC: GlslLib = ethel::shader_glsl_lib! {
     "
 };
 
-pub(super) const LIB_QUAT_SLERP: GlslLib = ethel::shader_glsl_lib! {
+pub const LIB_QUAT_SLERP: GlslLib = ethel::shader_glsl_lib! {
     vec4 slerpQuat [ q0: vec4, q1: vec4, t: float ] => "
         float dotp = dot(normalize(q0), normalize(q1));
 
@@ -114,7 +121,7 @@ pub(super) const LIB_QUAT_SLERP: GlslLib = ethel::shader_glsl_lib! {
     "
 };
 
-pub(super) const LIB_MAT3_COFACTOR: GlslLib = ethel::shader_glsl_lib! {
+pub const LIB_MAT3_COFACTOR: GlslLib = ethel::shader_glsl_lib! {
     mat3 cofactor3 [ m: mat3 ] => "
         vec3 c0 = m[0];
         vec3 c1 = m[1];
@@ -127,7 +134,7 @@ pub(super) const LIB_MAT3_COFACTOR: GlslLib = ethel::shader_glsl_lib! {
     "
 };
 
-pub(super) const LIB_QUAT_FROM_ANGLE: GlslLib = ethel::shader_glsl_lib! {
+pub const LIB_QUAT_FROM_ANGLE: GlslLib = ethel::shader_glsl_lib! {
     vec4 quatFromAxisAngle [
         axis  : vec3,
         angle : float

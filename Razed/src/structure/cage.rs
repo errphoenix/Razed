@@ -1,13 +1,18 @@
-use ethel::data::{
-    Column, IndirectIndex,
-    hash::{Cell, FxSpatialHash},
-    table::TableView,
+//TODO: move all to compute, cpu only init and deformed positions pulling
+
+use ethel::{
+    data::{
+        Column, IndirectIndex,
+        hash::{Cell, FxSpatialHash},
+        table::TableView,
+    },
+    shader::{Constant, GlslStruct, GlslUniform, ShaderProgram, WriteValue},
 };
 
 use crate::structure::lattice::NodesRowTableView;
 
 pub const PER_POINT_LATTICE_ATTACHMENTS: usize = 4;
-pub const PER_CAGE_MAX_LATTICE_ATTACHMENTS: usize = 16;
+pub const PER_CAGE_MAX_LATTICE_ATTACHMENTS: usize = 8;
 pub const PER_CAGE_POINTS: usize = 8;
 pub const CAGE_DIAG_EXTENT: f32 = 1.5;
 pub const QUERY_LATTICE_ATTACH_MAX_RANGE: f32 = 32.0;
