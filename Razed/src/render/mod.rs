@@ -22,9 +22,8 @@ use rendrs::pipeline::{Pass, RenderPool, RenderTarget, RenderTargetDescriptor, R
 #[cfg(feature = "devmode")]
 use crate::render::pass::debug_lines_draw::DebugLinesData;
 use crate::{
-    assets,
-    data::{FrameDataBuffers, LayoutFragmentData},
-    render::graphics::Materials,
+    assets, data::FrameDataBuffers, render::graphics::Materials,
+    structure::cage::ComputeShaderCageDeform,
 };
 
 #[allow(unused)]
@@ -395,6 +394,8 @@ impl Renderer {
         self.shaders.cage = pass::debug_cage_draw::ShaderDebugCage::new_compiled();
         self.shaders.interface = gui::render::ShaderUiBasic::new_compiled();
         self.shaders.fd_preprocess = pass::ComputeShaderProcessCommand::new_compiled();
+
+        ComputeShaderCageDeform::new_compiled();
 
         #[cfg(feature = "devmode")]
         {

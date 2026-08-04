@@ -183,3 +183,20 @@ pub const LIB_MAT3_CONVERT_QUAT: GlslLib = ethel::shader_glsl_lib! {
         return normalize(q);
     "
 };
+
+/// Vector3 outer-product utility function.
+///
+/// Creates the `outer` function, taking in 2 `vec3` parameters, returning
+/// the `mat3` outer product.
+pub const LIB_VEC3_OUTER: GlslLib = ethel::shader_glsl_lib! {
+    mat3 outer[
+        a : vec3,
+        b : vec3
+    ] => "
+        return mat3(
+            a * b.x,
+            a * b.y,
+            a * b.z
+        );
+    "
+};
