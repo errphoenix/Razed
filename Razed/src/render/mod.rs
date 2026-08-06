@@ -232,36 +232,40 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             }
 
             let upload_buf = &frame_data.cage_upload_buf;
-            let mut offset = cage_buf.length_pod_bindref();
+            if !upload_buf.is_empty(section.as_index()) {
+                let mut offset = cage_buf.length_pod_bindref();
 
-            upload_buf.drain(section.as_index(), ..).for_each(|data| {
-                let CageAos {
-                    map_index,
-                    bindref,
-                    lattice_binds,
-                    lattice_lut,
-                    points_bind,
-                    points_barycenter_bind,
-                    attachments,
-                } = data;
+                upload_buf.drain(section.as_index(), ..).for_each(|data| {
+                    let CageAos {
+                        map_index,
+                        bindref,
+                        lattice_binds,
+                        lattice_lut,
+                        points_bind,
+                        points_barycenter_bind,
+                        attachments,
+                    } = data;
 
-                let bindref = glam::vec4(bindref.x, bindref.y, bindref.z, 1.0);
-                let points_bind = CagePoints(points_bind);
+                    let bindref = glam::vec4(bindref.x, bindref.y, bindref.z, 1.0);
+                    let points_bind = CagePoints(points_bind);
 
-                cage_buf.blit_rmap(&[map_index], offset);
-                cage_buf.blit_pod_bindref(&[bindref], offset);
-                cage_buf.blit_pod_bind_lattice(&[lattice_binds], offset);
-                cage_buf.blit_pod_lut_lattice(&[lattice_lut], offset);
-                cage_buf.blit_pod_points_bind(&[points_bind], offset);
-                cage_buf.blit_pod_barycenter_bind(&[points_barycenter_bind], offset);
-                cage_buf.blit_pod_attachments(&[attachments], offset);
+                    cage_buf.blit_rmap(&[map_index], offset);
+                    cage_buf.blit_pod_bindref(&[bindref], offset);
+                    cage_buf.blit_pod_bind_lattice(&[lattice_binds], offset);
+                    cage_buf.blit_pod_lut_lattice(&[lattice_lut], offset);
+                    cage_buf.blit_pod_points_bind(&[points_bind], offset);
+                    cage_buf.blit_pod_barycenter_bind(&[points_barycenter_bind], offset);
+                    cage_buf.blit_pod_attachments(&[attachments], offset);
 
-                if let Some(pipe) = self.cage_pipe() {
-                    pipe.queue_remap(offset, map_index);
-                }
+                    if let Some(pipe) = self.cage_pipe() {
+                        pipe.queue_remap(offset, map_index);
+                    }
 
-                offset += 1;
-            });
+                    offset += 1;
+                });
+
+                let offset = cage_buf.length_pod_bindref();
+            }
         }
 
         let render_pool = &self.render_pool;

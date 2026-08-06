@@ -358,12 +358,6 @@ impl CagePipeCpu {
         while let Ok(CageSyncRemap { gpu_index, map_id }) = self.from_gpu.try_recv() {
             if let Some(direct) = map.solve_indirect(map_id) {
                 map.contiguous_mut()[direct.as_index()] = gpu_index as u32;
-                println!(
-                    "map i{} => d{} => g{}",
-                    map_id.as_index(),
-                    direct.as_index(),
-                    gpu_index
-                );
             }
         }
     }
