@@ -21,7 +21,12 @@ use rendrs::pipeline::{Pass, RenderPool, RenderTarget, RenderTargetDescriptor, R
 
 #[cfg(feature = "devmode")]
 use crate::render::pass::debug_lines_draw::DebugLinesData;
-use crate::{assets, data::FrameDataBuffers, render::graphics::Materials};
+use crate::{
+    assets,
+    data::FrameDataBuffers,
+    render::{graphics::Materials, pass::CagePoints},
+    structure::cage::{CageAos, CagePipeGpu},
+};
 
 #[allow(unused)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -115,6 +120,8 @@ pub struct Renderer {
 
     #[cfg(feature = "devmode")]
     lines_debug_buffer: DebugLinesData,
+
+    cage_pipe: Option<CagePipeGpu>,
 
     pub glyph_atlas_texture: GlyphAtlasTexture,
     pub glyph_pipe: Option<crossbeam::channel::Receiver<GlyphRaster>>,
@@ -213,6 +220,42 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         let _ = frame_data
             .render_frame_last_duration
             .set_and_advance(self.last_frame_render);
+
+        // sync cage pipe and upload new cages
+        {
+            let cage_buf = &frame_data.cages;
+            if let Some(pipe) = self.cage_pipe.as_ref() {
+                pipe.poll(cage_buf);
+            }
+
+            let upload_buf = &frame_data.cage_upload_buf;
+            let mut offset = cage_buf.length_pod_bindref();
+
+            upload_buf.drain(section.as_index(), ..).for_each(|data| {
+                let CageAos {
+                    map_index,
+                    bindref,
+                    lattice_binds,
+                    lattice_lut,
+                    points_bind,
+                    points_barycenter_bind,
+                    attachments,
+                } = data;
+
+                let bindref = glam::vec4(bindref.x, bindref.y, bindref.z, 1.0);
+                let points_bind = CagePoints(points_bind);
+
+                cage_buf.blit_rmap(&[map_index], offset);
+                cage_buf.blit_pod_bindref(&[bindref], offset);
+                cage_buf.blit_pod_bind_lattice(&[lattice_binds], offset);
+                cage_buf.blit_pod_lut_lattice(&[lattice_lut], offset);
+                cage_buf.blit_pod_points_bind(&[points_bind], offset);
+                cage_buf.blit_pod_barycenter_bind(&[points_barycenter_bind], offset);
+                cage_buf.blit_pod_attachments(&[attachments], offset);
+
+                offset += 1;
+            });
+        }
 
         let render_pool = &self.render_pool;
         let cage_count = frame_data.cage_points_count.load(Ordering::Acquire);
@@ -375,6 +418,14 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
     }
 }
 impl Renderer {
+    pub fn set_cage_pipe(&mut self, cage_pipe: CagePipeGpu) {
+        self.cage_pipe = Some(cage_pipe);
+    }
+
+    pub fn cage_pipe(&self) -> Option<&CagePipeGpu> {
+        self.cage_pipe.as_ref()
+    }
+
     fn pipeline(&self) -> &RenderPipeline {
         self.pipeline
             .as_ref()

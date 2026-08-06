@@ -38,17 +38,14 @@ pub const fn pass(shader: &ShaderFragment, dev_materials: &MaterialGroup) -> Fra
             let section = section.as_index();
 
             ctx.cages_data
-                .bind_ssbo_imap_cages(section, Some(SSBO_INDEX_IMAP_CAGES));
+                .bind_ssbo_pod_points(Some(SSBO_INDEX_POD_CAGES_LOCALPOINTS));
             ctx.cages_data
-                .bind_ssbo_pod_cages_localpoints(section, Some(SSBO_INDEX_POD_CAGES_LOCALPOINTS));
-            ctx.cages_data.bind_ssbo_pod_cages_localpoints_bind(
-                section,
-                Some(SSBO_INDEX_POD_CAGES_LOCALPOINTS_BIND),
-            );
-            ctx.cages_data.bind_ssbo_pod_cages_world_bind_reference(
-                section,
-                Some(SSBO_INDEX_POD_CAGES_WORLD_BIND_REFERENCE),
-            );
+                .bind_ssbo_pod_points_bind(Some(SSBO_INDEX_POD_CAGES_LOCALPOINTS_BIND));
+            ctx.cages_data
+                .bind_ssbo_pod_bindref(Some(SSBO_INDEX_POD_CAGES_WORLD_BIND_REFERENCE));
+
+            ctx.cages_data
+                .bind_ssbo_imap_cages(section, Some(SSBO_INDEX_IMAP_CAGES));
 
             ctx.fragments_data.bind_shader_storage(section);
             // SAFETY: safe access to the commands buffer is guaranteed by the

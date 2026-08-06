@@ -17,8 +17,7 @@ use crate::{
     procedural::{VoxelGrid, VoxelGridOptions},
     render::RenderGroup,
     structure::{
-        CageRowTableView, CageSystem, DebrisSystem, FragmentSystem, FragmentsRowTableView,
-        create_structure_lattice,
+        CageSystem, DebrisSystem, FragmentSystem, FragmentsRowTableView, create_structure_lattice,
         debris::MotionAccumulator,
         lattice::{LatticeSystem, NodesRowTableView},
     },
@@ -308,37 +307,14 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 }
             }
 
-            // cage upload (only new)
+            // new cages upload
             {
-                let cage_data = self.cage.data();
-                // let imap_cages = cage_data.slots_map();
-                // let pod_cage_locals = cage_data.local_points_slice();
-                // let pod_cage_locals_bind = cage_data.local_points_bind_slice();
-                // let pod_cage_rotations = cage_data.rotation_slice();
-                // let pod_cage_covariants = cage_data.covariant_slice();
-                // let pod_cage_references = cage_data.world_bind_reference_slice();
-
+                let cage_map = self.cage.gpu_map();
                 storage
                     .cage_points_count
-                    .store(cage_data.len() as u32, Ordering::Release);
+                    .store(cage_map.len() as u32, Ordering::Release);
 
-                //let tb_cages = &storage.cages;
-                // tb_cages.blit_imap_cages(buf_idx, imap_cages, 0);
-                // tb_cages.blit_pod_cages_localpoints(buf_idx, pod_cage_locals, 0);
-                // tb_cages.blit_pod_cages_localpoints_bind(buf_idx, pod_cage_locals_bind, 0);
-                // //tb_cages.blit_pod_cages_rotations(buf_idx, pod_cage_rotations, 0);
-                // tb_cages.blit_pod_cages_covariants(buf_idx, pod_cage_covariants, 0);
-                // tb_cages.blit_pod_cages_world_bind_reference(buf_idx, pod_cage_references, 0);
-
-                // let output_rotations = tb_cages.view_pod_cages_rotations(buf_idx);
-                // let out_rotations_len = output_rotations.len().min(cage_data.rotation.capacity());
-
-                // const CAGE_SIZE: usize = crate::structure::cage::PER_CAGE_POINTS;
-                // unsafe {
-                //     let src = output_rotations.as_slice().as_ptr();
-                //     let dst = pod_cage_rotations.as_ptr() as *mut [glam::Quat; CAGE_SIZE];
-                //     std::ptr::copy_nonoverlapping(src, dst, out_rotations_len);
-                // }
+                self.cage.upload_cages(section, &storage.cage_upload_buf);
             }
 
             const VEC3_VEC4_PADDING: usize = 4;
@@ -529,6 +505,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             );
         });
 
+        self.cage.clear_cages_buffer();
+
         let sync_duration = t0.load(Ordering::Acquire);
         let t1 = Instant::now();
         let nanos = ((t1 - t00).as_nanos() as u64) - sync_duration;
@@ -574,6 +552,14 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         delta: janus::context::DeltaTime,
     ) {
         self.profiler.page();
+        let t0 = Instant::now();
+
+        self.cage.poll_remap();
+        self.textures_metadata_registry.pipe_sync_commands();
+
+        if screen.resolution().is_changed() {
+            self.ui_system.set_resolution(screen.resolution());
+        }
 
         {
             // simulation control keys
@@ -588,13 +574,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 self.sim_control.speed -= SIM_SPEED_STEP;
                 self.sim_control.speed = self.sim_control.speed.max(0.01);
             }
-        }
-
-        let t0 = Instant::now();
-        self.textures_metadata_registry.pipe_sync_commands();
-
-        if screen.resolution().is_changed() {
-            self.ui_system.set_resolution(screen.resolution());
         }
 
         {
@@ -686,9 +665,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         });
 
         self.profiler.capture_duration("lattice_trivialities", || {
-            let deforms = CageRowTableView::from(self.cage.data());
-            self.fragments.compute_world_positions(&deforms);
-
             // synchronizes lattice damage from xpbd-lattice solver
             self.lattice.register_dead_nodes();
         });
@@ -702,13 +678,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         self.process_fragment_damage();
         self.release_debris_bodies();
         self.delete_disabled_fragments();
-
-        self.profiler
-            .capture_duration("cage_compute_covariants", || {
-                self.cage.apply_rotations();
-                let lattice = NodesRowTableView::from(self.lattice.nodes());
-                self.cage.compute_covariants(&lattice);
-            });
 
         self.profiler.capture_duration("debris_sleep", || {
             const SIM_SPEED_LOW_THRESHOLD: f32 = 0.75;
@@ -736,7 +705,7 @@ impl State {
             let lattice_node_count = self.lattice.nodes().len();
             let lattice_constr_count = self.lattice.links().len();
             let fragment_count = self.fragments.data().len();
-            let cages_count = self.cage.data().len();
+            let cages_count = self.cage.gpu_map().len();
             let debris_count = self.debris.data().len();
 
             env.insert(DEBUG_PERF_FPS_AVG, fps_avg as u32);
@@ -759,6 +728,14 @@ impl State {
             },
         );
         env.insert(SIM_CTL_SPEED, self.sim_control.speed);
+    }
+
+    pub fn cage_system(&self) -> &CageSystem {
+        &self.cage
+    }
+
+    pub fn cage_system_mut(&mut self) -> &mut CageSystem {
+        &mut self.cage
     }
 
     pub fn ui_system(&self) -> &InterfaceSystem {

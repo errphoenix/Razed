@@ -11,7 +11,7 @@ pub use debris::{
 };
 
 #[allow(unused_imports)]
-pub use cage::{CageRowTable, CageRowTableView, CageSystem};
+pub use cage::CageSystem;
 
 #[allow(unused_imports)]
 pub use fragment::{FragmentSystem, FragmentsRowTable, FragmentsRowTableView};

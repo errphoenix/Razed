@@ -11,6 +11,7 @@ use crate::{
     data::FrameDataBuffers,
     procedural::{CubeVoronoi, voxel_grid},
     render::RenderGroup,
+    structure::cage,
 };
 
 mod assets;
@@ -64,6 +65,7 @@ fn main() {
             const GLYPH_ATLAS_SIZE: u32 = 2048;
 
             let (raster_tx, raster_rx) = crossbeam::channel::unbounded();
+            let (cage_cpu_pipe, cage_gpu_pipe) = cage::pipes();
 
             renderer.handler_init_callback(|handle| {
                 handle.textures_master_registry = textures_master_registry;
@@ -82,6 +84,7 @@ fn main() {
                     .add_handle(glyph_asset_handle);
 
                 handle.glyph_pipe = Some(raster_rx);
+                handle.set_cage_pipe(cage_gpu_pipe);
             });
             state.handler_init_callback(|handle| {
                 handle.frag_meshmap = fragment_mesh_mapping;
@@ -93,6 +96,7 @@ fn main() {
                 handle.ui_system_mut().bind_system_fonts();
 
                 handle.glyph_pipe = Some(raster_tx);
+                handle.cage_system_mut().set_pipe(cage_cpu_pipe);
             });
             start_handler.init(state, renderer)
         },

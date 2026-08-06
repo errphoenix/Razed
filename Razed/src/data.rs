@@ -2,7 +2,7 @@ use std::sync::{Arc, atomic::AtomicU32};
 
 use crate::{
     render::{self, pass::CagePoints},
-    structure::cage::{PER_CAGE_MAX_LATTICE_ATTACHMENTS, PER_CAGE_POINTS},
+    structure::cage::{CageAos, PER_CAGE_MAX_LATTICE_ATTACHMENTS, PER_CAGE_POINTS},
 };
 use ethel::{
     DrawCommand, layout_buffer, layout_mesh_buffer,
@@ -10,7 +10,10 @@ use ethel::{
     state::data::{DirectIndex, IndirectIndex},
 };
 use gui::render::{UiCommandsBuffer, UiDataBuffer};
-use janus::{context::DeltaTime, sync::TriCell};
+use janus::{
+    context::DeltaTime,
+    sync::{TriCell, TriVec},
+};
 
 use crate::structure::fragment::ANCHORS_COUNT as FRAGMENT_ANCHORS_COUNT;
 
@@ -215,10 +218,11 @@ pub struct FrameDataBuffers {
 
     pub generic_objects: PartitionedTriBuffer<RENDERABLE_STORAGE_PARTS>,
     pub fragments: PartitionedTriBuffer<FRAGMENTS_STORAGE_PARTS>,
-    pub cages: CagePartitionedBuffer,
     pub debris: PartitionedTriBuffer<DEBRIS_STORAGE_PARTS>,
     pub debris_count: Arc<AtomicU32>,
+    pub cages: CagePartitionedBuffer,
     pub cage_points_count: Arc<AtomicU32>,
+    pub cage_upload_buf: TriVec<CageAos>,
 
     pub lattice_debug: PartitionedTriBuffer<LATTICE_STORAGE_PARTS>,
     pub lattice_constraint_count: Arc<AtomicU32>,
@@ -257,10 +261,11 @@ impl FrameDataBuffers {
 
             generic_objects: generic_objects_buffer,
             fragments: fragment_data,
-            cages: CagePartitionedBuffer::new(),
             debris: debris_data,
             debris_count: Arc::new(AtomicU32::new(0)),
+            cages: CagePartitionedBuffer::new(),
             cage_points_count: Arc::new(AtomicU32::new(0)),
+            cage_upload_buf: TriVec::new(),
 
             lattice_debug: xpbd_visualiser,
             lattice_constraint_count: Arc::new(AtomicU32::new(0)),

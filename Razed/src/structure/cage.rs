@@ -35,7 +35,6 @@ pub struct CageAos {
 
 #[derive(Debug, Default)]
 pub struct CageSystem {
-    upload_buffer: TriVec<CageAos>,
     local_buffer: Vec<CageAos>,
     gpu_map: ParallelIndexArrayColumn<usize>,
 
@@ -51,12 +50,22 @@ impl CageSystem {
         Self::default()
     }
 
+    pub fn gpu_map(&self) -> &ParallelIndexArrayColumn<usize> {
+        &self.gpu_map
+    }
+
     pub fn set_pipe(&mut self, pipe: CagePipeCpu) {
         self.pipe = Some(pipe);
     }
 
     pub fn pipe(&self) -> Option<&CagePipeCpu> {
         self.pipe.as_ref()
+    }
+
+    pub fn poll_remap(&mut self) {
+        if let Some(pipe) = self.pipe.as_ref() {
+            pipe.poll(&mut self.gpu_map);
+        }
     }
 
     /// Queue a cage deletion request.
@@ -98,9 +107,8 @@ impl CageSystem {
             .map(|direct| self.gpu_map.contiguous()[direct.as_index()])
     }
 
-    pub fn upload_cages(&self, section: StorageSection) {
-        self.upload_buffer
-            .extend_from_slice(section.as_index(), &self.local_buffer);
+    pub fn upload_cages(&self, section: StorageSection, to: &TriVec<CageAos>) {
+        to.extend_from_slice(section.as_index(), &self.local_buffer);
     }
 
     pub fn clear_cages_buffer(&mut self) {

@@ -186,14 +186,6 @@ impl FragmentSystem {
         self.fragment_damage_frame.clear();
     }
 
-    pub fn compute_world_positions(&mut self, _cages: &CageRowTableView) {
-        // todo: this is used to spawn debris seamlessly at the last
-        // fragment position. computing an accurate position, especially
-        // with the new cage system, would require full ffd. this is a big
-        // waste of cpu cycles, so it would be better to move to calculating
-        // world-positions for debris spawning on demand.
-    }
-
     /// Synchronise stable indirect indices `broken_ids` of constraints and
     /// [`degenerate_nodes`] with fragments state.
     pub fn sync_lattice_damage(&mut self, broken_nodes: &[DamagedNode]) {
