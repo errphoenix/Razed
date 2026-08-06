@@ -1,6 +1,6 @@
 use ethel::{
     data::{
-        Column, IndirectIndex, ParallelIndexArrayColumn,
+        Column, DirectIndex, IndirectIndex, ParallelIndexArrayColumn,
         column::IterColumn,
         hash::{Cell, FxSpatialHash},
         table::TableView,
@@ -36,7 +36,7 @@ pub struct CageAos {
 #[derive(Debug, Default)]
 pub struct CageSystem {
     local_buffer: Vec<CageAos>,
-    gpu_map: ParallelIndexArrayColumn<usize>,
+    gpu_map: ParallelIndexArrayColumn<u32>,
 
     pipe: Option<CagePipeCpu>,
 
@@ -50,7 +50,7 @@ impl CageSystem {
         Self::default()
     }
 
-    pub fn gpu_map(&self) -> &ParallelIndexArrayColumn<usize> {
+    pub fn gpu_map(&self) -> &ParallelIndexArrayColumn<u32> {
         &self.gpu_map
     }
 
@@ -90,9 +90,8 @@ impl CageSystem {
             return;
         }
 
-        let gpu_index = gpu_index.unwrap();
         if let Some(pipe) = self.pipe() {
-            pipe.queue_delete(gpu_index, cage_id);
+            pipe.queue_delete(cage_id);
         } else {
             tracing::error!(
                 "unitialised CPU-side cage pipe, delete request will be discarded: {}",
@@ -101,7 +100,7 @@ impl CageSystem {
         }
     }
 
-    pub fn gpu_index_of(&self, cage_id: IndirectIndex) -> Option<usize> {
+    pub fn gpu_index_of(&self, cage_id: IndirectIndex) -> Option<u32> {
         self.gpu_map
             .solve_indirect(cage_id)
             .map(|direct| self.gpu_map.contiguous()[direct.as_index()])
@@ -153,7 +152,7 @@ impl CageSystem {
             glam::vec4(local.x, local.y, local.z, 1.0)
         });
 
-        let map_id = self.gpu_map.insert(0usize);
+        let map_id = self.gpu_map.insert(0u32);
         let cage = CageAos {
             map_index: map_id,
             bindref: cage_center,
@@ -269,7 +268,7 @@ impl CageSystem {
             .take(PER_POINT_LATTICE_ATTACHMENTS)
             .enumerate()
             .for_each(|(i, &(original_index, pos))| {
-                let distance = point.distance_squared(pos);
+                let distance = point.distance(pos);
                 let weight = 1.0 / (distance + 0.0001);
                 lattice_weights_sum += weight;
                 attachments[i] = NodeAttachment {
@@ -333,8 +332,6 @@ pub fn pipes() -> (CagePipeCpu, CagePipeGpu) {
 
 #[derive(Clone, Debug)]
 pub struct CageDeleteGpu {
-    /// The GPU index of the cage element to remove
-    pub gpu_index: usize,
     /// The stable ID of the CPU-GPU cage map
     pub map_id: IndirectIndex,
 }
@@ -353,14 +350,20 @@ pub struct CagePipeCpu {
     from_gpu: crossbeam::channel::Receiver<CageSyncRemap>,
 }
 impl CagePipeCpu {
-    pub fn queue_delete(&self, gpu_index: usize, map_id: IndirectIndex) {
-        let _ = self.to_gpu.send(CageDeleteGpu { gpu_index, map_id });
+    pub fn queue_delete(&self, map_id: IndirectIndex) {
+        let _ = self.to_gpu.send(CageDeleteGpu { map_id });
     }
 
-    pub fn poll(&self, map: &mut ParallelIndexArrayColumn<usize>) {
+    pub fn poll(&self, map: &mut ParallelIndexArrayColumn<u32>) {
         while let Ok(CageSyncRemap { gpu_index, map_id }) = self.from_gpu.try_recv() {
             if let Some(direct) = map.solve_indirect(map_id) {
-                map.contiguous_mut()[direct.as_index()] = gpu_index;
+                map.contiguous_mut()[direct.as_index()] = gpu_index as u32;
+                println!(
+                    "map i{} => d{} => g{}",
+                    map_id.as_index(),
+                    direct.as_index(),
+                    gpu_index
+                );
             }
         }
     }
@@ -452,9 +455,20 @@ impl CagePipeGpu {
         }
     }
 
-    pub fn poll(&self, gpu_data: &CagePartitionedBuffer) {
+    pub fn poll(&self, gpu_data: &CagePartitionedBuffer, imap: &[DirectIndex]) {
         while let Ok(msg) = self.from_cpu.try_recv() {
-            let index = msg.gpu_index;
+            let id = msg.map_id;
+            let direct = imap[id.as_index()];
+            if !id.related_to_direct(&direct) {
+                tracing::error!(
+                    "error while processing cage deletion: generation mismatch, expected {}, got {}",
+                    direct.generation(),
+                    id.generation()
+                );
+                continue;
+            }
+
+            let index = direct.as_index();
             let length = gpu_data.length_pod_bindref();
 
             // id of the element to remap

@@ -224,8 +224,11 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         // sync cage pipe and upload new cages
         {
             let cage_buf = &frame_data.cages;
+            let cage_map = &frame_data.cage_map;
+            let imap = unsafe { cage_map.view_section(section.as_index()) };
+
             if let Some(pipe) = self.cage_pipe.as_ref() {
-                pipe.poll(cage_buf);
+                pipe.poll(cage_buf, imap.as_slice());
             }
 
             let upload_buf = &frame_data.cage_upload_buf;
@@ -253,6 +256,10 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 cage_buf.blit_pod_barycenter_bind(&[points_barycenter_bind], offset);
                 cage_buf.blit_pod_attachments(&[attachments], offset);
 
+                if let Some(pipe) = self.cage_pipe() {
+                    pipe.queue_remap(offset, map_index);
+                }
+
                 offset += 1;
             });
         }
@@ -267,6 +274,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             let ctx = CageDeformComputeCtx {
                 total_cage_count: cage_count,
                 cage_data: &frame_data.cages,
+                lattice_data: &frame_data.lattice_debug,
             };
 
             self.shaders.cage_deform.bind();
@@ -324,6 +332,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             {
                 let ctx = pass::FragmentsDrawCtx {
                     cages_data: cages_buf,
+                    cages_map: &frame_data.cage_map,
                     fragments_data: frags_buf,
                     fragments_commands: frags_cmd,
                     material_registry: self.materials.locations(),
@@ -346,10 +355,9 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         // cage draw pass
         {
             let ctx = pass::DebugCageDrawCtx {
-                fragments_data: &frame_data.fragments,
                 cage_data: &frame_data.cages,
                 point_size: 2.5,
-                cage_total_count: cage_count * 8,
+                cage_total_count: cage_count,
             };
             self.pipeline()
                 .debug_cage_draw_pass

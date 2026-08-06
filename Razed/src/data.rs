@@ -220,7 +220,9 @@ pub struct FrameDataBuffers {
     pub fragments: PartitionedTriBuffer<FRAGMENTS_STORAGE_PARTS>,
     pub debris: PartitionedTriBuffer<DEBRIS_STORAGE_PARTS>,
     pub debris_count: Arc<AtomicU32>,
+
     pub cages: CagePartitionedBuffer,
+    pub cage_map: TriBuffer<DirectIndex>,
     pub cage_points_count: Arc<AtomicU32>,
     pub cage_upload_buf: TriVec<CageAos>,
 
@@ -263,7 +265,9 @@ impl FrameDataBuffers {
             fragments: fragment_data,
             debris: debris_data,
             debris_count: Arc::new(AtomicU32::new(0)),
+
             cages: CagePartitionedBuffer::new(),
+            cage_map: TriBuffer::zeroed(CAGES_ALLOC),
             cage_points_count: Arc::new(AtomicU32::new(0)),
             cage_upload_buf: TriVec::new(),
 

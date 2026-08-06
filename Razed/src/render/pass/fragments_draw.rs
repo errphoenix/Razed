@@ -1,4 +1,5 @@
 use ethel::{
+    data::DirectIndex,
     render::{
         buffer::{PartitionedTriBuffer, TriBuffer},
         command::{DrawArraysIndirectCommand, GpuCommandDispatch},
@@ -20,6 +21,7 @@ pub type FragmentsDrawPass = DrawPass<FragmentsDrawCtxWrapper, 1, 0>;
 #[derive(Debug)]
 pub struct FragmentsDrawCtx<'data> {
     pub cages_data: &'data CagePartitionedBuffer,
+    pub cages_map: &'data TriBuffer<DirectIndex>,
     pub fragments_data: &'data PartitionedTriBuffer<{ FRAGMENTS_STORAGE_PARTS }>,
     pub fragments_commands: &'data TriBuffer<DrawArraysIndirectCommand>,
 
@@ -42,10 +44,10 @@ pub const fn pass(shader: &ShaderFragment, dev_materials: &MaterialGroup) -> Fra
             ctx.cages_data
                 .bind_ssbo_pod_points_bind(Some(SSBO_INDEX_POD_CAGES_LOCALPOINTS_BIND));
             ctx.cages_data
-                .bind_ssbo_pod_bindref(Some(SSBO_INDEX_POD_CAGES_WORLD_BIND_REFERENCE));
+                .bind_ssbo_pod_bindref(Some(SSBO_INDEX_POD_CAGES_BINDREF));
 
-            ctx.cages_data
-                .bind_ssbo_imap_cages(section, Some(SSBO_INDEX_IMAP_CAGES));
+            ctx.cages_map
+                .bind_shader_storage(section, SSBO_INDEX_IMAP_CAGES, 0);
 
             ctx.fragments_data.bind_shader_storage(section);
             // SAFETY: safe access to the commands buffer is guaranteed by the
@@ -66,16 +68,18 @@ macro_rules! ssbo_binding {
     (POD_CageID) => {
         2
     };
-    (IMap_Cages) => {
+
+    (POD_Cages_LocalPoints) => {
         3
     };
-    (POD_Cages_LocalPoints) => {
+    (POD_Cages_LocalPoints_Bind) => {
         4
     };
-    (POD_Cages_LocalPoints_Bind) => {
+    (POD_Cages_BindRef) => {
         5
     };
-    (POD_Cages_WorldBindReference) => {
+
+    (IMap_Cages) => {
         6
     };
 }
@@ -83,11 +87,10 @@ macro_rules! ssbo_binding {
 pub const SSBO_INDEX_POD_BINDPOSE: u32 = ssbo_binding!(POD_BindPose);
 pub const SSBO_INDEX_POD_MESHID: u32 = ssbo_binding!(POD_MeshID);
 pub const SSBO_INDEX_POD_CAGEID: u32 = ssbo_binding!(POD_CageID);
-pub const SSBO_INDEX_IMAP_CAGES: u32 = ssbo_binding!(IMap_Cages);
 pub const SSBO_INDEX_POD_CAGES_LOCALPOINTS: u32 = ssbo_binding!(POD_Cages_LocalPoints);
 pub const SSBO_INDEX_POD_CAGES_LOCALPOINTS_BIND: u32 = ssbo_binding!(POD_Cages_LocalPoints_Bind);
-pub const SSBO_INDEX_POD_CAGES_WORLD_BIND_REFERENCE: u32 =
-    ssbo_binding!(POD_Cages_WorldBindReference);
+pub const SSBO_INDEX_POD_CAGES_BINDREF: u32 = ssbo_binding!(POD_Cages_BindRef);
+pub const SSBO_INDEX_IMAP_CAGES: u32 = ssbo_binding!(IMap_Cages);
 
 use ShaderFragmentVariants::*;
 
@@ -236,11 +239,7 @@ ethel::shader_glsl! {
                         [dyn_array IndirectIndex: pod_cage_id]
                     }
                 }
-                ethel::shader_glsl_ssbo! {
-                    buf IMap_Cages => {
-                        [dyn_array DirectIndex: imap_cages]
-                    }
-                }
+
                 ethel::shader_glsl_ssbo! {
                     buf POD_Cages_LocalPoints => {
                         [dyn_array vec4: pod_cages_localpoints => each 8]
@@ -252,8 +251,14 @@ ethel::shader_glsl! {
                     }
                 }
                 ethel::shader_glsl_ssbo! {
-                    buf POD_Cages_WorldBindReference => {
-                        [dyn_array float: pod_cages_world_bind_reference => each 3]
+                    buf POD_Cages_BindRef => {
+                        [dyn_array vec4: pod_cages_bindref]
+                    }
+                }
+
+                ethel::shader_glsl_ssbo! {
+                    buf IMap_Cages => {
+                        [dyn_array DirectIndex: imap_cages]
                     }
                 }
             };
@@ -294,11 +299,13 @@ ethel::shader_glsl! {
 
                 IndirectIndex cage_id = pod_cage_id[fragment_id];
                 DirectIndex cage_did = imap_cages[cage_id.index];
-                vec4[8] localpoints = pod_cages_localpoints[cage_did.index];
-                vec4[8] localpoints_bind = pod_cages_localpoints_bind[cage_did.index];
+                // take in account direct index degenerate, which is
+                // not present in the gpu buffer arrays
+                uint cage_index = cage_did.index - 1;
 
-                float[3] cage_sref = pod_cages_world_bind_reference[cage_did.index];
-                vec3 cage_world_pos = vec3(cage_sref[0], cage_sref[1], cage_sref[2]);
+                vec4[8] localpoints = pod_cages_localpoints[cage_index];
+                vec4[8] localpoints_bind = pod_cages_localpoints_bind[cage_index];
+                vec3 cage_bindref = pod_cages_bindref[cage_index].xyz;
 
                 // anchor order is guaranteed to be:
                 // 0: -x, -y, -z,
@@ -355,7 +362,7 @@ ethel::shader_glsl! {
                 vec3 rc1 = mix(rc01, rc11, ify);
                 vec3 local_deformed = mix(rc0, rc1, ifz);
 
-                vec4 world = vec4(cage_world_pos + local_deformed, 1.0);
+                vec4 world = vec4(cage_bindref + local_deformed, 1.0);
 
                 // derive normal
                 vec3 e_x0 = p100 - p000;

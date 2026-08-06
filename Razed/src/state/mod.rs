@@ -310,6 +310,11 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             // new cages upload
             {
                 let cage_map = self.cage.gpu_map();
+                let cage_map_buf = &storage.cage_map;
+                unsafe {
+                    cage_map_buf.blit_section(section.as_index(), cage_map.slots_map(), 0);
+                }
+
                 storage
                     .cage_points_count
                     .store(cage_map.len() as u32, Ordering::Release);
@@ -891,7 +896,6 @@ impl State {
                 });
             }
 
-            println!("creating {} debris", buffer.len());
             buffer.drain(..).for_each(
                 |DebrisData {
                      position,

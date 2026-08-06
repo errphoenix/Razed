@@ -268,7 +268,7 @@ impl FragmentSystem {
         self.disabled_frags_frame.iter()
     }
 
-    const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 8;
+    const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 12;
 
     pub fn create_deformation_cages(
         &mut self,
