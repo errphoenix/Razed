@@ -119,48 +119,53 @@ layout_buffer! {
 }
 
 ethel::typed_part_buffer! {
-    const Cage: 8, {
-        enum Pod_Rotation: CAGES_ALLOC => {
-            type glam::Quat;
+    const Cage: 9, {
+        enum RMap: CAGES_ALLOC => {
+            type IndirectIndex;
             bind 0;
+        };
+
+        enum Pod_Rotation: CAGES_ALLOC => {
+            type [glam::Quat; PER_CAGE_POINTS];
+            bind 1;
             init with {
-                glam::Quat::IDENTITY
+                [glam::Quat::IDENTITY; PER_CAGE_POINTS]
             };
             shader render::pass::cage_deform_compute::SSBO_INDEX_POD_ROTATION;
         };
         enum Pod_BindRef: CAGES_ALLOC => {
             type glam::Vec4;
-            bind 1;
+            bind 2;
             shader render::pass::cage_deform_compute::SSBO_INDEX_POD_BIND_REF;
         };
         enum Pod_Points: CAGES_ALLOC => {
             type CagePoints;
-            bind 2;
+            bind 3;
             shader render::pass::cage_deform_compute::SSBO_INDEX_POD_POINTS;
         };
         enum Pod_Points_Bind: CAGES_ALLOC => {
             type CagePoints;
-            bind 3;
+            bind 4;
             shader render::pass::cage_deform_compute::SSBO_INDEX_POD_POINTS_BIND;
         };
         enum Pod_Barycenter_Bind: CAGES_ALLOC => {
             type [glam::Vec4; PER_CAGE_POINTS];
-            bind 4;
+            bind 5;
             shader render::pass::cage_deform_compute::SSBO_INDEX_POD_BARYCENTER_BIND;
         };
         enum Pod_Attachments: CAGES_ALLOC => {
             type [render::pass::LatticeAttachments; PER_CAGE_POINTS];
-            bind 5;
+            bind 6;
             shader render::pass::cage_deform_compute::SSBO_INDEX_POD_ATTACHMENTS;
         };
         enum Pod_Lut_Lattice: CAGES_ALLOC => {
             type [IndirectIndex; PER_CAGE_MAX_LATTICE_ATTACHMENTS];
-            bind 6;
+            bind 7;
             shader render::pass::cage_deform_compute::SSBO_INDEX_POD_LUT_LATTICE;
         };
         enum Pod_Bind_Lattice: CAGES_ALLOC => {
             type [glam::Vec4; PER_CAGE_MAX_LATTICE_ATTACHMENTS];
-            bind 7;
+            bind 8;
             shader render::pass::cage_deform_compute::SSBO_INDEX_POD_BIND_LATTICE;
         };
     }

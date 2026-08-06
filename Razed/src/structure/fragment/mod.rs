@@ -10,7 +10,7 @@ use rustc_hash::FxHashSet;
 use crate::{
     procedural::VoxelGrid,
     structure::{
-        CageRowTableView, CageSystem,
+        CageSystem,
         lattice::{DamagedNode, NodesRowTableView},
     },
 };

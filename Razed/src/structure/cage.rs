@@ -1,12 +1,19 @@
-//TODO: move all to compute, cpu only init and deformed positions pulling
-
-use ethel::data::{
-    Column, IndirectIndex,
-    hash::{Cell, FxSpatialHash},
-    table::TableView,
+use ethel::{
+    data::{
+        Column, IndirectIndex, ParallelIndexArrayColumn,
+        column::IterColumn,
+        hash::{Cell, FxSpatialHash},
+        table::TableView,
+    },
+    render::buffer::{StorageSection, partitioned::PartitionedBuffer},
 };
+use janus::sync::TriVec;
 
-use crate::{render::pass::NodeAttachment, structure::lattice::NodesRowTableView};
+use crate::{
+    data::{CagePartitionedBuffer, LayoutCage},
+    render::pass::{CagePoints, LatticeAttachments, NodeAttachment},
+    structure::lattice::NodesRowTableView,
+};
 
 pub const PER_POINT_LATTICE_ATTACHMENTS: usize = 4;
 pub const PER_CAGE_MAX_LATTICE_ATTACHMENTS: usize = 8;
@@ -14,34 +21,25 @@ pub const PER_CAGE_POINTS: usize = 8;
 pub const CAGE_DIAG_EXTENT: f32 = 1.5;
 pub const QUERY_LATTICE_ATTACH_MAX_RANGE: f32 = 32.0;
 
-ethel::table_spec! {
-    struct Cage {
-        // calculated on gpu compute shader, used for ffd
-        rotation: [glam::Quat; PER_CAGE_POINTS];
-        covariant: [glam::Mat4; PER_CAGE_POINTS];
+#[derive(Clone, Debug)]
+pub struct CageAos {
+    pub map_index: IndirectIndex,
 
-        world_bind_reference: [f32; 3];
-
-        // vec4 for gpu alignment as this data is used in shaders
-        // * local_points is used as the output of cage deformation
-        //   compute, and ffd for fragments
-        // * local_points_bind is used for ffd for fragments
-        local_points: CagePoints;
-        local_points_bind: CagePoints;
-
-        // no alignment requirements as this data is cpu-only
-        // for covariant computation
-        point_barycenter_lattice_bind: [glam::Vec3; PER_CAGE_POINTS];
-        point_barycenter_lattice_real: [glam::Vec3; PER_CAGE_POINTS];
-        point_lattice_attachments: [LatticeAttachments; PER_CAGE_POINTS];
-        attached_lattice: [IndirectIndex; PER_CAGE_MAX_LATTICE_ATTACHMENTS];
-        lattice_bind_points: [glam::Vec3; PER_CAGE_MAX_LATTICE_ATTACHMENTS];
-    }
+    pub bindref: glam::Vec3,
+    pub lattice_binds: [glam::Vec4; PER_CAGE_MAX_LATTICE_ATTACHMENTS],
+    pub lattice_lut: [IndirectIndex; PER_CAGE_MAX_LATTICE_ATTACHMENTS],
+    pub points_bind: [glam::Vec4; PER_CAGE_POINTS],
+    pub points_barycenter_bind: [glam::Vec4; PER_CAGE_POINTS],
+    pub attachments: [LatticeAttachments; PER_CAGE_POINTS],
 }
 
 #[derive(Debug, Default)]
 pub struct CageSystem {
-    data: CageRowTable,
+    upload_buffer: TriVec<CageAos>,
+    local_buffer: Vec<CageAos>,
+    gpu_map: ParallelIndexArrayColumn<usize>,
+
+    pipe: Option<CagePipeCpu>,
 
     /// Mapping of lattice node point ID to cage ID attached to the node.
     node_map: Vec<IndirectIndex>,
@@ -53,114 +51,66 @@ impl CageSystem {
         Self::default()
     }
 
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            data: CageRowTable::with_capacity(capacity),
-            node_map: Vec::new(),
-            generate_query_near_buf: Vec::with_capacity(PER_CAGE_MAX_LATTICE_ATTACHMENTS),
+    pub fn set_pipe(&mut self, pipe: CagePipeCpu) {
+        self.pipe = Some(pipe);
+    }
+
+    pub fn pipe(&self) -> Option<&CagePipeCpu> {
+        self.pipe.as_ref()
+    }
+
+    /// Queue a cage deletion request.
+    ///
+    /// The render thread will process the request and delete the associated
+    /// cage data from the GPU buffers.
+    ///
+    /// If the `cage_id` is not associated to a valid GPU index, no request
+    /// is sent at all.
+    ///
+    /// While GPU deletion is done on the render thread, the `cage_id` is
+    /// immediately deleted from the local map residing on this thread.
+    pub fn queue_delete_cage(&mut self, cage_id: IndirectIndex) {
+        let gpu_index = self.gpu_index_of(cage_id);
+        self.gpu_map.free(cage_id);
+
+        if gpu_index.is_some_and(|i| i == 0) || gpu_index.is_none() {
+            tracing::warn!(
+                "attempted to delete cage from ID that is not associated to a valid GPU index: {}",
+                "either the render thread has not yet processed the associated cage, or the cage ID is degenerate."
+            );
+            return;
+        }
+
+        let gpu_index = gpu_index.unwrap();
+        if let Some(pipe) = self.pipe() {
+            pipe.queue_delete(gpu_index, cage_id);
+        } else {
+            tracing::error!(
+                "unitialised CPU-side cage pipe, delete request will be discarded: {}",
+                "pipe was never initialised."
+            )
         }
     }
 
-    pub fn data(&self) -> &CageRowTable {
-        &self.data
+    pub fn gpu_index_of(&self, cage_id: IndirectIndex) -> Option<usize> {
+        self.gpu_map
+            .solve_indirect(cage_id)
+            .map(|direct| self.gpu_map.contiguous()[direct.as_index()])
     }
 
-    pub fn data_mut(&mut self) -> &mut CageRowTable {
-        &mut self.data
+    pub fn upload_cages(&self, section: StorageSection) {
+        self.upload_buffer
+            .extend_from_slice(section.as_index(), &self.local_buffer);
     }
 
-    pub fn apply_rotations(&mut self) {
-        let bind_points = &self.data.local_points_bind;
-        let rotations = &self.data.rotation;
-        let point_bind_barys = &self.data.point_barycenter_lattice_bind;
-        let point_real_barys = &self.data.point_barycenter_lattice_real;
-        let points = &mut self.data.local_points;
-
-        for (((points, binds), rotations), (bind_barys, real_barys)) in points
-            .iter_mut()
-            .zip(bind_points)
-            .zip(rotations)
-            .zip(point_bind_barys.iter().zip(point_real_barys))
-        {
-            points
-                .0
-                .iter_mut()
-                .zip(binds.0.iter())
-                .zip(rotations)
-                .zip(bind_barys.iter().zip(real_barys))
-                .for_each(|(((pos, bind), &rot), (&b_bary, &r_bary))| {
-                    let bind = glam::vec3(bind.x, bind.y, bind.z);
-                    let deformed = rot * (bind - b_bary) + r_bary;
-                    *pos = glam::vec4(deformed.x, deformed.y, deformed.z, 1.0);
-                });
-        }
+    pub fn clear_cages_buffer(&mut self) {
+        self.local_buffer.clear();
     }
 
-    pub fn compute_covariants(&mut self, lattice_data: &NodesRowTableView) {
-        fn outer_product(a: glam::Vec3, b: glam::Vec3) -> glam::Mat3 {
-            glam::mat3(a * b.x, a * b.y, a * b.z)
-        }
-
-        let lattice = &self.data.attached_lattice;
-        let lattice_binds = &self.data.lattice_bind_points;
-        let point_attached_lattice = &self.data.point_lattice_attachments;
-        let bind_barycenters = &self.data.point_barycenter_lattice_bind;
-        let cage_reference = &self.data.world_bind_reference;
-        let real_barycenters = &mut self.data.point_barycenter_lattice_real;
-        let covariants = &mut self.data.covariant;
-
-        for (
-            cov,
-            (
-                (((lattice_nodes, lattice_bind_points), attachments), (bind_barys, real_barys)),
-                reference,
-            ),
-        ) in covariants.iter_mut().zip(
-            lattice
-                .iter()
-                .zip(lattice_binds)
-                .zip(point_attached_lattice)
-                .zip(bind_barycenters.iter().zip(real_barycenters))
-                .zip(cage_reference)
-                .skip(1),
-        ) {
-            let mut lattice_current_pos = [glam::Vec3::ZERO; PER_CAGE_MAX_LATTICE_ATTACHMENTS];
-            for (i, &node) in lattice_nodes.iter().enumerate() {
-                let node_pos = *lattice_data.current_pos(node);
-                lattice_current_pos[i] = node_pos;
-            }
-
-            let bind_ref = glam::Vec3::from_array(*reference);
-
-            for ((attachments, covariant), (bind_bary, real_bary)) in attachments
-                .iter()
-                .zip(cov)
-                .zip(bind_barys.iter().zip(real_barys))
-            {
-                *real_bary = glam::Vec3::ZERO;
-                for &NodeAttachment { index, weight } in &attachments.0 {
-                    let node_pos = lattice_current_pos[index as usize];
-                    *real_bary += node_pos * weight;
-                }
-                *real_bary -= bind_ref;
-
-                let mut cov3 = glam::Mat3::ZERO;
-                for &NodeAttachment { index, weight } in &attachments.0 {
-                    let node_real_pos = lattice_current_pos[index as usize] - bind_ref;
-                    let node_bind_pos = lattice_bind_points[index as usize];
-
-                    let real_com = node_real_pos - *real_bary;
-                    let bind_com = node_bind_pos - bind_bary;
-
-                    cov3 += outer_product(real_com, bind_com) * weight;
-                }
-                cov3 += glam::Mat3::IDENTITY * 0.00005;
-
-                *covariant = glam::Mat4::from_mat3(cov3);
-            }
-        }
-    }
-
+    /// Generate a new cage and queue it for upload on the GPU buffers.
+    ///
+    /// Returns the [`IndirectIndex`] to the local map residing on this
+    /// thread.
     pub fn generate_cage(
         &mut self,
         cage_center: glam::Vec3,
@@ -183,25 +133,30 @@ impl CageSystem {
             let local = p.world_point - cage_center;
             glam::vec4(local.x, local.y, local.z, 1.0)
         });
-        let points_barycenter_bind = cage_data.points.map(|p| p.lattice_barycenter - cage_center);
+        let points_barycenter_bind = cage_data.points.map(|p| {
+            let local = p.lattice_barycenter - cage_center;
+            glam::vec4(local.x, local.y, local.z, 1.0)
+        });
         let points_attachments = cage_data
             .points
             .map(|p| LatticeAttachments(p.lattice_attachments));
-        let lattice_bind_pos = cage_data.lattice_bind_pos.map(|p| p - cage_center);
-        let cage_reference = cage_center.to_array();
+        let lattice_bind_pos = cage_data.lattice_bind_pos.map(|p| {
+            let local = p - cage_center;
+            glam::vec4(local.x, local.y, local.z, 1.0)
+        });
 
-        self.data.insert((
-            [glam::Quat::IDENTITY; PER_CAGE_POINTS],
-            [glam::Mat4::IDENTITY; PER_CAGE_POINTS],
-            cage_reference,
-            CagePoints(points_pos),
-            CagePoints(points_pos),
-            points_barycenter_bind,
-            points_barycenter_bind,
-            points_attachments,
-            cage_data.attached_lattice,
-            lattice_bind_pos,
-        ))
+        let map_id = self.gpu_map.insert(0usize);
+        let cage = CageAos {
+            map_index: map_id,
+            bindref: cage_center,
+            lattice_binds: lattice_bind_pos,
+            lattice_lut: cage_data.attached_lattice,
+            points_bind: points_pos,
+            points_barycenter_bind: points_barycenter_bind,
+            attachments: points_attachments,
+        };
+        self.local_buffer.push(cage);
+        map_id
     }
 
     fn create_cage(
@@ -351,4 +306,157 @@ struct CagePointData {
     pub lattice_attachments: [NodeAttachment; PER_POINT_LATTICE_ATTACHMENTS],
     pub lattice_barycenter: glam::Vec3,
     pub weight_sum: f32,
+}
+
+pub fn pipes() -> (CagePipeCpu, CagePipeGpu) {
+    let (gpu_tx, gpu_rx) = crossbeam::channel::unbounded::<CageDeleteGpu>();
+    let (cpu_tx, cpu_rx) = crossbeam::channel::unbounded::<CageSyncRemap>();
+    (
+        CagePipeCpu {
+            to_gpu: gpu_tx,
+            from_gpu: cpu_rx,
+        },
+        CagePipeGpu {
+            to_cpu: cpu_tx,
+            from_cpu: gpu_rx,
+        },
+    )
+}
+
+#[derive(Clone, Debug)]
+pub struct CageDeleteGpu {
+    /// The GPU index of the cage element to remove
+    pub gpu_index: usize,
+    /// The stable ID of the CPU-GPU cage map
+    pub map_id: IndirectIndex,
+}
+
+#[derive(Clone, Debug, Copy, PartialEq, Eq, Hash)]
+pub struct CageSyncRemap {
+    /// The new GPU index to set
+    pub gpu_index: usize,
+    /// The stable ID of the CPU-GPU cage map
+    pub map_id: IndirectIndex,
+}
+
+#[derive(Debug)]
+pub struct CagePipeCpu {
+    to_gpu: crossbeam::channel::Sender<CageDeleteGpu>,
+    from_gpu: crossbeam::channel::Receiver<CageSyncRemap>,
+}
+impl CagePipeCpu {
+    pub fn queue_delete(&self, gpu_index: usize, map_id: IndirectIndex) {
+        let _ = self.to_gpu.send(CageDeleteGpu { gpu_index, map_id });
+    }
+
+    pub fn poll(&self, map: &mut ParallelIndexArrayColumn<usize>) {
+        while let Ok(CageSyncRemap { gpu_index, map_id }) = self.from_gpu.try_recv() {
+            if let Some(direct) = map.solve_indirect(map_id) {
+                map.contiguous_mut()[direct.as_index()] = gpu_index;
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct CagePipeGpu {
+    to_cpu: crossbeam::channel::Sender<CageSyncRemap>,
+    from_cpu: crossbeam::channel::Receiver<CageDeleteGpu>,
+}
+impl CagePipeGpu {
+    pub fn queue_remap(&self, gpu_index: usize, map_id: IndirectIndex) {
+        let _ = self.to_cpu.send(CageSyncRemap { gpu_index, map_id });
+    }
+
+    fn swap_remove_element<const PARTS: usize, T: Sized + Default>(
+        buf: &PartitionedBuffer<PARTS>,
+        partition: usize,
+        to_remove: usize,
+        length: usize,
+    ) {
+        unsafe {
+            let mut view = buf.view_part_mut::<T>(partition);
+            view.swap(to_remove, length - 1);
+            buf.set_length(partition, (length - 1) as u32);
+        }
+    }
+
+    fn swap_remove_cage<const PARTS: usize>(
+        buf: &PartitionedBuffer<PARTS>,
+        to_remove: usize,
+        length: usize,
+    ) -> IndirectIndex {
+        Self::swap_remove_element::<PARTS, glam::Vec4>(
+            buf,
+            LayoutCage::PodBindRef as usize,
+            to_remove,
+            length,
+        );
+        Self::swap_remove_element::<PARTS, CagePoints>(
+            buf,
+            LayoutCage::PodPoints as usize,
+            to_remove,
+            length,
+        );
+        Self::swap_remove_element::<PARTS, CagePoints>(
+            buf,
+            LayoutCage::PodPointsBind as usize,
+            to_remove,
+            length,
+        );
+        Self::swap_remove_element::<PARTS, [glam::Quat; PER_CAGE_POINTS]>(
+            buf,
+            LayoutCage::PodRotation as usize,
+            to_remove,
+            length,
+        );
+        Self::swap_remove_element::<PARTS, [glam::Vec4; PER_CAGE_POINTS]>(
+            buf,
+            LayoutCage::PodBarycenterBind as usize,
+            to_remove,
+            length,
+        );
+        Self::swap_remove_element::<PARTS, [LatticeAttachments; PER_CAGE_POINTS]>(
+            buf,
+            LayoutCage::PodAttachments as usize,
+            to_remove,
+            length,
+        );
+        Self::swap_remove_element::<PARTS, [glam::Vec4; PER_CAGE_MAX_LATTICE_ATTACHMENTS]>(
+            buf,
+            LayoutCage::PodBindLattice as usize,
+            to_remove,
+            length,
+        );
+        Self::swap_remove_element::<PARTS, [IndirectIndex; PER_CAGE_MAX_LATTICE_ATTACHMENTS]>(
+            buf,
+            LayoutCage::PodLutLattice as usize,
+            to_remove,
+            length,
+        );
+
+        const RMAP_PART_INDEX: usize = LayoutCage::Rmap as usize;
+        unsafe {
+            let mut view = buf.view_part_mut::<IndirectIndex>(RMAP_PART_INDEX);
+            view.swap(to_remove, length - 1);
+            buf.set_length(RMAP_PART_INDEX, (length - 1) as u32);
+            view[to_remove]
+        }
+    }
+
+    pub fn poll(&self, gpu_data: &CagePartitionedBuffer) {
+        while let Ok(msg) = self.from_cpu.try_recv() {
+            let index = msg.gpu_index;
+            let length = gpu_data.length_pod_bindref();
+
+            // id of the element to remap
+            let remap_target = Self::swap_remove_cage(gpu_data.inner(), index, length);
+
+            // if the swap_remove occurred on the last element, we dont need
+            // to remap anything
+            if index + 1 < length {
+                self.queue_remap(index, remap_target);
+            }
+        }
+    }
 }
