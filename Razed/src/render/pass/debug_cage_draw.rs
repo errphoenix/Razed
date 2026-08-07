@@ -91,7 +91,7 @@ ethel::shader_glsl! {
 
             src() {
                 "
-                out_Color = vec4(1.0, 0.0, 1.0, 1.0);
+                out_Color = vec4(1.0, 0.0, 1.0, 0.8);
                 ";
             }
         ];

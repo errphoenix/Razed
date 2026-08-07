@@ -1,6 +1,6 @@
 use ethel::{
     data::{
-        Column, DirectIndex, IndirectIndex, ParallelIndexArrayColumn,
+        Column, DirectIndex, IndirectIndex, ParallelIndexArrayColumn, SparseSlot,
         column::IterColumn,
         hash::{Cell, FxSpatialHash},
         table::TableView,

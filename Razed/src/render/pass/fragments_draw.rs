@@ -144,21 +144,25 @@ ethel::shader_glsl! {
                 const float DIFFUSE_ALPHA_PAGE = 6.0;
                 const float NORMAL_EMISSIVE_PAGE = 7.0;
                 const float ORMD_PAGE = 8.0;
+                const float UV_SCALE = 0.35;
+
+                vec2 scaled_uv = fs_uv * UV_SCALE;
 
                 vec4 qDiffuseAlpha = texture(
                     texture_map[DEV_MATERIAL_GROUP],
-                    vec3(fs_uv, DIFFUSE_ALPHA_PAGE)
+                    vec3(scaled_uv, DIFFUSE_ALPHA_PAGE)
                 );
                 vec4 qNormalEmissive = texture(
                     texture_map[DEV_MATERIAL_GROUP],
-                    vec3(fs_uv, NORMAL_EMISSIVE_PAGE)
+                    vec3(scaled_uv, NORMAL_EMISSIVE_PAGE)
                 );
                 vec4 qOrmd = texture(
                     texture_map[DEV_MATERIAL_GROUP],
-                    vec3(fs_uv, ORMD_PAGE)
+                    vec3(scaled_uv, ORMD_PAGE)
                 );
 
-                vec3 diffuse = qDiffuseAlpha.rgb;
+                //vec3 diffuse = qDiffuseAlpha.rgb;
+                vec3 diffuse = vec3(0.725);
                 float alpha = qDiffuseAlpha.a;
                 vec3 normalMap = qNormalEmissive.rgb;
                 float emissive = qNormalEmissive.a;

@@ -240,8 +240,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                         map_index,
                         bindref,
                         lattice_binds,
-                        lattice_lut,
                         points_bind,
+                        lattice_lut,
                         points_barycenter_bind,
                         attachments,
                     } = data;
@@ -263,15 +263,13 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
                     offset += 1;
                 });
-
-                let offset = cage_buf.length_pod_bindref();
             }
         }
 
         let render_pool = &self.render_pool;
         let cage_count = frame_data.cage_points_count.load(Ordering::Acquire);
 
-        // cage extract rotations compute pass
+        // cage deformation (derive cov. + svd) compute pass
         {
             use pass::cage_deform_compute::CageDeformComputeCtx;
 
@@ -360,7 +358,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         {
             let ctx = pass::DebugCageDrawCtx {
                 cage_data: &frame_data.cages,
-                point_size: 2.5,
+                point_size: 0.65,
                 cage_total_count: cage_count,
             };
             self.pipeline()
