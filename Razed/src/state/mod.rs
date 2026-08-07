@@ -855,6 +855,13 @@ impl State {
                 }
 
                 let data = self.fragments.data();
+
+                // query delete of associated cage
+                {
+                    let cage_id = data.deformation_cage[frag_index.as_index()];
+                    self.cage.queue_delete_cage(cage_id);
+                }
+
                 let mesh_id = data.mesh_id[frag_index.as_index()];
                 let position = data.world_position[frag_index.as_index()];
                 let mass_coeff = data.mass_coeff[frag_index.as_index()];
