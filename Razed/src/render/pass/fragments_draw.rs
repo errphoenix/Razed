@@ -303,9 +303,7 @@ ethel::shader_glsl! {
 
                 IndirectIndex cage_id = pod_cage_id[fragment_id];
                 DirectIndex cage_did = imap_cages[cage_id.index];
-                // take in account direct index degenerate, which is
-                // not present in the gpu buffer arrays
-                uint cage_index = cage_did.index - 1;
+                uint cage_index = cage_did.index;
 
                 vec4[8] localpoints = pod_cages_localpoints[cage_index];
                 vec4[8] localpoints_bind = pod_cages_localpoints_bind[cage_index];

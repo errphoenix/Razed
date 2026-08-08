@@ -2,10 +2,10 @@ pub mod graphics;
 pub mod pass;
 pub mod shader_commons;
 
-use std::sync::atomic::Ordering;
+use std::{num::NonZeroUsize, sync::atomic::Ordering};
 
 use ethel::{
-    render::{Resolution, command::DrawGroups},
+    render::{Resolution, buffer::StorageSection, command::DrawGroups},
     state::camera::ViewPoint,
 };
 use gui::{

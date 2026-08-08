@@ -222,7 +222,7 @@ ethel::shader_glsl_compute! {
 
         src() {
             "
-            uint local       = gl_LocalInvocationID.x;
+            uint local             = gl_LocalInvocationID.x;
             uint cage_local_index  = local / PER_GROUP_CAGE_COUNT;
             uint point_local_index = local % PER_GROUP_CAGE_COUNT;
             uint cage_global_index = gl_WorkGroupID.x * PER_GROUP_CAGE_COUNT + cage_local_index;

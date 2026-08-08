@@ -1,7 +1,8 @@
+use std::num::NonZeroUsize;
+
 use ethel::{
     data::{
-        Column, DirectIndex, IndirectIndex, ParallelIndexArrayColumn, SparseSlot,
-        column::IterColumn,
+        Column, DirectIndex, IndexArrayColumn, IndirectIndex, SparseSlot,
         hash::{Cell, FxSpatialHash},
         table::TableView,
     },
@@ -36,7 +37,7 @@ pub struct CageAos {
 #[derive(Debug, Default)]
 pub struct CageSystem {
     local_buffer: Vec<CageAos>,
-    gpu_map: ParallelIndexArrayColumn<u32>,
+    gpu_map: IndexArrayColumn<()>,
 
     pipe: Option<CagePipeCpu>,
 
@@ -50,7 +51,7 @@ impl CageSystem {
         Self::default()
     }
 
-    pub fn gpu_map(&self) -> &ParallelIndexArrayColumn<u32> {
+    pub fn gpu_map(&self) -> &IndexArrayColumn<()> {
         &self.gpu_map
     }
 
@@ -80,7 +81,6 @@ impl CageSystem {
     /// immediately deleted from the local map residing on this thread.
     pub fn queue_delete_cage(&mut self, cage_id: IndirectIndex) {
         let gpu_index = self.gpu_index_of(cage_id);
-        self.gpu_map.free(cage_id);
 
         if gpu_index.is_some_and(|i| i == 0) || gpu_index.is_none() {
             tracing::warn!(
@@ -101,9 +101,11 @@ impl CageSystem {
     }
 
     pub fn gpu_index_of(&self, cage_id: IndirectIndex) -> Option<u32> {
-        self.gpu_map
-            .solve_indirect(cage_id)
-            .map(|direct| self.gpu_map.contiguous()[direct.as_index()])
+        self.gpu_map()
+            .slots_map()
+            .get(cage_id.as_index())
+            .copied()
+            .map(DirectIndex::as_int)
     }
 
     pub fn upload_cages(&self, section: StorageSection, to: &TriVec<CageAos>) {
@@ -152,7 +154,7 @@ impl CageSystem {
             glam::vec4(local.x, local.y, local.z, 1.0)
         });
 
-        let map_id = self.gpu_map.insert(0u32);
+        let map_id = self.gpu_map.insert(());
         let cage = CageAos {
             map_index: map_id,
             bindref: cage_center,
@@ -339,7 +341,9 @@ pub struct CageDeleteGpu {
 #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash)]
 pub struct CageSyncRemap {
     /// The new GPU index to set
-    pub gpu_index: usize,
+    ///
+    /// A value of `None` is basically a delete operation.
+    pub gpu_index: Option<NonZeroUsize>,
     /// The stable ID of the CPU-GPU cage map
     pub map_id: IndirectIndex,
 }
@@ -354,10 +358,17 @@ impl CagePipeCpu {
         let _ = self.to_gpu.send(CageDeleteGpu { map_id });
     }
 
-    pub fn poll(&self, map: &mut ParallelIndexArrayColumn<u32>) {
+    pub fn poll(&self, map: &mut IndexArrayColumn<()>) {
         while let Ok(CageSyncRemap { gpu_index, map_id }) = self.from_gpu.try_recv() {
-            if let Some(direct) = map.solve_indirect(map_id) {
-                map.contiguous_mut()[direct.as_index()] = gpu_index as u32;
+            match gpu_index {
+                Some(new_index) => {
+                    let new_index = new_index.get();
+                    let new_direct = DirectIndex::from_index(new_index, map_id.generation());
+                    map.slots_map_mut()[map_id.as_index()] = new_direct;
+                }
+                _ => {
+                    map.free(map_id);
+                }
             }
         }
     }
@@ -369,7 +380,7 @@ pub struct CagePipeGpu {
     from_cpu: crossbeam::channel::Receiver<CageDeleteGpu>,
 }
 impl CagePipeGpu {
-    pub fn queue_remap(&self, gpu_index: usize, map_id: IndirectIndex) {
+    pub fn queue_remap(&self, gpu_index: Option<NonZeroUsize>, map_id: IndirectIndex) {
         let _ = self.to_cpu.send(CageSyncRemap { gpu_index, map_id });
     }
 
@@ -464,15 +475,8 @@ impl CagePipeGpu {
 
             let index = direct.as_index();
             let length = gpu_data.length_pod_bindref();
-
-            // id of the element to remap
-            let remap_target = Self::swap_remove_cage(gpu_data.inner(), index, length);
-
-            // if the swap_remove occurred on the last element, we dont need
-            // to remap anything
-            if index + 1 < length {
-                self.queue_remap(index, remap_target);
-            }
+            Self::swap_remove_cage(gpu_data.inner(), index, length);
+            self.queue_remap(None, id);
         }
     }
 }
