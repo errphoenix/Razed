@@ -221,51 +221,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             .render_frame_last_duration
             .set_and_advance(self.last_frame_render);
 
-        // sync cage pipe and upload new cages
-        {
-            let cage_buf = &frame_data.cages;
-            let cage_map = &frame_data.cage_map;
-            let imap = unsafe { cage_map.view_section(section.as_index()) };
-
-            if let Some(pipe) = self.cage_pipe.as_ref() {
-                pipe.poll(cage_buf, imap.as_slice());
-            }
-
-            let upload_buf = &frame_data.cage_upload_buf;
-            if !upload_buf.is_empty(section.as_index()) {
-                let mut offset = cage_buf.length_pod_bindref();
-
-                upload_buf.drain(section.as_index(), ..).for_each(|data| {
-                    let CageAos {
-                        map_index,
-                        bindref,
-                        lattice_binds,
-                        points_bind,
-                        lattice_lut,
-                        points_barycenter_bind,
-                        attachments,
-                    } = data;
-
-                    let bindref = glam::vec4(bindref.x, bindref.y, bindref.z, 1.0);
-                    let points_bind = CagePoints(points_bind);
-
-                    cage_buf.blit_rmap(&[map_index], offset);
-                    cage_buf.blit_pod_bindref(&[bindref], offset);
-                    cage_buf.blit_pod_bind_lattice(&[lattice_binds], offset);
-                    cage_buf.blit_pod_lut_lattice(&[lattice_lut], offset);
-                    cage_buf.blit_pod_points_bind(&[points_bind], offset);
-                    cage_buf.blit_pod_barycenter_bind(&[points_barycenter_bind], offset);
-                    cage_buf.blit_pod_attachments(&[attachments], offset);
-
-                    if let Some(pipe) = self.cage_pipe() {
-                        pipe.queue_remap(offset, map_index);
-                    }
-
-                    offset += 1;
-                });
-            }
-        }
-
         let render_pool = &self.render_pool;
         let cage_count = frame_data.cage_points_count.load(Ordering::Acquire);
 
@@ -290,6 +245,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         }
         // there is no barrier here: an ssbo barrier is set after
         // fd_preprocess, which does not depend on this pass
+
+        self.sync_cage_changes(frame_data, section);
 
         unsafe {
             janus::gl::Clear(janus::gl::COLOR_BUFFER_BIT | janus::gl::DEPTH_BUFFER_BIT);
@@ -549,6 +506,51 @@ impl Renderer {
             }
 
             self.lines_debug_buffer.set_color_fallback(COLOR);
+        }
+    }
+
+    fn sync_cage_changes(&self, frame_data: &FrameDataBuffers, section: StorageSection) {
+        let cage_buf = &frame_data.cages;
+        let cage_map = &frame_data.cage_map;
+        let imap = unsafe { cage_map.view_section(section.as_index()) };
+
+        if let Some(pipe) = self.cage_pipe.as_ref() {
+            pipe.poll(cage_buf, imap.as_slice());
+        }
+
+        let upload_buf = &frame_data.cage_upload_buf;
+        if !upload_buf.is_empty(section.as_index()) {
+            let mut offset = cage_buf.length_pod_bindref() + 1;
+
+            upload_buf.drain(section.as_index(), ..).for_each(|data| {
+                let CageAos {
+                    map_index,
+                    bindref,
+                    lattice_binds,
+                    points_bind,
+                    lattice_lut,
+                    points_barycenter_bind,
+                    attachments,
+                } = data;
+
+                let bindref = glam::vec4(bindref.x, bindref.y, bindref.z, 1.0);
+                let points_bind = CagePoints(points_bind);
+
+                cage_buf.blit_rmap(&[map_index], offset);
+                cage_buf.blit_pod_bindref(&[bindref], offset);
+                cage_buf.blit_pod_bind_lattice(&[lattice_binds], offset);
+                cage_buf.blit_pod_lut_lattice(&[lattice_lut], offset);
+                cage_buf.blit_pod_points_bind(&[points_bind], offset);
+                cage_buf.blit_pod_barycenter_bind(&[points_barycenter_bind], offset);
+                cage_buf.blit_pod_attachments(&[attachments], offset);
+
+                if let Some(pipe) = self.cage_pipe() {
+                    let gpu_index = NonZeroUsize::new(offset).expect("offset is never 0");
+                    pipe.queue_remap(Some(gpu_index), map_index);
+                }
+
+                offset += 1;
+            });
         }
     }
 }
