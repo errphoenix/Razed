@@ -1,12 +1,12 @@
 use ethel::{
-    render::buffer::PartitionedTriBuffer,
+    render::buffer::{PartitionedTriBuffer, TriBuffer},
     shader::{Constant, GlslLib, GlslStruct, GlslUniform, ShaderProgram, WriteValue},
 };
 use rendrs::pipeline::ComputePass;
 
 use crate::{
     data::{CagePartitionedBuffer, LayoutXpbdDebugData},
-    structure::cage,
+    structure::cage::{self, OffsetRotation},
 };
 
 pub type CageDeformComputePass = ComputePass<CageDeformComputeCtxWrapper, 0, 0>;
@@ -15,6 +15,7 @@ pub type CageDeformComputePass = ComputePass<CageDeformComputeCtxWrapper, 0, 0>;
 pub struct CageDeformComputeCtx<'data> {
     pub total_cage_count: u32,
     pub cage_data: &'data CagePartitionedBuffer,
+    pub cage_feedback: &'data TriBuffer<OffsetRotation>,
     pub lattice_data: &'data PartitionedTriBuffer<4>,
 }
 
@@ -25,7 +26,6 @@ pub const fn pass(shader: &ComputeShaderCageDeform) -> CageDeformComputePass {
     CageDeformComputePass::new(handle_view, [], [], |section, ctx| {
         let section = section.as_index();
 
-        ctx.cage_data.bind_ssbo_all();
         ctx.lattice_data.bind_shader_storage_single(
             section,
             LayoutXpbdDebugData::ImapNodes as usize,
@@ -36,6 +36,9 @@ pub const fn pass(shader: &ComputeShaderCageDeform) -> CageDeformComputePass {
             LayoutXpbdDebugData::PodNodes as usize,
             Some(SSBO_INDEX_POD_LATTICE_POSITION),
         );
+        ctx.cage_feedback
+            .bind_shader_storage(section, SSBO_INDEX_OUT_FEEDBACK, 0);
+        ctx.cage_data.bind_ssbo_all();
 
         let rotations_count = ctx.total_cage_count * cage::PER_CAGE_POINTS as u32;
         let dispatch_count = rotations_count.div_ceil(CAGE_DEFORM_WORKGROUP_SIZE);
@@ -65,7 +68,10 @@ impl WriteValue for NodeAttachment {
 }
 
 macro_rules! ssbo_binding {
-    (Pod_Rotation) => {
+    // (Pod_Rotation) => {
+    //     0
+    // };
+    (Out_Feedback) => {
         0
     };
     (Pod_BindRef) => {
@@ -97,7 +103,7 @@ macro_rules! ssbo_binding {
     };
 }
 
-pub const SSBO_INDEX_POD_ROTATION: u32 = ssbo_binding!(Pod_Rotation);
+//pub const SSBO_INDEX_POD_ROTATION: u32 = ssbo_binding!(Pod_Rotation);
 pub const SSBO_INDEX_POD_BIND_REF: u32 = ssbo_binding!(Pod_BindRef);
 pub const SSBO_INDEX_POD_POINTS: u32 = ssbo_binding!(Pod_Points);
 pub const SSBO_INDEX_POD_POINTS_BIND: u32 = ssbo_binding!(Pod_Points_Bind);
@@ -107,9 +113,11 @@ pub const SSBO_INDEX_POD_LUT_LATTICE: u32 = ssbo_binding!(Pod_Lut_Lattice);
 pub const SSBO_INDEX_POD_BIND_LATTICE: u32 = ssbo_binding!(Pod_Bind_Lattice);
 pub const SSBO_INDEX_IMAP_LATTICE: u32 = ssbo_binding!(IMap_Lattice);
 pub const SSBO_INDEX_POD_LATTICE_POSITION: u32 = ssbo_binding!(Pod_Lattice_Position);
+pub const SSBO_INDEX_OUT_FEEDBACK: u32 = ssbo_binding!(Out_Feedback);
 
 pub const CAGE_DEFORM_WORKGROUP_SIZE: u32 = 64;
 pub const CAGE_DEFORM_PER_GROUP_CAGE_COUNT: u32 = 8;
+pub const CAGE_DEFORM_PER_CAGE_POINT_COUNT: u32 = 8;
 pub const CAGE_DEFORM_PER_POINT_ATTACH_COUNT: u32 = cage::PER_POINT_LATTICE_ATTACHMENTS as u32;
 
 pub const TYPE_CAGE_POINTS_LIST: GlslStruct = CagePointsGlslStruct::as_definition();
@@ -151,11 +159,6 @@ ethel::shader_glsl_compute! {
         };
 
         ssbo {
-            ethel::shader_glsl_ssbo! {
-                buf Pod_Rotation => {
-                    [dyn_array vec4: pod_cage_rotation => each 8] // 8 is per-cage-points
-                }
-            }
             ethel::shader_glsl_ssbo! {
                 buf Pod_BindRef => {
                     [dyn_array vec4: pod_cage_bindref]
@@ -201,10 +204,16 @@ ethel::shader_glsl_compute! {
                     [dyn_array vec4: pod_lattice_position]
                 }
             }
+            ethel::shader_glsl_ssbo! {
+                buf Out_Feedback => {
+                    [dyn_array vec4: out_cage_feedback => each 2] // offset 0, rotation 1
+                }
+            }
         };
 
         const {
             Constant::new("PER_GROUP_CAGE_COUNT", CAGE_DEFORM_PER_GROUP_CAGE_COUNT)
+            Constant::new("PER_CAGE_POINT_COUNT", CAGE_DEFORM_PER_CAGE_POINT_COUNT)
             Constant::new("PER_POINT_ATTACH_COUNT", CAGE_DEFORM_PER_POINT_ATTACH_COUNT)
         };
 
@@ -217,7 +226,8 @@ ethel::shader_glsl_compute! {
         };
 
         share {
-            vec3 sm_lattice_pos[PER_GROUP_CAGE_COUNT][8];
+            vec3 sm_lattice_pos[PER_GROUP_CAGE_COUNT][PER_CAGE_POINT_COUNT];
+            vec3 sm_offsets_tmp[PER_GROUP_CAGE_COUNT][PER_CAGE_POINT_COUNT];
         };
 
         src() {
@@ -246,53 +256,73 @@ ethel::shader_glsl_compute! {
 
             barrier();
 
-            if (cage_global_index >= total_cage_count) return;
+            vec4 rotation = vec4(vec3(0.0), 1.0);
+            if (cage_global_index < total_cage_count) {
+                vec3 cage_bind_ref = pod_cage_bindref[cage_global_index].xyz;
+                vec4 cage_lattice_binds[8] = pod_cage_lattice_bind[cage_global_index]; // shared per-cage lattice bind-pos cache
+                vec4 point_barycenter_binds[8] = pod_cage_barycenter_bind[cage_global_index]; // per-point bind-lattice barycenter
+                vec3 bind_barycenter = point_barycenter_binds[point_local_index].xyz;
 
-            vec3 cage_bind_ref = pod_cage_bindref[cage_global_index].xyz;
-            vec4 cage_lattice_binds[8] = pod_cage_lattice_bind[cage_global_index]; // shared per-cage lattice bind-pos cache
-            vec4 point_barycenter_binds[8] = pod_cage_barycenter_bind[cage_global_index]; // per-point bind-lattice barycenter
-            vec3 bind_barycenter = point_barycenter_binds[point_local_index].xyz;
+                LatticeAttachments cage_attachments[8] = pod_cage_attachments[cage_global_index];
+                NodeAttachment point_attachments[PER_POINT_ATTACH_COUNT] = cage_attachments[point_local_index].list;
 
-            LatticeAttachments cage_attachments[8] = pod_cage_attachments[cage_global_index];
-            NodeAttachment point_attachments[PER_POINT_ATTACH_COUNT] = cage_attachments[point_local_index].list;
+                vec3 shared_cage_lattice_pos[8] = sm_lattice_pos[cage_local_index];
 
-            vec3 shared_cage_lattice_pos[8] = sm_lattice_pos[cage_local_index];
+                // compute real-time barycenter
+                vec3 real_barycenter = vec3(0.0);
+                for (uint i = 0; i < PER_POINT_ATTACH_COUNT; ++i) {
+                    NodeAttachment attachment = point_attachments[i];
+                    vec3 real_node_pos = shared_cage_lattice_pos[attachment.index];
+                    real_barycenter += real_node_pos * attachment.weight;
+                }
+                real_barycenter -= cage_bind_ref;
 
-            // compute real-time barycenter
-            vec3 real_barycenter = vec3(0.0);
-            for (uint i = 0; i < PER_POINT_ATTACH_COUNT; ++i) {
-                NodeAttachment attachment = point_attachments[i];
-                vec3 real_node_pos = shared_cage_lattice_pos[attachment.index];
-                real_barycenter += real_node_pos * attachment.weight;
+                mat3 covariance = mat3(0.0);
+                for (uint i = 0; i < PER_POINT_ATTACH_COUNT; ++i) {
+                    NodeAttachment attachment = point_attachments[i];
+
+                    vec3 real_node_pos = shared_cage_lattice_pos[attachment.index];
+                    vec3 bind_node_pos = cage_lattice_binds[attachment.index].xyz;
+
+                    covariance += outer(
+                        real_node_pos - real_barycenter,
+                        bind_node_pos - bind_barycenter
+                    ) * attachment.weight;
+                }
+                const mat3 MAT3_IDENTITY = mat3(vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 0.0, 1.0));
+                covariance += MAT3_IDENTITY * 0.0001;
+
+                mat3 rotation_mat = svdExtractRotation(covariance);
+                rotation = matToQuat(rotation_mat);
+
+                vec4 cage_points_bind[8] = pod_cage_points_bind[cage_global_index];
+                vec3 point_bind = cage_points_bind[point_local_index].xyz;
+                vec3 deformed = rotateQuat(point_bind - bind_barycenter, rotation) + real_barycenter;
+
+                pod_cage_points[cage_global_index][point_local_index] = vec4(deformed, 1.0);
+                sm_offsets_tmp[cage_local_index][point_local_index] = deformed;
             }
-            real_barycenter -= cage_bind_ref;
 
-            mat3 covariance = mat3(0.0);
-            for (uint i = 0; i < PER_POINT_ATTACH_COUNT; ++i) {
-                NodeAttachment attachment = point_attachments[i];
+            barrier();
 
-                vec3 real_node_pos = shared_cage_lattice_pos[attachment.index];
-                vec3 bind_node_pos = cage_lattice_binds[attachment.index].xyz;
+            if (point_local_index == 0) {
+                vec3 offset_sum = vec3(0.0);
+                offset_sum += sm_offsets_tmp[cage_local_index][0];
+                offset_sum += sm_offsets_tmp[cage_local_index][1];
+                offset_sum += sm_offsets_tmp[cage_local_index][2];
+                offset_sum += sm_offsets_tmp[cage_local_index][3];
+                offset_sum += sm_offsets_tmp[cage_local_index][4];
+                offset_sum += sm_offsets_tmp[cage_local_index][5];
+                offset_sum += sm_offsets_tmp[cage_local_index][6];
+                offset_sum += sm_offsets_tmp[cage_local_index][7];
 
-                covariance += outer(
-                    real_node_pos - real_barycenter,
-                    bind_node_pos - bind_barycenter
-                ) * attachment.weight;
+                vec4 fb_offset = vec4(offset_sum, 1.0);
+                vec4 fb_rotation = rotation; // simply use the first point's rotation
+
+                out_cage_feedback[cage_global_index][0] = fb_offset;
+                out_cage_feedback[cage_global_index][1] = fb_rotation;
             }
-            const mat3 MAT3_IDENTITY = mat3(vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 0.0, 1.0));
-            covariance += MAT3_IDENTITY * 0.0001;
 
-            mat3 rotation_mat = svdExtractRotation(covariance);
-            vec4 rotation = matToQuat(rotation_mat);
-
-            vec4 cage_rotations[8] = pod_cage_rotation[cage_global_index];
-            cage_rotations[point_local_index] = rotation;
-
-            vec4 cage_points_bind[8] = pod_cage_points_bind[cage_global_index];
-            vec3 point_bind = cage_points_bind[point_local_index].xyz;
-            vec3 deformed = rotateQuat(point_bind - bind_barycenter, rotation) + real_barycenter;
-
-            pod_cage_points[cage_global_index][point_local_index] = vec4(deformed, 1.0);
             ";
         }
     }

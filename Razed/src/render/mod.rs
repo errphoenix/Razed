@@ -232,6 +232,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 total_cage_count: cage_count,
                 cage_data: &frame_data.cages,
                 lattice_data: &frame_data.lattice_debug,
+                cage_feedback: &frame_data.cage_feedback,
             };
 
             self.shaders.cage_deform.bind();
@@ -535,7 +536,6 @@ impl Renderer {
 
                 let bindref = glam::vec4(bindref.x, bindref.y, bindref.z, 1.0);
                 let points_bind = CagePoints(points_bind);
-
                 cage_buf.blit_rmap(&[map_index], offset);
                 cage_buf.blit_pod_bindref(&[bindref], offset);
                 cage_buf.blit_pod_bind_lattice(&[lattice_binds], offset);

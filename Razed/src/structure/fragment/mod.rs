@@ -30,7 +30,6 @@ ethel::table_spec! {
         // bind position at fragment creation
         // vec4 due to SSBO alignment requirements
         bind_position: glam::Vec4;
-        world_position: glam::Vec3;
 
         // lattice contribution coefficient
         health_coeff: f32;
@@ -351,7 +350,6 @@ impl FragmentSystem {
                 weights,
                 IndirectIndex::default(),
                 position,
-                fragment_world,
                 50.0, // todo: health contribution
                 1.0,  // todo: debris rigid body
                 1.0,  // todo: damage and integrity
@@ -382,7 +380,7 @@ impl FragmentSystem {
         let offset = {
             let opt = grid.options();
             let size = glam::vec3(opt.width, opt.height, opt.depth);
-            (opt.cell_size - size) * 0.5
+            (opt.cell_size - size) * 0.5 - glam::Vec3::X * 2.0
         };
         for &cell in grid.voxels().cells() {
             let point = grid.point_at_or_approx(cell) + origin + offset;

@@ -2,7 +2,7 @@ use std::sync::{Arc, atomic::AtomicU32};
 
 use crate::{
     render::{self, pass::CagePoints},
-    structure::cage::{CageAos, PER_CAGE_MAX_LATTICE_ATTACHMENTS, PER_CAGE_POINTS},
+    structure::cage::{CageAos, OffsetRotation, PER_CAGE_MAX_LATTICE_ATTACHMENTS, PER_CAGE_POINTS},
 };
 use ethel::{
     DrawCommand, layout_buffer, layout_mesh_buffer,
@@ -128,47 +128,39 @@ ethel::typed_part_buffer! {
             bind 0;
         };
 
-        enum Pod_Rotation: CAGES_ALLOC => {
-            type [glam::Quat; PER_CAGE_POINTS];
-            bind 1;
-            init with {
-                [glam::Quat::IDENTITY; PER_CAGE_POINTS]
-            };
-            shader render::pass::cage_deform_compute::SSBO_INDEX_POD_ROTATION;
-        };
         enum Pod_BindRef: CAGES_ALLOC => {
             type glam::Vec4;
-            bind 2;
+            bind 1;
             shader render::pass::cage_deform_compute::SSBO_INDEX_POD_BIND_REF;
         };
         enum Pod_Points: CAGES_ALLOC => {
             type CagePoints;
-            bind 3;
+            bind 2;
             shader render::pass::cage_deform_compute::SSBO_INDEX_POD_POINTS;
         };
         enum Pod_Points_Bind: CAGES_ALLOC => {
             type CagePoints;
-            bind 4;
+            bind 3;
             shader render::pass::cage_deform_compute::SSBO_INDEX_POD_POINTS_BIND;
         };
         enum Pod_Barycenter_Bind: CAGES_ALLOC => {
             type [glam::Vec4; PER_CAGE_POINTS];
-            bind 5;
+            bind 4;
             shader render::pass::cage_deform_compute::SSBO_INDEX_POD_BARYCENTER_BIND;
         };
         enum Pod_Attachments: CAGES_ALLOC => {
             type [render::pass::LatticeAttachments; PER_CAGE_POINTS];
-            bind 6;
+            bind 5;
             shader render::pass::cage_deform_compute::SSBO_INDEX_POD_ATTACHMENTS;
         };
         enum Pod_Lut_Lattice: CAGES_ALLOC => {
             type [IndirectIndex; PER_CAGE_MAX_LATTICE_ATTACHMENTS];
-            bind 7;
+            bind 6;
             shader render::pass::cage_deform_compute::SSBO_INDEX_POD_LUT_LATTICE;
         };
         enum Pod_Bind_Lattice: CAGES_ALLOC => {
             type [glam::Vec4; PER_CAGE_MAX_LATTICE_ATTACHMENTS];
-            bind 8;
+            bind 7;
             shader render::pass::cage_deform_compute::SSBO_INDEX_POD_BIND_LATTICE;
         };
     }
@@ -225,6 +217,7 @@ pub struct FrameDataBuffers {
     pub cage_map: TriBuffer<DirectIndex>,
     pub cage_points_count: Arc<AtomicU32>,
     pub cage_upload_buf: TriVec<CageAos>,
+    pub cage_feedback: TriBuffer<OffsetRotation>,
 
     pub lattice_debug: PartitionedTriBuffer<LATTICE_STORAGE_PARTS>,
     pub lattice_constraint_count: Arc<AtomicU32>,
@@ -270,6 +263,7 @@ impl FrameDataBuffers {
             cage_map: TriBuffer::zeroed(CAGES_ALLOC),
             cage_points_count: Arc::new(AtomicU32::new(0)),
             cage_upload_buf: TriVec::new(),
+            cage_feedback: TriBuffer::zeroed(CAGES_ALLOC),
 
             lattice_debug: xpbd_visualiser,
             lattice_constraint_count: Arc::new(AtomicU32::new(0)),

@@ -17,7 +17,9 @@ use crate::{
     procedural::{VoxelGrid, VoxelGridOptions},
     render::RenderGroup,
     structure::{
-        CageSystem, DebrisSystem, FragmentSystem, FragmentsRowTableView, create_structure_lattice,
+        CageSystem, DebrisSystem, FragmentSystem, FragmentsRowTableView,
+        cage::OffsetRotation,
+        create_structure_lattice,
         debris::MotionAccumulator,
         lattice::{LatticeSystem, NodesRowTableView},
     },
@@ -41,6 +43,7 @@ use ethel::{
         time::AccumulationWindow,
     },
 };
+use glam::Vec4Swizzles;
 use gui::{
     InterfaceSystem,
     text::{GlyphAtlas, GlyphRaster},
@@ -272,6 +275,13 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             let _ = self
                 .render_frame_time
                 .set_and_advance(storage.render_frame_last_duration.get());
+
+            // load cage deformation feedback data
+            {
+                let feedback_buf = &storage.cage_feedback;
+                let feedback = unsafe { feedback_buf.view_section(buf_idx) };
+                self.cage.set_deformation_feedback(feedback.as_slice());
+            }
 
             // interface quads & commands upload
             {
@@ -856,14 +866,15 @@ impl State {
 
                 let data = self.fragments.data();
 
-                // query delete of associated cage
-                {
-                    let cage_id = data.deformation_cage[frag_index.as_index()];
-                    self.cage.queue_delete_cage(cage_id);
-                }
+                let cage_id = data.deformation_cage[frag_index.as_index()];
+                let cage_did = self.cage.gpu_index_of(cage_id).unwrap();
+                let OffsetRotation { offset, rotation } =
+                    self.cage.deformation_feedback()[cage_did as usize];
+
+                self.cage.queue_delete_cage(cage_id);
 
                 let mesh_id = data.mesh_id[frag_index.as_index()];
-                let position = data.world_position[frag_index.as_index()];
+                let position = data.bind_position[frag_index.as_index()].xyz();
                 let mass_coeff = data.mass_coeff[frag_index.as_index()];
                 let integrity = data.integrity[frag_index.as_index()];
                 let mass = integrity * mass_coeff;
@@ -890,7 +901,8 @@ impl State {
                 inherit_v *= 0.035;
                 inherit_av *= 0.01;
 
-                let position = position - glam::Vec3::X * 2f32;
+                let position = position + (offset.xyz() * 0.125);
+                //let position = rotation.normalize().mul_vec3(position);
 
                 buffer.push(DebrisData {
                     position,

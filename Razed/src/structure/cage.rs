@@ -1,4 +1,4 @@
-use std::num::NonZeroUsize;
+use std::{cell::UnsafeCell, num::NonZeroUsize};
 
 use ethel::{
     data::{
@@ -34,10 +34,18 @@ pub struct CageAos {
     pub attachments: [LatticeAttachments; PER_CAGE_POINTS],
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct OffsetRotation {
+    pub offset: glam::Vec4,
+    pub rotation: glam::Quat,
+}
+
 #[derive(Debug, Default)]
 pub struct CageSystem {
     local_buffer: Vec<CageAos>,
     gpu_map: IndexArrayColumn<()>,
+
+    deformation_feedback: UnsafeCell<Vec<OffsetRotation>>,
 
     pipe: Option<CagePipeCpu>,
 
@@ -46,9 +54,23 @@ pub struct CageSystem {
 
     generate_query_near_buf: Vec<Cell>,
 }
+unsafe impl Send for CageSystem {}
+unsafe impl Sync for CageSystem {}
 impl CageSystem {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn set_deformation_feedback(&self, data: &[OffsetRotation]) {
+        let buf = self.deformation_feedback.get();
+        unsafe {
+            (*buf).clear();
+            (*buf).extend_from_slice(data);
+        }
+    }
+
+    pub fn deformation_feedback(&self) -> &[OffsetRotation] {
+        unsafe { self.deformation_feedback.get().as_ref().unwrap() }
     }
 
     pub fn gpu_map(&self) -> &IndexArrayColumn<()> {
@@ -417,12 +439,6 @@ impl CagePipeGpu {
         Self::swap_remove_element::<PARTS, CagePoints>(
             buf,
             LayoutCage::PodPointsBind as usize,
-            to_remove,
-            length,
-        );
-        Self::swap_remove_element::<PARTS, [glam::Quat; PER_CAGE_POINTS]>(
-            buf,
-            LayoutCage::PodRotation as usize,
             to_remove,
             length,
         );

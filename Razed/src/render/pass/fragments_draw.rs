@@ -364,7 +364,7 @@ ethel::shader_glsl! {
                 vec3 rc1 = mix(rc01, rc11, ify);
                 vec3 local_deformed = mix(rc0, rc1, ifz);
 
-                vec4 world = vec4(cage_bindref + local_deformed, 1.0);
+                vec4 world = vec4(bind_pose + local_deformed, 1.0);
 
                 // derive normal
                 vec3 e_x0 = p100 - p000;
