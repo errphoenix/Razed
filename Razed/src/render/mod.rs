@@ -247,8 +247,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         // there is no barrier here: an ssbo barrier is set after
         // fd_preprocess, which does not depend on this pass
 
-        self.sync_cage_changes(frame_data, section);
-
         unsafe {
             janus::gl::Clear(janus::gl::COLOR_BUFFER_BIT | janus::gl::DEPTH_BUFFER_BIT);
         }
@@ -360,6 +358,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 .debug_lines_draw_pass
                 .execute(section, render_pool, &ctx);
         }
+
+        self.sync_cage_changes(frame_data, section);
     }
 
     fn init_resources(&mut self, resolution: Resolution) {

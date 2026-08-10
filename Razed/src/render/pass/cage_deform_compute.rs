@@ -316,8 +316,7 @@ ethel::shader_glsl_compute! {
                 offset_sum += sm_offsets_tmp[cage_local_index][6];
                 offset_sum += sm_offsets_tmp[cage_local_index][7];
 
-                vec4 fb_offset = vec4(offset_sum, 1.0);
-                vec4 fb_rotation = rotation; // simply use the first point's rotation
+                vec4 fb_offset = vec4(offset_sum * 0.125, 1.0);
 
                 out_cage_feedback[cage_global_index][0] = fb_offset;
                 out_cage_feedback[cage_global_index][1] = fb_rotation;

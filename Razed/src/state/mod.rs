@@ -569,7 +569,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         self.profiler.page();
         let t0 = Instant::now();
 
-        self.cage.poll_remap();
         self.textures_metadata_registry.pipe_sync_commands();
 
         if screen.resolution().is_changed() {
@@ -704,6 +703,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         self.profiler.capture_duration("debris_hash", || {
             self.debris.hash_debris();
         });
+
+        self.cage.poll_remap();
     }
 }
 
