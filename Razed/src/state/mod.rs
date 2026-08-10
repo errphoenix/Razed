@@ -851,6 +851,7 @@ impl State {
         if count > 0 {
             struct DebrisData {
                 position: glam::Vec3,
+                rotation: glam::Quat,
                 velocity: glam::Vec3,
                 ang_velocity: glam::Vec3,
                 forces: glam::Vec3,
@@ -902,11 +903,11 @@ impl State {
                 inherit_v *= 0.035;
                 inherit_av *= 0.01;
 
-                let position = position + (offset.xyz() * 0.125);
-                //let position = rotation.normalize().mul_vec3(position);
+                let position = position + offset.xyz() - glam::Vec3::X * 2.0;
 
                 buffer.push(DebrisData {
                     position,
+                    rotation,
                     velocity: inherit_v,
                     ang_velocity: inherit_av,
                     forces: inherit_a,
@@ -919,6 +920,7 @@ impl State {
             buffer.drain(..).for_each(
                 |DebrisData {
                      position,
+                     rotation,
                      ang_velocity,
                      velocity,
                      forces,
@@ -929,7 +931,7 @@ impl State {
                     self.debris.data_mut().insert((
                         0.0,
                         position,
-                        glam::Quat::IDENTITY,
+                        rotation,
                         RbVelocity::new(velocity, ang_velocity),
                         forces,
                         torque,

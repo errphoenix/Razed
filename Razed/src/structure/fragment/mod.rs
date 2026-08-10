@@ -380,7 +380,7 @@ impl FragmentSystem {
         let offset = {
             let opt = grid.options();
             let size = glam::vec3(opt.width, opt.height, opt.depth);
-            (opt.cell_size - size) * 0.5 - glam::Vec3::X * 2.0
+            (opt.cell_size - size) * 0.5
         };
         for &cell in grid.voxels().cells() {
             let point = grid.point_at_or_approx(cell) + origin + offset;
