@@ -81,7 +81,7 @@ pub struct CageSystem {
 
     gpu_map: IndexArrayColumn<()>,
 
-    deformation_feedback: UnsafeCell<Vec<OffsetRotation>>,
+    deformation_feedback: Vec<OffsetRotation>,
 
     /// Mapping of lattice node point ID to cage ID attached to the node.
     node_map: Vec<IndirectIndex>,
@@ -95,16 +95,13 @@ impl CageSystem {
         Self::default()
     }
 
-    pub fn set_deformation_feedback(&self, data: &[OffsetRotation]) {
-        let buf = self.deformation_feedback.get();
-        unsafe {
-            (*buf).clear();
-            (*buf).extend_from_slice(data);
-        }
+    pub fn set_deformation_feedback(&mut self, data: &[OffsetRotation]) {
+        self.deformation_feedback.clear();
+        self.deformation_feedback.extend_from_slice(data);
     }
 
     pub fn deformation_feedback(&self) -> &[OffsetRotation] {
-        unsafe { self.deformation_feedback.get().as_ref().unwrap() }
+        &self.deformation_feedback
     }
 
     pub fn gpu_map(&self) -> &IndexArrayColumn<()> {
