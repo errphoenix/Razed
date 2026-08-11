@@ -317,6 +317,19 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 
             // new cages upload
             {
+                // cpu-side cage synchronisation
+                {
+                    let sync = storage.cage_sync_frame.cpu();
+
+                    let upload_buf = self.cage.upload_buffer();
+                    let delete_buf = self.cage.delete_buffer();
+                    sync.upload(section, upload_buf);
+                    sync.delete(section, delete_buf);
+
+                    let gpu_map = self.cage.gpu_map_mut();
+                    sync.remap(section, gpu_map);
+                }
+
                 let cage_map = self.cage.gpu_map();
                 let cage_map_buf = &storage.cage_map;
                 unsafe {
@@ -326,19 +339,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 storage
                     .cage_points_count
                     .store(cage_map.len() as u32, Ordering::Release);
-
-                // cpu-side cage synchronisation
-                {
-                    let sync = storage.cage_sync_frame.cpu();
-
-                    let gpu_map = self.cage.gpu_map_mut();
-                    sync.remap(section, gpu_map);
-
-                    let upload_buf = self.cage.upload_buffer();
-                    let delete_buf = self.cage.delete_buffer();
-                    sync.upload(section, upload_buf);
-                    sync.delete(section, delete_buf);
-                }
 
                 self.cage.clear_op_buffers();
             }

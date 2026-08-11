@@ -217,6 +217,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         let render_pool = &self.render_pool;
         let cage_count = frame_data.cage_points_count.load(Ordering::Acquire);
 
+        self.sync_cage_changes(frame_data, section);
+
         // cage deformation (derive cov. + svd) compute pass
         {
             use pass::cage_deform_compute::CageDeformComputeCtx;
@@ -351,8 +353,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 .debug_lines_draw_pass
                 .execute(section, render_pool, &ctx);
         }
-
-        self.sync_cage_changes(frame_data, section);
     }
 
     fn init_resources(&mut self, resolution: Resolution) {
@@ -500,9 +500,9 @@ impl Renderer {
 
         let cage_buf = &frame_data.cages;
         let cage_map = &frame_data.cage_map;
-        let imap = unsafe { cage_map.view_section(section.as_index()) };
+        let mut imap = unsafe { cage_map.view_section_mut(section.as_index()) };
 
         sync.upload(section, cage_buf);
-        sync.delete(section, cage_buf, imap.as_slice());
+        sync.delete(section, cage_buf, imap.as_mut_slice());
     }
 }

@@ -498,12 +498,13 @@ impl<'buffers> CageSyncFrameOps<'buffers, CageSyncGpu> {
         &self,
         section: StorageSection,
         gpu_buf: &CagePartitionedBuffer,
-        imap: &[DirectIndex],
+        imap: &mut [DirectIndex],
     ) {
         self.delete
             .drain(section.as_index(), ..)
             .for_each(|CageDeleteOp { map_id }| {
                 let direct = imap[map_id.as_index()];
+
                 if !map_id.related_to_direct(&direct) {
                     tracing::error!(
                         "error while processing cage deletion: generation mismatch, expected {}, got {}",
@@ -515,8 +516,16 @@ impl<'buffers> CageSyncFrameOps<'buffers, CageSyncGpu> {
 
                 let index = direct.as_index();
                 let length = gpu_buf.length_pod_bindref();
-                Self::swap_remove_cage(gpu_buf.inner(), index, length);
+                let remap_id = Self::swap_remove_cage(gpu_buf.inner(), index, length);
+
                 self.remap(section, None, map_id);
+
+                if index + 1 < length {
+                    let old_direct = imap[remap_id.as_index()];
+                    imap[remap_id.as_index()] = DirectIndex::from_index(index, old_direct.generation());
+                    self.remap(section, NonZeroUsize::new(direct.as_index()), remap_id);
+                }
+
             });
     }
 
