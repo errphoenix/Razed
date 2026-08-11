@@ -2,7 +2,9 @@ use std::sync::{Arc, atomic::AtomicU32};
 
 use crate::{
     render::{self, pass::CagePoints},
-    structure::cage::{CageAos, OffsetRotation, PER_CAGE_MAX_LATTICE_ATTACHMENTS, PER_CAGE_POINTS},
+    structure::cage::{
+        CageSyncFrameBuffers, OffsetRotation, PER_CAGE_MAX_LATTICE_ATTACHMENTS, PER_CAGE_POINTS,
+    },
 };
 use ethel::{
     DrawCommand, layout_buffer, layout_mesh_buffer,
@@ -10,10 +12,7 @@ use ethel::{
     state::data::{DirectIndex, IndirectIndex},
 };
 use gui::render::{UiCommandsBuffer, UiDataBuffer};
-use janus::{
-    context::DeltaTime,
-    sync::{TriCell, TriVec},
-};
+use janus::{context::DeltaTime, sync::TriCell};
 
 use crate::structure::fragment::ANCHORS_COUNT as FRAGMENT_ANCHORS_COUNT;
 
@@ -216,8 +215,8 @@ pub struct FrameDataBuffers {
     pub cages: CagePartitionedBuffer,
     pub cage_map: TriBuffer<DirectIndex>,
     pub cage_points_count: Arc<AtomicU32>,
-    pub cage_upload_buf: TriVec<CageAos>,
     pub cage_feedback: TriBuffer<OffsetRotation>,
+    pub cage_sync_frame: CageSyncFrameBuffers,
 
     pub lattice_debug: PartitionedTriBuffer<LATTICE_STORAGE_PARTS>,
     pub lattice_constraint_count: Arc<AtomicU32>,
@@ -262,8 +261,8 @@ impl FrameDataBuffers {
             cages: CagePartitionedBuffer::new(),
             cage_map: TriBuffer::zeroed(CAGES_ALLOC),
             cage_points_count: Arc::new(AtomicU32::new(0)),
-            cage_upload_buf: TriVec::new(),
             cage_feedback: TriBuffer::zeroed(CAGES_ALLOC),
+            cage_sync_frame: CageSyncFrameBuffers::new(),
 
             lattice_debug: xpbd_visualiser,
             lattice_constraint_count: Arc::new(AtomicU32::new(0)),

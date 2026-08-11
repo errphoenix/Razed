@@ -2,10 +2,7 @@ use std::{
     io::BufWriter,
     path::PathBuf,
     str::FromStr,
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::atomic::Ordering,
     time::{Duration, Instant},
 };
 
@@ -263,13 +260,14 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             self.profiler.log_explicit("rasterize_glyphs", t0 - t1);
         }
 
-        // initialize start profiler frame point after cross() operation
-        // to avoid including sync time in profile report
-        let t0 = Arc::new(AtomicU64::new(0));
-        let t00 = Instant::now();
+        // re-initialize start profiler time inside cross() to avoid including
+        // block time (if any) in profile report
+        // this is because blocking here is not an indication of bad
+        // performance
+        let mut t0 = Instant::now();
         frame_boundary.cross(|section, storage| {
-            let elapsed = t00.elapsed().as_nanos();
-            t0.store(elapsed as u64, Ordering::Relaxed);
+            t0 = Instant::now();
+
             let buf_idx = section.as_index();
 
             let _ = self
@@ -329,7 +327,20 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                     .cage_points_count
                     .store(cage_map.len() as u32, Ordering::Release);
 
-                self.cage.upload_cages(section, &storage.cage_upload_buf);
+                // cpu-side cage synchronisation
+                {
+                    let sync = storage.cage_sync_frame.cpu();
+
+                    let gpu_map = self.cage.gpu_map_mut();
+                    sync.remap(section, gpu_map);
+
+                    let upload_buf = self.cage.upload_buffer();
+                    let delete_buf = self.cage.delete_buffer();
+                    sync.upload(section, upload_buf);
+                    sync.delete(section, delete_buf);
+                }
+
+                self.cage.clear_op_buffers();
             }
 
             const VEC3_VEC4_PADDING: usize = 4;
@@ -520,13 +531,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             );
         });
 
-        self.cage.clear_cages_buffer();
-
-        let sync_duration = t0.load(Ordering::Acquire);
         let t1 = Instant::now();
-        let nanos = ((t1 - t00).as_nanos() as u64) - sync_duration;
-        self.profiler
-            .log_explicit("transfer", Duration::from_nanos(nanos));
+        self.profiler.log_explicit("transfer", t1 - t0);
         self.profiler.pop_trace();
     }
 
@@ -703,8 +709,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         self.profiler.capture_duration("debris_hash", || {
             self.debris.hash_debris();
         });
-
-        self.cage.poll_remap();
     }
 }
 
@@ -873,7 +877,7 @@ impl State {
                 let OffsetRotation { offset, rotation } =
                     self.cage.deformation_feedback()[cage_did as usize];
 
-                self.cage.queue_delete_cage(cage_id);
+                self.cage.delete_cage(cage_id);
 
                 let mesh_id = data.mesh_id[frag_index.as_index()];
                 let position = data.bind_position[frag_index.as_index()].xyz();

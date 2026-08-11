@@ -22,16 +22,50 @@ pub const PER_CAGE_POINTS: usize = 8;
 pub const CAGE_DIAG_EXTENT: f32 = 1.5;
 pub const QUERY_LATTICE_ATTACH_MAX_RANGE: f32 = 32.0;
 
-#[derive(Clone, Debug)]
-pub struct CageAos {
+#[derive(Clone, Copy, Debug)]
+pub struct CageUploadItem {
     pub map_index: IndirectIndex,
-
     pub bindref: glam::Vec3,
     pub lattice_binds: [glam::Vec4; PER_CAGE_MAX_LATTICE_ATTACHMENTS],
     pub lattice_lut: [IndirectIndex; PER_CAGE_MAX_LATTICE_ATTACHMENTS],
     pub points_bind: [glam::Vec4; PER_CAGE_POINTS],
     pub points_barycenter_bind: [glam::Vec4; PER_CAGE_POINTS],
     pub attachments: [LatticeAttachments; PER_CAGE_POINTS],
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Copy)]
+pub struct CageRemapDelta {
+    /// The new GPU index to set
+    ///
+    /// A value of `None` is basically a delete operation.
+    pub gpu_index: Option<NonZeroUsize>,
+    /// The stable ID of the CPU-GPU cage map
+    pub map_id: IndirectIndex,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Copy)]
+pub struct CageDeleteOp {
+    pub map_id: IndirectIndex,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct CageSyncFrameBuffers {
+    upload: TriVec<CageUploadItem>,
+    remap: TriVec<CageRemapDelta>,
+    delete: TriVec<CageDeleteOp>,
+}
+impl CageSyncFrameBuffers {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn cpu(&self) -> CageSyncFrameOps<'_, CageSyncCpu> {
+        CageSyncFrameOps::from_buffers(self)
+    }
+
+    pub fn gpu(&self) -> CageSyncFrameOps<'_, CageSyncGpu> {
+        CageSyncFrameOps::from_buffers(self)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -42,12 +76,12 @@ pub struct OffsetRotation {
 
 #[derive(Debug, Default)]
 pub struct CageSystem {
-    local_buffer: Vec<CageAos>,
+    local_upload_buf: Vec<CageUploadItem>,
+    local_delete_buf: Vec<CageDeleteOp>,
+
     gpu_map: IndexArrayColumn<()>,
 
     deformation_feedback: UnsafeCell<Vec<OffsetRotation>>,
-
-    pipe: Option<CagePipeCpu>,
 
     /// Mapping of lattice node point ID to cage ID attached to the node.
     node_map: Vec<IndirectIndex>,
@@ -77,49 +111,8 @@ impl CageSystem {
         &self.gpu_map
     }
 
-    pub fn set_pipe(&mut self, pipe: CagePipeCpu) {
-        self.pipe = Some(pipe);
-    }
-
-    pub fn pipe(&self) -> Option<&CagePipeCpu> {
-        self.pipe.as_ref()
-    }
-
-    pub fn poll_remap(&mut self) {
-        if let Some(pipe) = self.pipe.as_ref() {
-            pipe.poll(&mut self.gpu_map);
-        }
-    }
-
-    /// Queue a cage deletion request.
-    ///
-    /// The render thread will process the request and delete the associated
-    /// cage data from the GPU buffers.
-    ///
-    /// If the `cage_id` is not associated to a valid GPU index, no request
-    /// is sent at all.
-    ///
-    /// While GPU deletion is done on the render thread, the `cage_id` is
-    /// immediately deleted from the local map residing on this thread.
-    pub fn queue_delete_cage(&mut self, cage_id: IndirectIndex) {
-        let gpu_index = self.gpu_index_of(cage_id);
-
-        if gpu_index.is_some_and(|i| i == 0) || gpu_index.is_none() {
-            tracing::warn!(
-                "attempted to delete cage from ID that is not associated to a valid GPU index: {}",
-                "either the render thread has not yet processed the associated cage, or the cage ID is degenerate."
-            );
-            return;
-        }
-
-        if let Some(pipe) = self.pipe() {
-            pipe.queue_delete(cage_id);
-        } else {
-            tracing::error!(
-                "unitialised CPU-side cage pipe, delete request will be discarded: {}",
-                "pipe was never initialised."
-            )
-        }
+    pub fn gpu_map_mut(&mut self) -> &mut IndexArrayColumn<()> {
+        &mut self.gpu_map
     }
 
     pub fn gpu_index_of(&self, cage_id: IndirectIndex) -> Option<u32> {
@@ -130,12 +123,27 @@ impl CageSystem {
             .map(DirectIndex::as_int)
     }
 
-    pub fn upload_cages(&self, section: StorageSection, to: &TriVec<CageAos>) {
-        to.extend_from_slice(section.as_index(), &self.local_buffer);
+    pub fn clear_op_buffers(&mut self) {
+        self.local_upload_buf.clear();
+        self.local_delete_buf.clear();
     }
 
-    pub fn clear_cages_buffer(&mut self) {
-        self.local_buffer.clear();
+    pub fn upload_buffer(&self) -> &[CageUploadItem] {
+        &self.local_upload_buf
+    }
+
+    pub fn delete_buffer(&self) -> &[CageDeleteOp] {
+        &self.local_delete_buf
+    }
+
+    pub fn delete_cage(&mut self, cage_id: IndirectIndex) {
+        let direct = self.gpu_map.solve_indirect(cage_id);
+        if direct.is_some_and(|d| d.as_int() == 0) || direct.is_none() {
+            tracing::error!("attempted to delete uninitialized or invalid cage: operation aborted");
+            self.gpu_map.free(cage_id);
+            return;
+        }
+        self.local_delete_buf.push(CageDeleteOp { map_id: cage_id });
     }
 
     /// Generate a new cage and queue it for upload on the GPU buffers.
@@ -177,7 +185,7 @@ impl CageSystem {
         });
 
         let map_id = self.gpu_map.insert(());
-        let cage = CageAos {
+        let cage = CageUploadItem {
             map_index: map_id,
             bindref: cage_center,
             lattice_binds: lattice_bind_pos,
@@ -186,7 +194,7 @@ impl CageSystem {
             points_barycenter_bind: points_barycenter_bind,
             attachments: points_attachments,
         };
-        self.local_buffer.push(cage);
+        self.local_upload_buf.push(cage);
         map_id
     }
 
@@ -339,73 +347,56 @@ struct CagePointData {
     pub weight_sum: f32,
 }
 
-pub fn pipes() -> (CagePipeCpu, CagePipeGpu) {
-    let (gpu_tx, gpu_rx) = crossbeam::channel::unbounded::<CageDeleteGpu>();
-    let (cpu_tx, cpu_rx) = crossbeam::channel::unbounded::<CageSyncRemap>();
-    (
-        CagePipeCpu {
-            to_gpu: gpu_tx,
-            from_gpu: cpu_rx,
-        },
-        CagePipeGpu {
-            to_cpu: cpu_tx,
-            from_cpu: gpu_rx,
-        },
-    )
-}
-
-#[derive(Clone, Debug)]
-pub struct CageDeleteGpu {
-    /// The stable ID of the CPU-GPU cage map
-    pub map_id: IndirectIndex,
-}
-
-#[derive(Clone, Debug, Copy, PartialEq, Eq, Hash)]
-pub struct CageSyncRemap {
-    /// The new GPU index to set
-    ///
-    /// A value of `None` is basically a delete operation.
-    pub gpu_index: Option<NonZeroUsize>,
-    /// The stable ID of the CPU-GPU cage map
-    pub map_id: IndirectIndex,
-}
+pub struct CageSyncCpu;
+pub struct CageSyncGpu;
 
 #[derive(Debug)]
-pub struct CagePipeCpu {
-    to_gpu: crossbeam::channel::Sender<CageDeleteGpu>,
-    from_gpu: crossbeam::channel::Receiver<CageSyncRemap>,
+pub struct CageSyncFrameOps<'buffers, Op> {
+    _op: std::marker::PhantomData<Op>,
+    upload: &'buffers TriVec<CageUploadItem>,
+    remap: &'buffers TriVec<CageRemapDelta>,
+    delete: &'buffers TriVec<CageDeleteOp>,
 }
-impl CagePipeCpu {
-    pub fn queue_delete(&self, map_id: IndirectIndex) {
-        let _ = self.to_gpu.send(CageDeleteGpu { map_id });
-    }
-
-    pub fn poll(&self, map: &mut IndexArrayColumn<()>) {
-        while let Ok(CageSyncRemap { gpu_index, map_id }) = self.from_gpu.try_recv() {
-            match gpu_index {
-                Some(new_index) => {
-                    let new_index = new_index.get();
-                    let new_direct = DirectIndex::from_index(new_index, map_id.generation());
-                    map.slots_map_mut()[map_id.as_index()] = new_direct;
-                }
-                _ => {
-                    map.free(map_id);
-                }
-            }
+impl<'buffers, Op> CageSyncFrameOps<'buffers, Op> {
+    pub const fn from_buffers(buffers: &'buffers CageSyncFrameBuffers) -> Self {
+        Self {
+            _op: std::marker::PhantomData,
+            upload: &buffers.upload,
+            remap: &buffers.remap,
+            delete: &buffers.delete,
         }
     }
 }
-
-#[derive(Debug)]
-pub struct CagePipeGpu {
-    to_cpu: crossbeam::channel::Sender<CageSyncRemap>,
-    from_cpu: crossbeam::channel::Receiver<CageDeleteGpu>,
+impl<'buffers, Op> From<&'buffers CageSyncFrameBuffers> for CageSyncFrameOps<'buffers, Op> {
+    fn from(value: &'buffers CageSyncFrameBuffers) -> Self {
+        Self::from_buffers(value)
+    }
 }
-impl CagePipeGpu {
-    pub fn queue_remap(&self, gpu_index: Option<NonZeroUsize>, map_id: IndirectIndex) {
-        let _ = self.to_cpu.send(CageSyncRemap { gpu_index, map_id });
+impl<'buffers> CageSyncFrameOps<'buffers, CageSyncCpu> {
+    pub fn upload(&self, section: StorageSection, data: &[CageUploadItem]) {
+        self.upload.extend_from_slice(section.as_index(), data);
     }
 
+    pub fn delete(&self, section: StorageSection, data: &[CageDeleteOp]) {
+        self.delete.extend_from_slice(section.as_index(), data);
+    }
+
+    pub fn remap(&self, section: StorageSection, local_map: &mut IndexArrayColumn<()>) {
+        self.remap.drain(section.as_index(), ..).for_each(
+            |CageRemapDelta { gpu_index, map_id }| match gpu_index {
+                Some(new_index) => {
+                    let new_index = new_index.get();
+                    let new_direct = DirectIndex::from_index(new_index, map_id.generation());
+                    local_map.slots_map_mut()[map_id.as_index()] = new_direct;
+                }
+                _ => {
+                    local_map.free(map_id);
+                }
+            },
+        );
+    }
+}
+impl<'buffers> CageSyncFrameOps<'buffers, CageSyncGpu> {
     fn swap_remove_element<const PARTS: usize, T: Sized + Default>(
         buf: &PartitionedBuffer<PARTS>,
         partition: usize,
@@ -476,23 +467,69 @@ impl CagePipeGpu {
         }
     }
 
-    pub fn poll(&self, gpu_data: &CagePartitionedBuffer, imap: &[DirectIndex]) {
-        while let Ok(msg) = self.from_cpu.try_recv() {
-            let id = msg.map_id;
-            let direct = imap[id.as_index()];
-            if !id.related_to_direct(&direct) {
-                tracing::error!(
-                    "error while processing cage deletion: generation mismatch, expected {}, got {}",
-                    direct.generation(),
-                    id.generation()
-                );
-                continue;
-            }
+    pub fn upload(&self, section: StorageSection, gpu_buf: &CagePartitionedBuffer) {
+        let mut offset = gpu_buf.length_pod_bindref() + 1;
+        self.upload.drain(section.as_index(), ..).for_each(|data| {
+            let CageUploadItem {
+                map_index,
+                bindref,
+                lattice_binds,
+                points_bind,
+                lattice_lut,
+                points_barycenter_bind,
+                attachments,
+            } = data;
 
-            let index = direct.as_index();
-            let length = gpu_data.length_pod_bindref();
-            Self::swap_remove_cage(gpu_data.inner(), index, length);
-            self.queue_remap(None, id);
-        }
+            let bindref = glam::vec4(bindref.x, bindref.y, bindref.z, 1.0);
+            let points_bind = CagePoints(points_bind);
+            gpu_buf.blit_rmap(&[map_index], offset);
+            gpu_buf.blit_pod_bindref(&[bindref], offset);
+            gpu_buf.blit_pod_bind_lattice(&[lattice_binds], offset);
+            gpu_buf.blit_pod_lut_lattice(&[lattice_lut], offset);
+            gpu_buf.blit_pod_points_bind(&[points_bind], offset);
+            gpu_buf.blit_pod_barycenter_bind(&[points_barycenter_bind], offset);
+            gpu_buf.blit_pod_attachments(&[attachments], offset);
+
+            let gpu_index = NonZeroUsize::new(offset).expect("offset is never 0");
+            self.remap(section, Some(gpu_index), map_index);
+
+            offset += 1;
+        });
+    }
+
+    pub fn delete(
+        &self,
+        section: StorageSection,
+        gpu_buf: &CagePartitionedBuffer,
+        imap: &[DirectIndex],
+    ) {
+        self.delete
+            .drain(section.as_index(), ..)
+            .for_each(|CageDeleteOp { map_id }| {
+                let direct = imap[map_id.as_index()];
+                if !map_id.related_to_direct(&direct) {
+                    tracing::error!(
+                        "error while processing cage deletion: generation mismatch, expected {}, got {}",
+                        direct.generation(),
+                        map_id.generation()
+                    );
+                    return;
+                }
+
+                let index = direct.as_index();
+                let length = gpu_buf.length_pod_bindref();
+                Self::swap_remove_cage(gpu_buf.inner(), index, length);
+                self.remap(section, None, map_id);
+            });
+    }
+
+    pub fn remap(
+        &self,
+        section: StorageSection,
+        gpu_index: Option<NonZeroUsize>,
+        map_id: IndirectIndex,
+    ) {
+        self.remap
+            .push(section.as_index(), CageRemapDelta { gpu_index, map_id });
     }
 }

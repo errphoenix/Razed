@@ -2,7 +2,7 @@ pub mod graphics;
 pub mod pass;
 pub mod shader_commons;
 
-use std::{num::NonZeroUsize, sync::atomic::Ordering};
+use std::sync::atomic::Ordering;
 
 use ethel::{
     render::{Resolution, buffer::StorageSection, command::DrawGroups},
@@ -21,12 +21,7 @@ use rendrs::pipeline::{Pass, RenderPool, RenderTarget, RenderTargetDescriptor, R
 
 #[cfg(feature = "devmode")]
 use crate::render::pass::debug_lines_draw::DebugLinesData;
-use crate::{
-    assets,
-    data::FrameDataBuffers,
-    render::{graphics::Materials, pass::CagePoints},
-    structure::cage::{CageAos, CagePipeGpu},
-};
+use crate::{assets, data::FrameDataBuffers, render::graphics::Materials};
 
 #[allow(unused)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -120,8 +115,6 @@ pub struct Renderer {
 
     #[cfg(feature = "devmode")]
     lines_debug_buffer: DebugLinesData,
-
-    cage_pipe: Option<CagePipeGpu>,
 
     pub glyph_atlas_texture: GlyphAtlasTexture,
     pub glyph_pipe: Option<crossbeam::channel::Receiver<GlyphRaster>>,
@@ -386,14 +379,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
     }
 }
 impl Renderer {
-    pub fn set_cage_pipe(&mut self, cage_pipe: CagePipeGpu) {
-        self.cage_pipe = Some(cage_pipe);
-    }
-
-    pub fn cage_pipe(&self) -> Option<&CagePipeGpu> {
-        self.cage_pipe.as_ref()
-    }
-
     fn pipeline(&self) -> &RenderPipeline {
         self.pipeline
             .as_ref()
@@ -511,46 +496,13 @@ impl Renderer {
     }
 
     fn sync_cage_changes(&self, frame_data: &FrameDataBuffers, section: StorageSection) {
+        let sync = frame_data.cage_sync_frame.gpu();
+
         let cage_buf = &frame_data.cages;
         let cage_map = &frame_data.cage_map;
         let imap = unsafe { cage_map.view_section(section.as_index()) };
 
-        if let Some(pipe) = self.cage_pipe.as_ref() {
-            pipe.poll(cage_buf, imap.as_slice());
-        }
-
-        let upload_buf = &frame_data.cage_upload_buf;
-        if !upload_buf.is_empty(section.as_index()) {
-            let mut offset = cage_buf.length_pod_bindref() + 1;
-
-            upload_buf.drain(section.as_index(), ..).for_each(|data| {
-                let CageAos {
-                    map_index,
-                    bindref,
-                    lattice_binds,
-                    points_bind,
-                    lattice_lut,
-                    points_barycenter_bind,
-                    attachments,
-                } = data;
-
-                let bindref = glam::vec4(bindref.x, bindref.y, bindref.z, 1.0);
-                let points_bind = CagePoints(points_bind);
-                cage_buf.blit_rmap(&[map_index], offset);
-                cage_buf.blit_pod_bindref(&[bindref], offset);
-                cage_buf.blit_pod_bind_lattice(&[lattice_binds], offset);
-                cage_buf.blit_pod_lut_lattice(&[lattice_lut], offset);
-                cage_buf.blit_pod_points_bind(&[points_bind], offset);
-                cage_buf.blit_pod_barycenter_bind(&[points_barycenter_bind], offset);
-                cage_buf.blit_pod_attachments(&[attachments], offset);
-
-                if let Some(pipe) = self.cage_pipe() {
-                    let gpu_index = NonZeroUsize::new(offset).expect("offset is never 0");
-                    pipe.queue_remap(Some(gpu_index), map_index);
-                }
-
-                offset += 1;
-            });
-        }
+        sync.upload(section, cage_buf);
+        sync.delete(section, cage_buf, imap.as_slice());
     }
 }
