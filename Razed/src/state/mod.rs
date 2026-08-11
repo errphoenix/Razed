@@ -385,7 +385,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 let pod_positions_rubber = &self.debris.rubber().position_slice()[1..];
                 let pod_rotations_rubber = &self.debris.rubber().rotation_slice()[1..];
                 let pod_mesh_id_rubber = &self.debris.rubber().mesh_id_slice()[1..];
-                let debris_offset_1 = self.debris.data().len() * size_of::<f32>();
+                let debris_offset_1 = (self.debris.data().len() - 1) * size_of::<f32>();
                 let debris_offset_4 = debris_offset_1 * 4;
 
                 // SAFETY: the use of LayoutDebrisData ensures we blit to a
