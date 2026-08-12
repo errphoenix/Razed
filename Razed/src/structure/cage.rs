@@ -1,4 +1,4 @@
-use std::{cell::UnsafeCell, num::NonZeroUsize};
+use std::num::NonZeroUsize;
 
 use ethel::{
     data::{
@@ -91,10 +91,6 @@ pub struct CageSystem {
 unsafe impl Send for CageSystem {}
 unsafe impl Sync for CageSystem {}
 impl CageSystem {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     pub fn set_deformation_feedback(&mut self, data: &[OffsetRotation]) {
         self.deformation_feedback.clear();
         self.deformation_feedback.extend_from_slice(data);
@@ -465,7 +461,7 @@ impl<'buffers> CageSyncFrameOps<'buffers, CageSyncGpu> {
     }
 
     pub fn upload(&self, section: StorageSection, gpu_buf: &CagePartitionedBuffer) {
-        let mut offset = gpu_buf.length_pod_bindref() + 1;
+        let mut offset = gpu_buf.length_pod_bindref();
         self.upload.drain(section.as_index(), ..).for_each(|data| {
             let CageUploadItem {
                 map_index,
@@ -519,13 +515,8 @@ impl<'buffers> CageSyncFrameOps<'buffers, CageSyncGpu> {
                 let remap_id = Self::swap_remove_cage(gpu_buf.inner(), index, length);
 
                 self.remap(section, None, map_id);
-
-                if index + 1 < length {
-                    let old_direct = imap[remap_id.as_index()];
-                    imap[remap_id.as_index()] = DirectIndex::from_index(index, old_direct.generation());
-                    self.remap(section, NonZeroUsize::new(direct.as_index()), remap_id);
-                }
-
+                let old_direct = imap[remap_id.as_index()];
+                imap[remap_id.as_index()] = DirectIndex::from_index(index, old_direct.generation());
             });
     }
 

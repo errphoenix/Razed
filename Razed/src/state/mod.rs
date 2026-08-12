@@ -877,7 +877,7 @@ impl State {
                 let OffsetRotation { offset, rotation } =
                     self.cage.deformation_feedback()[cage_did as usize];
 
-                self.cage.delete_cage(cage_id);
+                //self.cage.delete_cage(cage_id);
 
                 let mesh_id = data.mesh_id[frag_index.as_index()];
                 let position = data.bind_position[frag_index.as_index()].xyz();
