@@ -184,6 +184,105 @@ pub const LIB_MAT3_CONVERT_QUAT: GlslLib = ethel::shader_glsl_lib! {
     "
 };
 
+/// The Smith NDF masking function `G1` used to mask microfacet normals.
+///
+/// Creates the `ndf_G1_Smith` function, which has the following paramaters:
+/// * the microfacet surface normal 3d vector
+/// * the 3d vector pointing from the surface to the point
+/// * the result of the NDF's `lambda` function for the 3d vector pointing
+///   from the surface to the point
+///
+/// The 'point' is usually the viewpoint or the light's origin.
+///
+/// The `lambda` function is different depending on the chosen NDF.
+///
+/// The function returns a floating-point scalar.
+pub const LIB_NDF_MASK_G1_SMITH: GlslLib = ethel::shader_glsl_lib! {
+    float ndf_G1_Smith[
+        micro_normal : vec3,
+        to_point     : vec3,
+        lambda_point : float
+    ] => "
+        float MdotV = dot(micro_normal, to_point);
+        float n = MdotV > 0.0 ? 1.0 : 0.0;
+        float d = 1.0 + lambda_point;
+        return n / d;
+    "
+};
+
+/// The Smith normal distribution joint masking-shadowing function `G2`, used
+/// to mask microfacets from 2 visible directions.
+///
+/// This is the "separable" form defined by Heitz: the simplest, but prone to
+/// over-darkening as it incorrectly uncorrelates masking and shadowing.
+/// However, some applications are known to still utilize this approach.
+///
+/// Creates the `ndf_G2_SmithSeparable` function, which has the following
+/// parameters:
+/// * the microfacet surface normal 3d vector
+/// * the 3d vector pointing from the surface to the viewpoint
+/// * the 3d vector pointing away from the surface to the light's origin
+/// * the result of the NDF's `lambda` function for the 3d vector pointing
+///   from the surface to the viewpoint
+/// * the result of the NDF's `lambda` function for the 3d vector pointing
+///   from the surface to the light's origin
+///
+/// The `lambda` function is different depending on the chosen NDF.
+///
+/// The function returns a floating-point scalar.
+///
+/// Depends on [`LIB_NDF_MASK_G1_SMITH`]
+pub const LIB_NDF_MASK_G2_SMITH_SEPARABLE: GlslLib = ethel::shader_glsl_lib! {
+    float ndf_G2_SmithSeparable[
+        micro_normal : vec3,
+        to_view      : vec3,
+        to_light     : vec3,
+        lambda_view  : float,
+        lambda_light : float
+    ] => "
+        float a = ndf_G1_Smith(micro_normal, to_view, lambda_view);
+        float b = ndf_G1_Smith(micro_normal, to_light, lambda_light);
+        return a * b;
+    "
+};
+
+/// The Smith normal distribution joint masking-shadowing function `G2`, used
+/// to mask microfacets from 2 visible directions.
+///
+/// This is the "height-correlated" form defined by Heitz: this form takes
+/// advantage of the fact that the light and view directions are correlated
+/// by their relative alignment, but more importantly they both relate to the
+/// point's height relative to the rest of the surface.
+///
+/// Creates the `ndf_G2_SmithHeight` function, which has the following
+/// parameters:
+/// * the microfacet surface normal 3d vector
+/// * the 3d vector pointing from the surface to the viewpoint
+/// * the 3d vector pointing away from the surface to the light's origin
+/// * the result of the NDF's `lambda` function for the 3d vector pointing
+///   from the surface to the viewpoint
+/// * the result of the NDF's `lambda` function for the 3d vector pointing
+///   from the surface to the light's origin
+///
+/// The `lambda` function is different depending on the chosen NDF.
+///
+/// The function returns a floating-point scalar.
+pub const LIB_NDF_MASK_G2_SMITH_HEIGHT: GlslLib = ethel::shader_glsl_lib! {
+    float ndf_G2_SmithHeight[
+        micro_normal : vec3,
+        to_view      : vec3,
+        to_light     : vec3,
+        lambda_view  : float,
+        lambda_light : float
+    ] => "
+        float MdotV = dot(micro_normal, to_view ) > 0.0 ? 1.0 : 0.0;
+        float MdotL = dot(micro_normal, to_light) > 0.0 ? 1.0 : 0.0;
+        float n = MdotV * MdotL;
+        float d = 1.0 + lambda_view + lambda_light;
+        return n / d;
+    "
+};
+
 /// Vector3 outer-product utility function.
 ///
 /// Creates the `outer` function, taking in 2 `vec3` parameters, returning

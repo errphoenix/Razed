@@ -461,7 +461,7 @@ impl<'buffers> CageSyncFrameOps<'buffers, CageSyncGpu> {
     }
 
     pub fn upload(&self, section: StorageSection, gpu_buf: &CagePartitionedBuffer) {
-        let mut offset = gpu_buf.length_pod_bindref();
+        let mut offset = gpu_buf.length_pod_bindref().max(1);
         self.upload.drain(section.as_index(), ..).for_each(|data| {
             let CageUploadItem {
                 map_index,
