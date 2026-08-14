@@ -32,9 +32,9 @@ pub fn create_structure_lattice(
 
     const MASS: f32 = 100.0;
 
-    const VERY_STIFF_COMPL: f32 = 0.1e-7;
-    const STIFF_COMPL: f32 = 0.15e-5;
-    const SOFT_COMPL: f32 = 0.1e-4;
+    const VERY_STIFF_COMPL: f32 = 0.1e-8;
+    const STIFF_COMPL: f32 = 0.1e-7;
+    const SOFT_COMPL: f32 = 0.1e-6;
 
     const STRONG_LINK: XpbdLinkOptions = XpbdLinkOptions::new(VERY_STIFF_COMPL);
     const MID_LINK: XpbdLinkOptions = XpbdLinkOptions::new(STIFF_COMPL);
@@ -103,10 +103,6 @@ pub fn create_structure_lattice(
         let back_right = lattice.node(Node::new(o + glam::vec3(w, ceiling_y, -d), MASS));
         let front_right = lattice.node(Node::new(o + glam::vec3(w, ceiling_y, d), MASS));
         let front_left = lattice.node(Node::new(o + glam::vec3(-w, ceiling_y, d), MASS));
-        // let center_left = lattice.node(Node::new(o + glam::vec3(-w, ceiling_y, 0.0), MASS));
-        // let center_right = lattice.node(Node::new(o + glam::vec3(w, ceiling_y, 0.0), MASS));
-        // let center_front = lattice.node(Node::new(o + glam::vec3(0.0, ceiling_y, d), MASS));
-        // let center_back = lattice.node(Node::new(o + glam::vec3(0.0, ceiling_y, -d), MASS));
 
         let half_y = ceiling_y - (height * 0.5);
         let middle_back = lattice.node(Node::new(o + glam::vec3(0.0, half_y, -d), MASS));
@@ -114,12 +110,7 @@ pub fn create_structure_lattice(
         let middle_right = lattice.node(Node::new(o + glam::vec3(w, half_y, 0.0), MASS));
         let middle_left = lattice.node(Node::new(o + glam::vec3(-w, half_y, 0.0), MASS));
 
-        //let origin = lattice.node(Node::new(o + glam::vec3(0.0, ceiling_y, 0.0), MASS));
-
         // top loop
-        {}
-
-        // top loop (intermed.)
         {
             lattice.link_nodes(back_left, back_right, STRONG_LINK);
             lattice.link_nodes(back_right, front_right, STRONG_LINK);
@@ -128,45 +119,16 @@ pub fn create_structure_lattice(
         }
         // pillars
         {
-            // standard
             let prev_back_left = 0;
             let prev_back_right = 1;
             let prev_front_right = 2;
             let prev_front_left = 3;
 
-            // with centers
-            // let prev_back_left = 0;
-            // let prev_back_left_to_right = 1;
-            // let prev_back_right = 2;
-            // let prev_back_right_to_front = 3;
-            // let prev_front_right = 4;
-            // let prev_front_right_to_left = 5;
-            // let prev_front_left = 6;
-            // let prev_front_left_to_back = 7;
-
             lattice.link_nodes(back_left, last_top[prev_back_left], STRONG_LINK);
             lattice.link_nodes(back_right, last_top[prev_back_right], STRONG_LINK);
             lattice.link_nodes(front_right, last_top[prev_front_right], STRONG_LINK);
             lattice.link_nodes(front_left, last_top[prev_front_left], STRONG_LINK);
-
-            // with centers
-            // lattice.link_nodes(center_back, last_top[prev_back_left_to_right], STRONG_LINK);
-            // lattice.link_nodes(
-            //     center_right,
-            //     last_top[prev_back_right_to_front],
-            //     STRONG_LINK,
-            // );
-            // lattice.link_nodes(
-            //     center_front,
-            //     last_top[prev_front_right_to_left],
-            //     STRONG_LINK,
-            // );
-            // lattice.link_nodes(center_left, last_top[prev_front_left_to_back], STRONG_LINK);
-
-            // central spline
-            //lattice.link_nodes(origin, last_top[8], STRONG_LINK);
         }
-
         // side diagonals
         {
             let prev_back_left = 0;
@@ -194,34 +156,13 @@ pub fn create_structure_lattice(
             lattice.link_nodes(middle_left, last_top[prev_front_left], MID_LINK);
             lattice.link_nodes(middle_left, last_top[prev_back_left], MID_LINK);
         }
-
-        // floor diagonal and cross with intermediate
+        // floor diagonal
         {
             lattice.link_nodes(back_left, front_right, WEAK_LINK);
             lattice.link_nodes(front_left, back_right, WEAK_LINK);
-
-            // lattice.link_nodes(back_left, origin, WEAK_LINK);
-            // lattice.link_nodes(front_right, origin, WEAK_LINK);
-            // lattice.link_nodes(back_right, origin, WEAK_LINK);
-            // lattice.link_nodes(front_left, origin, WEAK_LINK);
-
-            // lattice.link_nodes(center_left, origin, STRONG_LINK);
-            // lattice.link_nodes(center_right, origin, STRONG_LINK);
-            // lattice.link_nodes(center_front, origin, STRONG_LINK);
-            // lattice.link_nodes(center_back, origin, STRONG_LINK);
         }
 
-        last_top = [
-            back_left,
-            //center_back,
-            back_right,
-            //center_right,
-            front_right,
-            //center_front,
-            front_left,
-            //center_left,
-            //origin,
-        ];
+        last_top = [back_left, back_right, front_right, front_left];
     }
 
     lattice.build()
