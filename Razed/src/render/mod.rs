@@ -387,9 +387,7 @@ impl Renderer {
 
     fn initialize_shaders(&mut self) {
         self.shaders.lattice = pass::ShaderDebugLattice::new_compiled();
-        self.shaders.fragments = pass::ShaderFragment::new_compiled_variant(
-            pass::ShaderFragmentVariants::WindowedAttenuation,
-        );
+        self.shaders.fragments = pass::ShaderFragment::new_compiled();
         self.shaders.debris = pass::ShaderDebris::new_compiled();
         self.shaders.cage_deform = pass::ComputeShaderCageDeform::new_compiled();
         self.shaders.cage_visual = pass::ShaderDebugCage::new_compiled();

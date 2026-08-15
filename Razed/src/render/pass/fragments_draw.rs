@@ -1,3 +1,4 @@
+use ethel::shader::Constant;
 use ethel::{
     data::DirectIndex,
     render::{
@@ -94,6 +95,14 @@ pub const SSBO_INDEX_IMAP_CAGES: u32 = ssbo_binding!(IMap_Cages);
 
 use ShaderFragmentVariants::*;
 
+use shader_commons::FresnelParamsGlslStruct;
+use shader_commons::LIB_FRESNEL_PARAMS;
+use shader_commons::LIB_FRESNEL_SCHLICK;
+use shader_commons::LIB_NDF_GGX;
+use shader_commons::LIB_NDF_GGX_LAMBDA;
+use shader_commons::LIB_NDF_LAMBDA_A_NOSQRT;
+use shader_commons::LIB_NDF_MASK_G2_SMITH_HEIGHT_GGX_HAMMON_APPROX;
+
 ethel::shader_glsl! {
     struct Fragment > [460] {
         common {
@@ -106,10 +115,6 @@ ethel::shader_glsl! {
                 ethel::mesh::GLSL_SSBO_INTEGRATION[0]
                 ethel::mesh::GLSL_SSBO_INTEGRATION[1]
             };
-
-            variants {
-                WindowedAttenuation;
-            };
         };
 
         unit ShaderKind::Pixel => [
@@ -118,34 +123,41 @@ ethel::shader_glsl! {
             };
 
             uniform {
+                length 16, texture_map: sampler2DArray => i32;
                 length 1, camera_forward: vec3 => glam::Vec3;
                 length 1, camera_position: vec3 => glam::Vec3;
-                length 16, texture_map: sampler2DArray => i32;
             };
 
             type {
                 rendrs::graphics::material::shader::TYPE_MATERIAL_ENTRY_LOCATION
                 rendrs::graphics::material::shader::TYPE_MATERIAL_LOCATION
+                FresnelParamsGlslStruct::as_definition()
             };
 
             const {
                 shader_commons::CONST_AMBIENT_LIGHT
+                Constant::new("DEV_MATERIAL_GROUP", 0u32)
+                Constant::new("DIFFUSE_ALPHA_PAGE", 6f32)
+                Constant::new("NORMAL_EMISSIVE_PAGE", 7f32)
+                Constant::new("ORMD_PAGE", 8f32)
+                Constant::new("UV_SCALE", 0.35)
             };
 
             lib {
                 rendrs::pack::DERIVE_COTANGENT;
-                >Default => rendrs::graphics::light::LIB_LIGHT_ATTENUATE_DISTANCE_FALLOFF;
-                >WindowedAttenuation => rendrs::graphics::light::LIB_LIGHT_ATTENUATE_ISQ_WINDOWED_CURVE;
+
+                LIB_FRESNEL_PARAMS;
+                LIB_FRESNEL_SCHLICK;
+                LIB_NDF_GGX;
+                LIB_NDF_GGX_LAMBDA;
+                LIB_NDF_LAMBDA_A_NOSQRT;
+                LIB_NDF_MASK_G2_SMITH_HEIGHT_GGX_HAMMON_APPROX;
+
+                rendrs::graphics::light::LIB_LIGHT_ATTENUATE_ISQ_WINDOWED_CURVE;
             };
 
             src() {
                 "
-                const uint DEV_MATERIAL_GROUP = 0;
-                const float DIFFUSE_ALPHA_PAGE = 6.0;
-                const float NORMAL_EMISSIVE_PAGE = 7.0;
-                const float ORMD_PAGE = 8.0;
-                const float UV_SCALE = 0.35;
-
                 vec2 scaled_uv = fs_uv * UV_SCALE;
 
                 vec4 qDiffuseAlpha = texture(
@@ -161,15 +173,14 @@ ethel::shader_glsl! {
                     vec3(scaled_uv, ORMD_PAGE)
                 );
 
-                //vec3 diffuse = qDiffuseAlpha.rgb;
-                vec3 diffuse = vec3(0.725);
+                vec3 diffuse = pow(qDiffuseAlpha.rgb, vec3(2.2));
                 float alpha = qDiffuseAlpha.a;
                 vec3 normalMap = qNormalEmissive.rgb;
                 float emissive = qNormalEmissive.a;
                 float occlusion = qOrmd.r;
                 float roughness = qOrmd.g;
                 float metallic = qOrmd.b;
-                float displacement = qOrmd.a;
+                //float displacement = qOrmd.a;
 
                 if (alpha < 0.1) {
                     discard;
@@ -179,31 +190,71 @@ ethel::shader_glsl! {
                 normalMap = normalMap * 2.0 - 1.0;
                 vec3 normal = normalize(TBN * normalMap);
 
-                // camera source point light
+                vec3 world = fs_world;
+
+                // surface outgoing radiance accumulation
+                vec3 Lo = vec3(LIGHT_AMBIENT);
+
+                // roughness (todo use disney principle?)
+                float a = roughness;
+
+                // material fresnel F0 evaluation
+                const vec3 FRESNEL_FALLBACK = vec3(0.04);
+                FresnelParams fresnel = fresnel_Params(
+                    metallic, diffuse, FRESNEL_FALLBACK
+                );
+                vec3 albedo = fresnel.albedo;
+                vec3 F0     = fresnel.fresnel;
+
+                // ------ global view-specific ------
+                vec3 N = normal;
+                vec3 V = normalize(camera_position - world); // dir to view
+                float NdotV = dot(N, V);
+                float absNdotV = abs(NdotV);
+
+                // ------ local light-specific ------
+                // only one light is evaluated: the camera as a point light
+
+                // equal to V because this is a camera point light
+                vec3 L = V; // dir to light
+
+                // eval. geometric angles
+                float NdotL    = dot(N, L);
+                float absNdotL = abs(NdotL);
+                float posNdotL = max(0.0, NdotL);
+
+                // --- light's incoming radiance ---
                 const float LIGHT_MAX_DIST = 128.0;
-                vec3 light_dir = camera_position - fs_world;
-                float light_d = max(dot(normalize(light_dir), normal), 0.0);
+                vec3 Li = vec3(posNdotL);
+                float light_dist_sq = dot(L, L);
+                float light_dist = sqrt(light_dist_sq);
+                Li *= lightAttenuate(light_dist_sq, light_dist, LIGHT_MAX_DIST, 0.01);
+                Li *= 4.0; // give it some intensity
+                // light color is white
 
-            ";
-            match {
-                _ => {
-                    "
-                    float light_dist = length(light_dir);
-                    light_d *= lightAttenuate(light_dist, LIGHT_MAX_DIST);
-                    ";
-                };
-                WindowedAttenuation => {
-                    "
-                    float light_dist_sq = dot(light_dir, light_dir);
-                    float light_dist = sqrt(light_dist_sq);
-                    light_d *= lightAttenuate(light_dist_sq, light_dist, LIGHT_MAX_DIST, 0.01);
-                    ";
-                };
-            }
-                "
+                // evaluate half-vector H, the microsurface normal
+                vec3  LV     = L + V;
+                float LV_len = length(LV);
+                vec3  H      = LV / LV_len;
 
-                float L = LIGHT_AMBIENT + light_d;
-                outColor = vec4(diffuse * L, 1.0);
+                // --- light's specular BRDF evaluation ---
+                // eval. microfacet angles
+                float MdotL = dot(H, L);
+                float NdotM = dot(N, H);
+
+                vec3 F = fresnel_Schlick(max(0.0, MdotL), F0);
+                float D = ndf_GGX(NdotM, a);
+                float G2 = ndf_G2_SmithHeight(absNdotV, absNdotL, a); // hammon approx.
+                vec3 t_FD = F * D;
+                float t_d = 4 * absNdotL * absNdotV;
+                vec3 BRDF_spec = t_FD / t_d;
+                BRDF_spec *= G2;
+
+                vec3 BRDF_diff = albedo / 3.14159;
+                vec3 BRDF = BRDF_diff + BRDF_spec;
+                Lo += BRDF * Li * posNdotL;
+
+                outColor = vec4(Lo, 1.0);
                 ";
             }
         ];
@@ -364,8 +415,6 @@ ethel::shader_glsl! {
                 vec3 rc1 = mix(rc01, rc11, ify);
                 vec3 local_deformed = mix(rc0, rc1, ifz);
 
-                vec4 world = vec4(bind_pose + local_deformed, 1.0);
-
                 // derive normal
                 vec3 e_x0 = p100 - p000;
                 vec3 e_x1 = p110 - p010;
@@ -400,15 +449,15 @@ ethel::shader_glsl! {
                         ify
                     )
                 );
-
                 vec3 tangent = tx;
                 vec3 bitangent = normalize(ty - dot(ty, tangent) * tangent);
                 vec3 normal_tb = cross(tangent, bitangent);
-
                 mat3 tbn_local = mat3(tangent, bitangent, normal_tb);
                 mat3 tbn_bind = mat3(normalize(b100-b000),normalize(b010-b000),normalize(b001-b000));
                 mat3 F = tbn_local * inverse(tbn_bind);
+
                 vec3 d_normal = normalize(cofactor3(F) * normal);
+                vec4 world = vec4(bind_pose + local_deformed, 1.0);
 
                 fs_world = world.xyz;
                 fs_normal = d_normal;

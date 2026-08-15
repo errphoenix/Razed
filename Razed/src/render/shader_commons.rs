@@ -17,7 +17,7 @@ pub const ATTRIBS_PIXEL_MINIMAL: GlslAttribute = ethel::shader_glsl_attribs! {
     output outColor: vec4;
 };
 
-pub const CONST_AMBIENT_LIGHT: Constant<f32> = Constant::new("LIGHT_AMBIENT", 0.25);
+pub const CONST_AMBIENT_LIGHT: Constant<f32> = Constant::new("LIGHT_AMBIENT", 0.08);
 
 ethel::shader_glsl_struct! {
     struct IndirectIndex {
@@ -601,7 +601,7 @@ pub const LIB_FRESNEL_SCHLICK: GlslLib = ethel::shader_glsl_lib! {
     ] => "
         float iNdotL = 1.0 - NdotL;
         float iNdotL5 = iNdotL*iNdotL*iNdotL*iNdotL*iNdotL;
-        float f = (1.0 - fresnel) * iNdotL5;
+        vec3 f = (1.0 - fresnel) * iNdotL5;
         return fresnel + f;
     "
 };
