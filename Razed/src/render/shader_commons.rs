@@ -75,7 +75,7 @@ pub const LIB_QUAT_CONVERT_MAT: GlslLib = ethel::shader_glsl_lib! {
 pub const LIB_QUAT_MUL_QUAT: GlslLib = ethel::shader_glsl_lib! {
     vec4 mulQuat [ q0: vec4, q1: vec4 ] => "
         vec4 r;
-        r.x = (q0.w * q1.x) + (q0.x + q1.w) + (q0.y * q1.z) - (q0.z * q1.y);
+        r.x = (q0.w * q1.x) + (q0.x * q1.w) + (q0.y * q1.z) - (q0.z * q1.y);
         r.y = (q0.w * q1.y) - (q0.x * q1.z) + (q0.y * q1.w) + (q0.z * q1.x);
         r.z = (q0.w * q1.z) + (q0.x * q1.y) - (q0.y * q1.x) + (q0.z * q1.w);
         r.w = (q0.w * q1.w) - (q0.x * q1.x) - (q0.y * q1.y) - (q0.z * q1.z);
@@ -94,7 +94,7 @@ pub const LIB_QUAT_MUL_QUAT: GlslLib = ethel::shader_glsl_lib! {
 pub const LIB_QUAT_ROT_VEC: GlslLib = ethel::shader_glsl_lib! {
     vec3 rotateQuat [ p: vec3, q: vec4 ] => "
         vec4 q_conj = vec4(-q.x, -q.y, -q.z, q.w);
-        vec4 p4 = vec4(p, 1.0);
+        vec4 p4 = vec4(p, 0.0);
 
         vec4 r = mulQuat(q, p4);
         r = mulQuat(r, q_conj);
@@ -299,7 +299,7 @@ pub const LIB_NDF_MASK_G2_SMITH_HEIGHT: GlslLib = ethel::shader_glsl_lib! {
         lambda_light : float
     ] => "
         float m0 = MdotV > 0.0 ? 1.0 : 0.0;
-        float m1 = MdotV > 0.0 ? 1.0 : 0.0;
+        float m1 = MdotL > 0.0 ? 1.0 : 0.0;
         float d = 1.0 + lambda_view + lambda_light;
         float n = m0 * m1;
         return n / d;
@@ -327,10 +327,11 @@ pub const LIB_NDF_BECKMANN: GlslLib = ethel::shader_glsl_lib! {
 
         float id2  = NdotM2 - 1.0;
         float a2d2 = a2 * NdotM2;
-        float g = exp(id2 / a2d1);
+        float g = exp(id2 / a2d2);
 
         float a2pi = 3.14159 * a2;
-        float f = m / a2pi;
+        float a2pit = a2p2i * NdotM4;
+        float f = m / a2pit;
 
         return f * g;
     "
@@ -486,8 +487,8 @@ pub const LIB_NDF_MASK_G1_SMITH_GGX_KARIS_APPROX: GlslLib = ethel::shader_glsl_l
         roughness : float
     ] => "
         float n = 2.0 * NdotP;
-        float 2ma = 2.0 - roughness;
-        float d = NdotP * 2ma + roughness;
+        float ma2 = 2.0 - roughness;
+        float d = NdotP * ma2 + roughness;
         return n / d;
     "
 };
@@ -513,13 +514,6 @@ pub const LIB_NDF_MASK_G1_SMITH_GGX_KARIS_APPROX: GlslLib = ethel::shader_glsl_l
 /// * the scalar roughness value of the surface
 ///
 /// The function returns a floating-point scalar.
-///
-/// The function assumes the microfacet normal cannot form an angle
-/// greater than 90 degrees, therefore they are not clamped. It assumes the
-/// use of the 'half-vector' `h` as the microfacet surface normal (param. 1),
-/// which is to be perfectly aligned with the microfacet normal vector and
-/// points exactly halfway the vectors pointing towards the viewpoint and the
-/// light, from which it is derived.
 ///
 /// Mutually exclusive with [`LIB_NDF_MASK_G2_SMITH_HEIGHT`].
 ///
