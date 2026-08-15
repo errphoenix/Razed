@@ -289,6 +289,8 @@ pub const LIB_NDF_MASK_G2_SMITH_SEPARABLE: GlslLib = ethel::shader_glsl_lib! {
 /// which is to be perfectly aligned with the microfacet normal vector and
 /// points exactly halfway the vectors pointing towards the viewpoint and the
 /// light, from which it is derived.
+///
+/// Mutually exclusive with [`LIB_NDF_MASK_G2_SMITH_HEIGHT_GGX_HAMMON_APPROX`].
 pub const LIB_NDF_MASK_G2_SMITH_HEIGHT: GlslLib = ethel::shader_glsl_lib! {
     float ndf_G2_SmithHeight[
         micro_normal : vec3,
@@ -532,6 +534,21 @@ pub const LIB_NDF_MASK_G1_SMITH_GGX_KARIS_APPROX: GlslLib = ethel::shader_glsl_l
 /// light, from which it is derived.
 ///
 /// Mutually exclusive with [`LIB_NDF_MASK_G2_SMITH_HEIGHT`].
+///
+/// **NOTE**: this optimization includes the term of the specular BRDF
+/// denominator `4 * |dot(n,l)| * |dot(n,v)|`, which means the G2 term must
+/// be multiplied outside the fraction when resolving that BRDF.
+///
+/// Practically, the BRDF equation should go from:
+/// ```
+/// (FRESNEL * G2 * NDF) / denom
+/// ```
+/// to:
+/// ```
+/// ((FRESNEL * NDF) / denom) * G2
+/// ```
+///
+/// where `denom` is specular BRDF denominator as `4 * |dot(n,l)| * |dot(n,v)|`
 pub const LIB_NDF_MASK_G2_SMITH_HEIGHT_GGX_HAMMON_APPROX: GlslLib = ethel::shader_glsl_lib! {
     float ndf_G2_SmithHeight[
         normal       : vec3,
@@ -546,6 +563,69 @@ pub const LIB_NDF_MASK_G2_SMITH_HEIGHT_GGX_HAMMON_APPROX: GlslLib = ethel::shade
         float b = NdotL + NdotV;
         float d = mix(a, b, roughness);
         return N / d;
+    "
+};
+
+ethel::shader_glsl_struct! {
+    struct FresnelParams {
+        albedo  : glam::Vec3 => vec3;
+        fresnel : glam::Vec3 => vec3;
+    }
+}
+
+/// Evaluate Fresnel-Schlick parameters.
+///
+/// Creates the `fresnel_Params` function, which has the following arguments:
+/// * a scalar "metalness" factor from 0 to 1
+/// * the RGB surface color (albedo)
+/// * the RGB "dielectric fallback" color, basically the default specular
+///   color of the surface if it is not a metallic (`metalness = 0`, thus
+///   dielectric) surface. A good standard value is 0.04 for all 3 channels.
+///
+/// Returns a `FresnelParams` struct, which first field is the new `albedo`
+/// surface color to be used as diffuse color, and then the second field
+/// `fresnel` is the `F0` value to be used in the Fresnel function such as
+/// [`Fresnel-Schlick`](LIB_FRESNEL_SCHLICK) approximation.
+pub const LIB_FRESNEL_PARAMS: GlslLib = ethel::shader_glsl_lib! {
+    FresnelParams fresnel_Params[
+        metalness           : float,
+        surface_color       : vec3,
+        dielectric_fallback : vec3
+    ] => "
+        vec3 f0 = mix(
+            dielectric_fallback,
+            surface_color,
+            metalness
+        );
+        vec3 ss = mix(
+            surface_color,
+            vec3(0.0),
+            metalness
+        );
+        return FresnelParams(ss, f0);
+    "
+};
+
+/// The Fresnel-Schlick approximation function.
+///
+/// Creates `fresnel_Schlick` function, which has the following arguments:
+/// * a 3d vector normal of the surface
+/// * a 3d vector that points from the surface to the light
+/// * the fresnel F0 value as evaluated by [`LIB_FRESNEL_PARAMS`]
+///
+/// Returns a 3d vector, intended as an RGB color as the Fresnel term of the
+/// specular BRDF.
+pub const LIB_FRESNEL_SCHLICK: GlslLib = ethel::shader_glsl_lib! {
+    vec3 fresnel_Schlick[
+        normal   : vec3,
+        to_light : vec3,
+        fresnel  : vec3
+    ] => "
+        float NdotL = max(0.0, dot(normal, to_light));
+        float iNdotL = 1.0 - NdotL;
+        float iNdotL5 = iNdotL*iNdotL*iNdotL*iNdotL*iNdotL;
+        float f = (1.0 - fresnel) * iNdotL5;
+        return fresnel + f;
     "
 };
 
