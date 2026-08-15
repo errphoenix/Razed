@@ -68,6 +68,13 @@ rendrs::material_groups! {
             roughness    = asset(*materials::MATEX_DEV_ID_ROAD015C_ROUGHNESS);
             displacement = asset(*materials::MATEX_DEV_ID_ROAD015C_DISPLACEMENT);
         };
+        entry(materials::MATERIAL_DEV_NAME_METAL048C) {
+            diffuse      = asset(*materials::MATEX_DEV_ID_METAL048C_DIFFUSE);
+            normal       = asset(*materials::MATEX_DEV_ID_METAL048C_NORMAL);
+            metallic     = asset(*materials::MATEX_DEV_ID_METAL048C_METALLIC);
+            roughness    = asset(*materials::MATEX_DEV_ID_METAL048C_ROUGHNESS);
+            displacement = asset(*materials::MATEX_DEV_ID_METAL048C_DISPLACEMENT);
+        };
     }
 }
 
@@ -116,5 +123,6 @@ pub mod materials {
         dev.bricks103 => diffuse, normal, occlusion, roughness, displacement;
         dev.concrete012 => diffuse, normal, roughness, displacement;
         dev.road015c => diffuse, normal, occlusion, roughness, displacement;
+        dev.metal048c => diffuse, normal, metallic, roughness, displacement;
     }
 }

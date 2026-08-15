@@ -22,5 +22,11 @@ ethel::asset_registry! {
         MATEX_DEV_NAME_ROAD015C_OCCLUSION => "assets/dev/road015c/occlusion.jpg";
         MATEX_DEV_NAME_ROAD015C_ROUGHNESS => "assets/dev/road015c/roughness.jpg";
         MATEX_DEV_NAME_ROAD015C_DISPLACEMENT => "assets/dev/road015c/displacement.jpg";
+
+        MATEX_DEV_NAME_METAL048C_DIFFUSE => "assets/dev/metal048c/diffuse.jpg";
+        MATEX_DEV_NAME_METAL048C_NORMAL => "assets/dev/metal048c/normal.jpg";
+        MATEX_DEV_NAME_METAL048C_METALLIC => "assets/dev/metal048c/metallic.jpg";
+        MATEX_DEV_NAME_METAL048C_ROUGHNESS => "assets/dev/metal048c/roughness.jpg";
+        MATEX_DEV_NAME_METAL048C_DISPLACEMENT => "assets/dev/metal048c/displacement.jpg";
     }
 }

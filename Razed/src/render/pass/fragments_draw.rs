@@ -93,8 +93,6 @@ pub const SSBO_INDEX_POD_CAGES_LOCALPOINTS_BIND: u32 = ssbo_binding!(POD_Cages_L
 pub const SSBO_INDEX_POD_CAGES_BINDREF: u32 = ssbo_binding!(POD_Cages_BindRef);
 pub const SSBO_INDEX_IMAP_CAGES: u32 = ssbo_binding!(IMap_Cages);
 
-use ShaderFragmentVariants::*;
-
 use shader_commons::FresnelParamsGlslStruct;
 use shader_commons::LIB_FRESNEL_PARAMS;
 use shader_commons::LIB_FRESNEL_SCHLICK;
@@ -102,6 +100,7 @@ use shader_commons::LIB_NDF_GGX;
 use shader_commons::LIB_NDF_GGX_LAMBDA;
 use shader_commons::LIB_NDF_LAMBDA_A_NOSQRT;
 use shader_commons::LIB_NDF_MASK_G2_SMITH_HEIGHT_GGX_HAMMON_APPROX;
+use shader_commons::LIB_TONEMAP_ACES_2015;
 
 ethel::shader_glsl! {
     struct Fragment > [460] {
@@ -137,14 +136,16 @@ ethel::shader_glsl! {
             const {
                 shader_commons::CONST_AMBIENT_LIGHT
                 Constant::new("DEV_MATERIAL_GROUP", 0u32)
-                Constant::new("DIFFUSE_ALPHA_PAGE", 6f32)
-                Constant::new("NORMAL_EMISSIVE_PAGE", 7f32)
-                Constant::new("ORMD_PAGE", 8f32)
-                Constant::new("UV_SCALE", 0.35)
+                Constant::new("DIFFUSE_ALPHA_PAGE", 12f32)
+                Constant::new("NORMAL_EMISSIVE_PAGE", 13f32)
+                Constant::new("ORMD_PAGE", 14f32)
+                Constant::new("UV_SCALE", 2.0)
             };
 
             lib {
                 rendrs::pack::DERIVE_COTANGENT;
+
+                rendrs::graphics::light::LIB_LIGHT_ATTENUATE_ISQ_WINDOWED_CURVE;
 
                 LIB_FRESNEL_PARAMS;
                 LIB_FRESNEL_SCHLICK;
@@ -153,7 +154,7 @@ ethel::shader_glsl! {
                 LIB_NDF_LAMBDA_A_NOSQRT;
                 LIB_NDF_MASK_G2_SMITH_HEIGHT_GGX_HAMMON_APPROX;
 
-                rendrs::graphics::light::LIB_LIGHT_ATTENUATE_ISQ_WINDOWED_CURVE;
+                LIB_TONEMAP_ACES_2015;
             };
 
             src() {
@@ -192,11 +193,8 @@ ethel::shader_glsl! {
 
                 vec3 world = fs_world;
 
-                // surface outgoing radiance accumulation
-                vec3 Lo = vec3(LIGHT_AMBIENT);
-
-                // roughness (todo use disney principle?)
-                float a = roughness;
+                // roughness
+                float a = roughness*roughness;
 
                 // material fresnel F0 evaluation
                 const vec3 FRESNEL_FALLBACK = vec3(0.04);
@@ -205,6 +203,9 @@ ethel::shader_glsl! {
                 );
                 vec3 albedo = fresnel.albedo;
                 vec3 F0     = fresnel.fresnel;
+
+                // surface outgoing radiance accumulation
+                vec3 Lo = vec3(LIGHT_AMBIENT) * diffuse;
 
                 // ------ global view-specific ------
                 vec3 to_camera = camera_position - world;
@@ -231,7 +232,7 @@ ethel::shader_glsl! {
                 float light_dist = sqrt(light_dist_sq);
                 float attenuation = lightAttenuate(light_dist_sq, light_dist, LIGHT_MAX_DIST, 0.01);
                 vec3 Li = vec3(attenuation);
-                Li *= 4.0; // give it some intensity
+                //Li *= 5.0; // give it some intensity
                 // light color is white
 
                 // evaluate half-vector H, the microsurface normal
@@ -257,7 +258,13 @@ ethel::shader_glsl! {
                 vec3 BRDF = BRDF_diff + BRDF_spec;
                 Lo += BRDF * Li * posNdotL;
 
-                outColor = vec4(Lo, 1.0);
+                vec3 color = Lo;
+                // tonemapping (Narkowicz 2015)
+                color = tonemap_ACES_2015(color);
+                // gamma correction
+                color = pow(color, vec3(1.0 / 2.2));
+
+                outColor = vec4(color, 1.0);
                 ";
             }
         ];

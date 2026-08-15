@@ -17,7 +17,7 @@ pub const ATTRIBS_PIXEL_MINIMAL: GlslAttribute = ethel::shader_glsl_attribs! {
     output outColor: vec4;
 };
 
-pub const CONST_AMBIENT_LIGHT: Constant<f32> = Constant::new("LIGHT_AMBIENT", 0.08);
+pub const CONST_AMBIENT_LIGHT: Constant<f32> = Constant::new("LIGHT_AMBIENT", 0.01);
 
 ethel::shader_glsl_struct! {
     struct IndirectIndex {
@@ -623,5 +623,29 @@ pub const LIB_VEC3_OUTER: GlslLib = ethel::shader_glsl_lib! {
             a * b.y,
             a * b.z
         );
+    "
+};
+
+/// ACES-approximated tonemap from Narkowicz 2015.
+///
+/// Creates the `tonemap_ACES_2015` function which takes a single vec3
+/// argument (intended as an RGB color).
+///
+/// Returns the tonemapped color as a vec3.
+pub const LIB_TONEMAP_ACES_2015: GlslLib = ethel::shader_glsl_lib! {
+    vec3 tonemap_ACES_2015[
+        color : vec3
+    ] => "
+        const float a = 2.51;
+        const float b = 0.03;
+        const float c = 2.43;
+        const float d = 0.59;
+        const float e = 0.14;
+
+        vec3 axb  = a * color + b;
+        vec3 cxd  = c * color + d;
+        vec3 num  = color * axb;
+        vec3 den  = color * cxd + e;
+        return clamp(num / den, 0.0, 1.0);
     "
 };
