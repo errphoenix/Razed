@@ -207,8 +207,9 @@ ethel::shader_glsl! {
                 vec3 F0     = fresnel.fresnel;
 
                 // ------ global view-specific ------
+                vec3 to_camera = camera_position - world;
                 vec3 N = normal;
-                vec3 V = normalize(camera_position - world); // dir to view
+                vec3 V = normalize(to_camera);
                 float NdotV = dot(N, V);
                 float absNdotV = abs(NdotV);
 
@@ -216,6 +217,7 @@ ethel::shader_glsl! {
                 // only one light is evaluated: the camera as a point light
 
                 // equal to V because this is a camera point light
+                vec3 to_light = to_camera;
                 vec3 L = V; // dir to light
 
                 // eval. geometric angles
@@ -225,10 +227,10 @@ ethel::shader_glsl! {
 
                 // --- light's incoming radiance ---
                 const float LIGHT_MAX_DIST = 128.0;
-                vec3 Li = vec3(posNdotL);
-                float light_dist_sq = dot(L, L);
+                float light_dist_sq = dot(to_light, to_light);
                 float light_dist = sqrt(light_dist_sq);
-                Li *= lightAttenuate(light_dist_sq, light_dist, LIGHT_MAX_DIST, 0.01);
+                float attenuation = lightAttenuate(light_dist_sq, light_dist, LIGHT_MAX_DIST, 0.01);
+                vec3 Li = vec3(attenuation);
                 Li *= 4.0; // give it some intensity
                 // light color is white
 
@@ -245,10 +247,11 @@ ethel::shader_glsl! {
                 vec3 F = fresnel_Schlick(max(0.0, MdotL), F0);
                 float D = ndf_GGX(NdotM, a);
                 float G2 = ndf_G2_SmithHeight(absNdotV, absNdotL, a); // hammon approx.
+                // G2 uses the Hammon approximation, so the denominator is no
+                // longer required to be applied here on the specular term as
+                // G2 already combines the denominator.
                 vec3 t_FD = F * D;
-                float t_d = 4 * absNdotL * absNdotV;
-                vec3 BRDF_spec = t_FD / t_d;
-                BRDF_spec *= G2;
+                vec3 BRDF_spec = t_FD * G2;
 
                 vec3 BRDF_diff = albedo / 3.14159;
                 vec3 BRDF = BRDF_diff + BRDF_spec;

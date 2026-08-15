@@ -527,10 +527,13 @@ pub const LIB_NDF_MASK_G1_SMITH_GGX_KARIS_APPROX: GlslLib = ethel::shader_glsl_l
 /// ```
 /// to:
 /// ```
-/// ((FRESNEL * NDF) / denom) * G2
+/// (FRESNEL * NDF) * G2
 /// ```
+/// where G2 is the Hammon approximation of the G2 Smith function that
+/// already divides by `denom`.
 ///
-/// where `denom` is specular BRDF denominator as `4 * |dot(n,l)| * |dot(n,v)|`
+/// where `denom` is the specular BRDF denominator as
+/// `4 * |dot(n,l)| * |dot(n,v)|`
 pub const LIB_NDF_MASK_G2_SMITH_HEIGHT_GGX_HAMMON_APPROX: GlslLib = ethel::shader_glsl_lib! {
     float ndf_G2_SmithHeight[
         NdotV     : float,
