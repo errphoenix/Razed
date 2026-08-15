@@ -187,8 +187,8 @@ pub const LIB_MAT3_CONVERT_QUAT: GlslLib = ethel::shader_glsl_lib! {
 /// The Smith NDF masking function `G1` used to mask microfacet normals.
 ///
 /// Creates the `ndf_G1_Smith` function, which has the following paramaters:
-/// * the microfacet surface normal 3d vector
-/// * the 3d vector pointing from the surface to the point
+/// * the angle (dot product) between the microfacet surface normal and the
+///   vector pointing from the surface to the point
 /// * the result of the NDF's `lambda` function for the 3d vector pointing
 ///   from the surface to the point
 ///
@@ -208,13 +208,11 @@ pub const LIB_MAT3_CONVERT_QUAT: GlslLib = ethel::shader_glsl_lib! {
 /// Mutually exclusive with [`LIB_NDF_MASK_G1_SMITH_GGX_KARIS_APPROX`].
 pub const LIB_NDF_MASK_G1_SMITH: GlslLib = ethel::shader_glsl_lib! {
     float ndf_G1_Smith[
-        micro_normal : vec3,
-        to_point     : vec3,
+        MdotP        : float,
         lambda_point : float
     ] => "
-        float MdotV = dot(micro_normal, to_point);
         float d = 1.0 + lambda_point;
-        return MdotV / d;
+        return MdotP / d;
     "
 };
 
@@ -227,13 +225,14 @@ pub const LIB_NDF_MASK_G1_SMITH: GlslLib = ethel::shader_glsl_lib! {
 ///
 /// Creates the `ndf_G2_SmithSeparable` function, which has the following
 /// parameters:
-/// * the microfacet surface normal 3d vector
-/// * the 3d vector pointing from the surface to the viewpoint
-/// * the 3d vector pointing away from the surface to the light's origin
+/// * the angle (dot product) between the microfacet surface normal and the
+///   vector pointing from the surface to the viewpoint
+/// * the angle (dot product) between the microfacet surface normal and the
+///   vector pointing from the surface to the light
 /// * the result of the NDF's `lambda` function for the 3d vector pointing
 ///   from the surface to the viewpoint
 /// * the result of the NDF's `lambda` function for the 3d vector pointing
-///   from the surface to the light's origin
+///   from the surface to the light
 ///
 /// The `lambda` function is different depending on the chosen NDF.
 ///
@@ -249,14 +248,13 @@ pub const LIB_NDF_MASK_G1_SMITH: GlslLib = ethel::shader_glsl_lib! {
 /// light, from which it is derived.
 pub const LIB_NDF_MASK_G2_SMITH_SEPARABLE: GlslLib = ethel::shader_glsl_lib! {
     float ndf_G2_SmithSeparable[
-        micro_normal : vec3,
-        to_view      : vec3,
-        to_light     : vec3,
+        MdotV        : float,
+        MdotL        : float,
         lambda_view  : float,
         lambda_light : float
     ] => "
-        float a = ndf_G1_Smith(micro_normal, to_view, lambda_view);
-        float b = ndf_G1_Smith(micro_normal, to_light, lambda_light);
+        float a = ndf_G1_Smith(MdotV, lambda_view);
+        float b = ndf_G1_Smith(MdotL, lambda_light);
         return a * b;
     "
 };
@@ -271,9 +269,10 @@ pub const LIB_NDF_MASK_G2_SMITH_SEPARABLE: GlslLib = ethel::shader_glsl_lib! {
 ///
 /// Creates the `ndf_G2_SmithHeight` function, which has the following
 /// parameters:
-/// * the microfacet surface normal 3d vector
-/// * the 3d vector pointing from the surface to the viewpoint
-/// * the 3d vector pointing away from the surface to the light's origin
+/// * the angle (dot product) between the microfacet surface normal and the
+///   vector pointing from the surface to the viewpoint
+/// * the angle (dot product) between the microfacet surface normal and the
+///   vector pointing from the surface to the light
 /// * the result of the NDF's `lambda` function for the 3d vector pointing
 ///   from the surface to the viewpoint
 /// * the result of the NDF's `lambda` function for the 3d vector pointing
@@ -293,14 +292,11 @@ pub const LIB_NDF_MASK_G2_SMITH_SEPARABLE: GlslLib = ethel::shader_glsl_lib! {
 /// Mutually exclusive with [`LIB_NDF_MASK_G2_SMITH_HEIGHT_GGX_HAMMON_APPROX`].
 pub const LIB_NDF_MASK_G2_SMITH_HEIGHT: GlslLib = ethel::shader_glsl_lib! {
     float ndf_G2_SmithHeight[
-        micro_normal : vec3,
-        to_view      : vec3,
-        to_light     : vec3,
+        MdotV        : float,
+        MdotL        : float,
         lambda_view  : float,
         lambda_light : float
     ] => "
-        float MdotV = dot(micro_normal, to_view );
-        float MdotL = dot(micro_normal, to_light);
         float n = MdotV * MdotL;
         float d = 1.0 + lambda_view + lambda_light;
         return n / d;
@@ -310,21 +306,19 @@ pub const LIB_NDF_MASK_G2_SMITH_HEIGHT: GlslLib = ethel::shader_glsl_lib! {
 /// The Beckmann normal distribution function.
 ///
 /// Creates the `ndf_Beckmann` function, with the following parameters:
-/// * the 3d vector of the surface normal
-/// * the 3d vector of the microfacet normal
+/// * the angle (dot product) between the surface normal and the microfacet
+///   surface normal
 /// * the scalar roughness value
 ///
 /// The lambda function of the Beckmann NDF corresponds to
 /// [`LIB_NDF_LAMBDA_A`].
 pub const LIB_NDF_BECKMANN: GlslLib = ethel::shader_glsl_lib! {
     float ndf_Beckmann[
-        normal       : vec3,
-        micro_normal : vec3,
-        roughness    : float
+        NdotM     : float,
+        roughness : float
     ] => "
-        float NdotM = dot(normal, micro_normal);
         float NdotM2 = NdotM*NdotM;
-        float NdotM4 = NdotM*NdotM*NdotM*NdotM;
+        float NdotM4 = NdotM2*NdotM2;
         float a2 = roughness*roughness;
 
         float id2  = NdotM2 - 1.0;
@@ -343,19 +337,17 @@ pub const LIB_NDF_BECKMANN: GlslLib = ethel::shader_glsl_lib! {
 ///
 /// Creates the `ndf_lambda_A` function, with the following
 /// parameters:
-/// * the 3d vector of the surface normal
-/// * the 3d vector pointing from the surface to another point, usually to the
-///   viewpoint or the light's origin
+/// * the angle (dot product) between the geometric surface normal and the
+///   vector pointing from the surface to another point, which is usually the
+///   viewpoint or the light
 /// * the scalar roughness value
 ///
 /// This function is mutually exclusive to [`LIB_NDF_BECKMANN_LAMBDA_A_NOSQRT`].
 pub const LIB_NDF_LAMBDA_A: GlslLib = ethel::shader_glsl_lib! {
     float ndf_lambda_A[
-        normal    : vec3,
-        point     : vec3,
+        NdotP     : float,
         roughness : float
     ] => "
-        float NdotP = dot(normal, point);
         float NdotP2 = NdotP*NdotP;
         float dr = roughness * sqrt(1.0 - NdotP2);
         return NdotP / dr;
@@ -366,9 +358,9 @@ pub const LIB_NDF_LAMBDA_A: GlslLib = ethel::shader_glsl_lib! {
 ///
 /// Creates the `ndf_lambda_A` function, with the following
 /// parameters:
-/// * the 3d vector of the surface normal
-/// * the 3d vector pointing from the surface to another point, usually to the
-///   viewpoint or the light's origin
+/// * the angle (dot product) between the geometric surface normal and the
+///   vector pointing from the surface to another point, which is usually the
+///   viewpoint or the light
 /// * the scalar roughness value
 ///
 /// The single difference with the square-root variant is that this function
@@ -381,11 +373,9 @@ pub const LIB_NDF_LAMBDA_A: GlslLib = ethel::shader_glsl_lib! {
 /// This function is mutually exclusive to [`LIB_NDF_LAMBDA_A`].
 pub const LIB_NDF_LAMBDA_A_NOSQRT: GlslLib = ethel::shader_glsl_lib! {
     float ndf_lambda_A[
-        normal    : vec3,
-        point     : vec3,
+        NdotP     : float,
         roughness : float
     ] => "
-        float NdotP = dot(normal, point);
         float NdotP2 = NdotP*NdotP;
         float dr = roughness * (1.0 - NdotP2);
         return NdotP / dr;
@@ -419,18 +409,16 @@ pub const LIB_NDF_BECKMANN_LAMBDA: GlslLib = ethel::shader_glsl_lib! {
 /// The GGX normal distribution function.
 ///
 /// Creates the `ndf_GGX` function, with the following parameters:
-/// * the 3d vector of the surface normal
-/// * the 3d vector of the microfacet normal
+/// * the angle (dot product) between the geometric surface normal and the
+///   microfacet surface normal
 /// * the scalar roughness value
 ///
 /// The lambda function of the GGX NDF corresponds to [`LIB_NDF_GGX_LAMBDA`].
 pub const LIB_NDF_GGX: GlslLib = ethel::shader_glsl_lib! {
     float ndf_GGX[
-        normal       : vec3,
-        micro_normal : vec3,
-        roughness    : float
+        NdotM     : float,
+        roughness : float
     ] => "
-        float NdotM = dot(normal, micro_normal);
         float a2 = roughness*roughness;
         float n = max(0.0, NdotM) * a2;
         float am = a2 - 1.0;
@@ -475,32 +463,24 @@ pub const LIB_NDF_GGX_LAMBDA: GlslLib = ethel::shader_glsl_lib! {
 /// proposed by Karis in his 2013 "Real Shading in Unreal Engine 4".
 ///
 /// Creates the `ndf_G1_Smith` function, which has the following paramaters:
-/// * the microfacet surface normal 3d vector
-/// * the 3d vector pointing from the surface to the point
+/// * the angle (dot product) between the geometric surface normal and the
+///   vector pointing from the surface to another point, which is usually the
+///   viewpoint or the light
 /// * the scalar roughness value of the surface
 ///
 /// The 'point' is usually the viewpoint or the light's origin.
 ///
 /// The function returns a floating-point scalar.
 ///
-/// The function assumes the microfacet normal cannot form an angle
-/// greater than 90 degrees, therefore they are not clamped. It assumes the
-/// use of the 'half-vector' `h` as the microfacet surface normal (param. 1),
-/// which is to be perfectly aligned with the microfacet normal vector and
-/// points exactly halfway the vectors pointing towards the viewpoint and the
-/// light, from which it is derived.
-///
 /// Mutually exclusive with [`LIB_NDF_MASK_G1_SMITH`].
 pub const LIB_NDF_MASK_G1_SMITH_GGX_KARIS_APPROX: GlslLib = ethel::shader_glsl_lib! {
     float ndf_G1_Smith[
-        normal    : vec3,
-        to_point  : vec3,
+        NdotP     : float,
         roughness : float
     ] => "
-        float NdotV = dot(normal, to_point);
-        float n = 2.0 * NdotV;
+        float n = 2.0 * NdotP;
         float 2ma = 2.0 - roughness;
-        float d = NdotV * 2ma + roughness;
+        float d = NdotP * 2ma + roughness;
         return n / d;
     "
 };
@@ -519,9 +499,10 @@ pub const LIB_NDF_MASK_G1_SMITH_GGX_KARIS_APPROX: GlslLib = ethel::shader_glsl_l
 ///
 /// Creates the `ndf_G2_SmithHeight` function, which has the following
 /// parameters:
-/// * the microfacet surface normal 3d vector
-/// * the 3d vector pointing from the surface to the viewpoint
-/// * the 3d vector pointing away from the surface to the light's origin
+/// * the absolute angle (abs dot product) between the **geometric** surface
+///   normal and the vector pointing from the surface to the viewpoint
+/// * the absolute angle (abs dot product) between the **geometric** surface
+///   normal and the vector pointing from the surface to the light
 /// * the scalar roughness value of the surface
 ///
 /// The function returns a floating-point scalar.
@@ -551,14 +532,11 @@ pub const LIB_NDF_MASK_G1_SMITH_GGX_KARIS_APPROX: GlslLib = ethel::shader_glsl_l
 /// where `denom` is specular BRDF denominator as `4 * |dot(n,l)| * |dot(n,v)|`
 pub const LIB_NDF_MASK_G2_SMITH_HEIGHT_GGX_HAMMON_APPROX: GlslLib = ethel::shader_glsl_lib! {
     float ndf_G2_SmithHeight[
-        normal       : vec3,
-        to_view      : vec3,
-        to_light     : vec3,
-        roughness    : float
+        NdotV     : float,
+        NdotL     : float,
+        roughness : float
     ] => "
         const float N = 0.5;
-        float NdotL = abs(dot(normal, to_light));
-        float NdotV = abs(dot(normal, to_view ));
         float a = 2.0 * NdotL * NdotV;
         float b = NdotL + NdotV;
         float d = mix(a, b, roughness);
@@ -609,19 +587,17 @@ pub const LIB_FRESNEL_PARAMS: GlslLib = ethel::shader_glsl_lib! {
 /// The Fresnel-Schlick approximation function.
 ///
 /// Creates `fresnel_Schlick` function, which has the following arguments:
-/// * a 3d vector normal of the surface
-/// * a 3d vector that points from the surface to the light
+/// * the positive part of the angle (dot product) between the **geometric**
+///   surface normal and the vector pointing from the surface to the light
 /// * the fresnel F0 value as evaluated by [`LIB_FRESNEL_PARAMS`]
 ///
 /// Returns a 3d vector, intended as an RGB color as the Fresnel term of the
 /// specular BRDF.
 pub const LIB_FRESNEL_SCHLICK: GlslLib = ethel::shader_glsl_lib! {
     vec3 fresnel_Schlick[
-        normal   : vec3,
-        to_light : vec3,
-        fresnel  : vec3
+        NdotL   : float,
+        fresnel : vec3
     ] => "
-        float NdotL = max(0.0, dot(normal, to_light));
         float iNdotL = 1.0 - NdotL;
         float iNdotL5 = iNdotL*iNdotL*iNdotL*iNdotL*iNdotL;
         float f = (1.0 - fresnel) * iNdotL5;
