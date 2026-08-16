@@ -232,7 +232,6 @@ ethel::shader_glsl! {
                 float light_dist = sqrt(light_dist_sq);
                 float attenuation = lightAttenuate(light_dist_sq, light_dist, LIGHT_MAX_DIST, 0.01);
                 vec3 Li = vec3(attenuation);
-                //Li *= 5.0; // give it some intensity
                 // light color is white
 
                 // evaluate half-vector H, the microsurface normal
