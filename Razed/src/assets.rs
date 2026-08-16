@@ -1,3 +1,4 @@
+use const_format::concatcp;
 use ethel::assets::TextureMetadata;
 
 pub type Texture = ethel::assets::RawTexture;
@@ -28,5 +29,32 @@ ethel::asset_registry! {
         MATEX_DEV_NAME_METAL048C_METALLIC     => "assets/dev/metal048c/metallic.jpg";
         MATEX_DEV_NAME_METAL048C_ROUGHNESS    => "assets/dev/metal048c/roughness.jpg";
         MATEX_DEV_NAME_METAL048C_DISPLACEMENT => "assets/dev/metal048c/displacement.jpg";
+
+        MATEX_DEV_NAME_METAL063_DIFFUSE      => "assets/dev/metal063/diffuse.jpg";
+        MATEX_DEV_NAME_METAL063_NORMAL       => "assets/dev/metal063/normal.jpg";
+        MATEX_DEV_NAME_METAL063_METALLIC     => "assets/dev/metal063/metallic.jpg";
+        MATEX_DEV_NAME_METAL063_ROUGHNESS    => "assets/dev/metal063/roughness.jpg";
+        MATEX_DEV_NAME_METAL063_DISPLACEMENT => "assets/dev/metal063/displacement.jpg";
+
+        ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_NEGX => "assets/dev/env/larnaca_castle/negx.jpg";
+        ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_NEGY => "assets/dev/env/larnaca_castle/negy.jpg";
+        ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_NEGZ => "assets/dev/env/larnaca_castle/negz.jpg";
+        ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_POSX => "assets/dev/env/larnaca_castle/posx.jpg";
+        ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_POSY => "assets/dev/env/larnaca_castle/posy.jpg";
+        ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_POSZ => "assets/dev/env/larnaca_castle/posz.jpg";
     }
 }
+
+pub const ENVMAP_CUBE_ENV_NAME_LARNACACASTLE: &str = "__dev.env.cube.larnaca-castle";
+pub const ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_NEGX: &str =
+    concatcp!(ENVMAP_CUBE_ENV_NAME_LARNACACASTLE, ".negx");
+pub const ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_NEGY: &str =
+    concatcp!(ENVMAP_CUBE_ENV_NAME_LARNACACASTLE, ".negy");
+pub const ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_NEGZ: &str =
+    concatcp!(ENVMAP_CUBE_ENV_NAME_LARNACACASTLE, ".negz");
+pub const ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_POSX: &str =
+    concatcp!(ENVMAP_CUBE_ENV_NAME_LARNACACASTLE, ".posz");
+pub const ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_POSY: &str =
+    concatcp!(ENVMAP_CUBE_ENV_NAME_LARNACACASTLE, ".posy");
+pub const ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_POSZ: &str =
+    concatcp!(ENVMAP_CUBE_ENV_NAME_LARNACACASTLE, ".posz");

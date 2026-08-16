@@ -5,6 +5,7 @@ pub mod shader_commons;
 use std::sync::atomic::Ordering;
 
 use ethel::{
+    assets::Handle,
     render::{Resolution, buffer::StorageSection, command::DrawGroups},
     state::camera::ViewPoint,
 };
@@ -13,11 +14,14 @@ use gui::{
     text::{GlyphAtlasTexture, GlyphRaster},
 };
 use janus::{
+    StringHash,
     context::DeltaTime,
     sync::TriCell,
-    texture::{ImageFormat, ImageType, MipLevels, TextureFiltering},
+    texture::{ImageFormat, ImageType, MipLevels, TextureFiltering, TextureView},
 };
-use rendrs::pipeline::{Pass, RenderPool, RenderTarget, RenderTargetDescriptor, RenderTargetId};
+use rendrs::pipeline::{
+    Pass, RenderPool, RenderTarget, RenderTargetDescriptor, RenderTargetId, SamplerObject,
+};
 
 #[cfg(feature = "devmode")]
 use crate::render::pass::debug_lines_draw::DebugLinesData;
@@ -54,8 +58,18 @@ pub struct RenderTargetHandles {
     base: RenderTargetId,
 }
 impl RenderTargetHandles {
-    pub fn base(&self) -> RenderTargetId {
+    pub const fn base(&self) -> RenderTargetId {
         self.base
+    }
+}
+
+#[derive(Debug)]
+pub struct PersistentSamplers {
+    dev_envmap_cubemap: SamplerObject,
+}
+impl PersistentSamplers {
+    pub const fn dev_envmap_cube(&self) -> SamplerObject {
+        self.dev_envmap_cubemap
     }
 }
 
@@ -105,11 +119,11 @@ pub struct Renderer {
 
     materials: Materials,
 
-    // safe to unwrap during rendering
+    // safe to unwrap during rendering after resource initialization
     pipeline: Option<RenderPipeline>,
-
-    // safe to unwrap during rendering
     target_handles: Option<RenderTargetHandles>,
+    persistent_samplers: Option<PersistentSamplers>,
+
     render_pool: RenderPool,
     shaders: RenderShaders,
 
@@ -362,23 +376,56 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         let texture_assets = &mut self.textures_master_registry;
         self.materials.initialize(texture_assets);
 
-        let dev_materials = &self.materials.groups().dev;
+        // init pipeline
+        {
+            let dev_materials = &self.materials.groups().dev;
+            self.pipeline = Some(RenderPipeline {
+                fd_preprocess_pass: pass::fd_preprocess::pass(&self.shaders.fd_preprocess),
+                fragments_draw_pass: pass::fragments_draw::pass(
+                    &self.shaders.fragments,
+                    dev_materials,
+                ),
+                debris_draw_pass: pass::debris_draw::pass(&self.shaders.debris),
+                debug_lattice_draw_pass: pass::debug_lattice_draw::pass(&self.shaders.lattice),
+                cage_deform_compute_pass: pass::cage_deform_compute::pass(
+                    &self.shaders.cage_deform,
+                ),
+                debug_cage_draw_pass: pass::debug_cage_draw::pass(&self.shaders.cage_visual),
+                interface_draw_pass: gui::render::pass(&self.shaders.interface),
 
-        self.pipeline = Some(RenderPipeline {
-            fd_preprocess_pass: pass::fd_preprocess::pass(&self.shaders.fd_preprocess),
-            fragments_draw_pass: pass::fragments_draw::pass(&self.shaders.fragments, dev_materials),
-            debris_draw_pass: pass::debris_draw::pass(&self.shaders.debris),
-            debug_lattice_draw_pass: pass::debug_lattice_draw::pass(&self.shaders.lattice),
-            cage_deform_compute_pass: pass::cage_deform_compute::pass(&self.shaders.cage_deform),
-            debug_cage_draw_pass: pass::debug_cage_draw::pass(&self.shaders.cage_visual),
-            interface_draw_pass: gui::render::pass(&self.shaders.interface),
+                #[cfg(feature = "devmode")]
+                debug_lines_draw_pass: pass::debug_lines_draw::pass(&self.shaders.lines),
+            });
+        }
 
-            #[cfg(feature = "devmode")]
-            debug_lines_draw_pass: pass::debug_lines_draw::pass(&self.shaders.lines),
-        });
+        // init persistent samplers
+        {
+            const DEV_ENV_CUBEMAP_NAME: &str = super::assets::ENVMAP_CUBE_ENV_NAME_LARNACACASTLE;
+            const DEV_ENV_CUBEMAP_ID: StringHash = janus::hash_string(DEV_ENV_CUBEMAP_NAME);
+
+            {
+                let dev_env_cubemap = graphics::pack_cubemap(texture_assets, DEV_ENV_CUBEMAP_NAME);
+                texture_assets.add_handle(Handle::from_gpu_resource(
+                    DEV_ENV_CUBEMAP_ID,
+                    dev_env_cubemap,
+                    texture_assets,
+                ));
+            }
+
+            let dev_env_cubemap = texture_assets.get_gpu_view(DEV_ENV_CUBEMAP_ID).unwrap();
+            self.persistent_samplers = Some(PersistentSamplers {
+                dev_envmap_cubemap: SamplerObject::new(dev_env_cubemap),
+            });
+        }
     }
 }
 impl Renderer {
+    fn persistent_samplers(&self) -> &PersistentSamplers {
+        self.persistent_samplers
+            .as_ref()
+            .expect("persistent samplers must be present after resource initialization")
+    }
+
     fn pipeline(&self) -> &RenderPipeline {
         self.pipeline
             .as_ref()
