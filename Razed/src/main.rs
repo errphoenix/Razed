@@ -11,7 +11,6 @@ use crate::{
     data::FrameDataBuffers,
     procedural::{CubeVoronoi, voxel_grid},
     render::RenderGroup,
-    structure::cage,
 };
 
 mod assets;
@@ -52,7 +51,7 @@ fn main() {
         janus::gl::PixelStorei(janus::gl::UNPACK_ALIGNMENT, 1);
 
         janus::gl::ClipControl(janus::gl::LOWER_LEFT, janus::gl::ZERO_TO_ONE);
-        janus::gl::DepthFunc(janus::gl::GREATER);
+        janus::gl::DepthFunc(render::DEFAULT_DEPTH_FUNC);
         janus::gl::ClearDepth(0.0);
         janus::gl::Enable(janus::gl::DEPTH_TEST);
 

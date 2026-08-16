@@ -161,13 +161,21 @@ pub fn pack_cubemap(
 type TextureAssetHandle = Handle<RawTexture, TextureMetadata>;
 
 pub fn pack_cubemap_faces(
-    negx: TextureAssetHandle,
-    negy: TextureAssetHandle,
-    negz: TextureAssetHandle,
-    posx: TextureAssetHandle,
-    posy: TextureAssetHandle,
-    posz: TextureAssetHandle,
+    mut negx: TextureAssetHandle,
+    mut negy: TextureAssetHandle,
+    mut negz: TextureAssetHandle,
+    mut posx: TextureAssetHandle,
+    mut posy: TextureAssetHandle,
+    mut posz: TextureAssetHandle,
 ) -> Texture {
+    {
+        negx.raw_resource_or_load(Some(&())).unwrap();
+        negy.raw_resource_or_load(Some(&())).unwrap();
+        negz.raw_resource_or_load(Some(&())).unwrap();
+        posx.raw_resource_or_load(Some(&())).unwrap();
+        posy.raw_resource_or_load(Some(&())).unwrap();
+        posz.raw_resource_or_load(Some(&())).unwrap();
+    }
     {
         let negx = negx.metadata();
         let negy = negy.metadata();
@@ -188,6 +196,7 @@ pub fn pack_cubemap_faces(
         .metadata()
         .size
         .expect("texture asset and its metadata must be properly initialised");
+
     let cubemap = Texture::new_cubemap(
         w as i32,
         h as i32,
@@ -196,17 +205,27 @@ pub fn pack_cubemap_faces(
         ImageFormat::Rgb,
     );
 
-    let faces = [
-        negx.raw_resource().unwrap().0.as_bytes(),
-        negy.raw_resource().unwrap().0.as_bytes(),
-        negz.raw_resource().unwrap().0.as_bytes(),
-        posx.raw_resource().unwrap().0.as_bytes(),
-        posy.raw_resource().unwrap().0.as_bytes(),
-        posz.raw_resource().unwrap().0.as_bytes(),
+    let face_data = [
+        posx.take_from_memory().unwrap(),
+        negx.take_from_memory().unwrap(),
+        posy.take_from_memory().unwrap(),
+        negy.take_from_memory().unwrap(),
+        posz.take_from_memory().unwrap(),
+        negz.take_from_memory().unwrap(),
     ];
 
     for i in 0..6 {
-        cubemap.upload_layer(0, 0, 0, i, w as i32, h as i32, faces[i as usize]);
+        cubemap
+            .upload_layer(
+                0,
+                0,
+                0,
+                i,
+                w as i32,
+                h as i32,
+                face_data[i as usize].image().as_bytes(),
+            )
+            .unwrap();
     }
 
     cubemap

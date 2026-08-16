@@ -17,7 +17,7 @@ use janus::{
     StringHash,
     context::DeltaTime,
     sync::TriCell,
-    texture::{ImageFormat, ImageType, MipLevels, TextureFiltering, TextureView},
+    texture::{ImageFormat, ImageType, MipLevels, TextureFiltering},
 };
 use rendrs::pipeline::{
     Pass, RenderPool, RenderTarget, RenderTargetDescriptor, RenderTargetId, SamplerObject,
@@ -26,6 +26,8 @@ use rendrs::pipeline::{
 #[cfg(feature = "devmode")]
 use crate::render::pass::debug_lines_draw::DebugLinesData;
 use crate::{assets, data::FrameDataBuffers, render::graphics::Materials};
+
+pub const DEFAULT_DEPTH_FUNC: u32 = janus::gl::GREATER;
 
 #[allow(unused)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -79,6 +81,7 @@ pub struct RenderPipeline {
     fd_preprocess_pass: pass::FdPreprocessComputePass,
     fragments_draw_pass: pass::FragmentsDrawPass,
     debris_draw_pass: pass::DebrisDrawPass,
+    skybox_draw_pass: pass::SkyboxDrawPass,
     debug_lattice_draw_pass: pass::DebugLatticeDrawPass,
     debug_cage_draw_pass: pass::DebugCageDrawPass,
     interface_draw_pass: gui::render::UiDrawPass,
@@ -90,6 +93,7 @@ impl RenderPipeline {
     fn revalidate(&mut self, render_pool: &RenderPool) {
         self.fragments_draw_pass.revalidate(render_pool);
         self.debris_draw_pass.revalidate(render_pool);
+        self.skybox_draw_pass.revalidate(render_pool);
         self.debug_lattice_draw_pass.revalidate(render_pool);
         self.debug_cage_draw_pass.revalidate(render_pool);
         self.interface_draw_pass.revalidate(render_pool);
@@ -101,11 +105,16 @@ impl RenderPipeline {
 
 #[derive(Debug, Default)]
 pub struct RenderShaders {
-    lattice: pass::ShaderDebugLattice,
     fragments: pass::ShaderFragment,
     debris: pass::ShaderDebris,
+
+    skybox: pass::ShaderSkybox,
+
+    lattice: pass::ShaderDebugLattice,
     cage_visual: pass::debug_cage_draw::ShaderDebugCage,
+
     interface: gui::render::ShaderUiBasic,
+
     cage_deform: pass::ComputeShaderCageDeform,
     fd_preprocess: pass::ComputeShaderProcessCommand,
 
@@ -173,6 +182,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             lattice,
             fragments: frags,
             debris,
+            skybox,
             cage_visual,
             interface,
             #[cfg(feature = "devmode")]
@@ -197,6 +207,10 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             lines.uniform_projection_mat4v([*proj]);
             lines.uniform_view_mat4v([view_mat]);
         }
+
+        skybox.bind();
+        skybox.uniform_projection_mat4v([*proj]);
+        skybox.uniform_view_mat4v([view_mat]);
 
         debris.bind();
         debris.uniform_camera_forward_vec3v([cam_forward]);
@@ -319,6 +333,14 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     .execute(section, render_pool, &ctx);
             }
         }
+
+        // skybox draw pass
+        {
+            self.pipeline()
+                .skybox_draw_pass
+                .execute(section, render_pool, &());
+        }
+
         // cage draw pass
         {
             let ctx = pass::DebugCageDrawCtx {
@@ -376,28 +398,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         let texture_assets = &mut self.textures_master_registry;
         self.materials.initialize(texture_assets);
 
-        // init pipeline
-        {
-            let dev_materials = &self.materials.groups().dev;
-            self.pipeline = Some(RenderPipeline {
-                fd_preprocess_pass: pass::fd_preprocess::pass(&self.shaders.fd_preprocess),
-                fragments_draw_pass: pass::fragments_draw::pass(
-                    &self.shaders.fragments,
-                    dev_materials,
-                ),
-                debris_draw_pass: pass::debris_draw::pass(&self.shaders.debris),
-                debug_lattice_draw_pass: pass::debug_lattice_draw::pass(&self.shaders.lattice),
-                cage_deform_compute_pass: pass::cage_deform_compute::pass(
-                    &self.shaders.cage_deform,
-                ),
-                debug_cage_draw_pass: pass::debug_cage_draw::pass(&self.shaders.cage_visual),
-                interface_draw_pass: gui::render::pass(&self.shaders.interface),
-
-                #[cfg(feature = "devmode")]
-                debug_lines_draw_pass: pass::debug_lines_draw::pass(&self.shaders.lines),
-            });
-        }
-
         // init persistent samplers
         {
             const DEV_ENV_CUBEMAP_NAME: &str = super::assets::ENVMAP_CUBE_ENV_NAME_LARNACACASTLE;
@@ -415,6 +415,31 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             let dev_env_cubemap = texture_assets.get_gpu_view(DEV_ENV_CUBEMAP_ID).unwrap();
             self.persistent_samplers = Some(PersistentSamplers {
                 dev_envmap_cubemap: SamplerObject::new(dev_env_cubemap),
+            });
+        }
+
+        // init pipeline
+        {
+            let dev_materials = &self.materials.groups().dev;
+            let skybox_sampler = self.persistent_samplers().dev_envmap_cube();
+
+            self.pipeline = Some(RenderPipeline {
+                fd_preprocess_pass: pass::fd_preprocess::pass(&self.shaders.fd_preprocess),
+                fragments_draw_pass: pass::fragments_draw::pass(
+                    &self.shaders.fragments,
+                    dev_materials,
+                ),
+                debris_draw_pass: pass::debris_draw::pass(&self.shaders.debris),
+                skybox_draw_pass: pass::skybox_draw::pass(&self.shaders.skybox, skybox_sampler),
+                debug_lattice_draw_pass: pass::debug_lattice_draw::pass(&self.shaders.lattice),
+                cage_deform_compute_pass: pass::cage_deform_compute::pass(
+                    &self.shaders.cage_deform,
+                ),
+                debug_cage_draw_pass: pass::debug_cage_draw::pass(&self.shaders.cage_visual),
+                interface_draw_pass: gui::render::pass(&self.shaders.interface),
+
+                #[cfg(feature = "devmode")]
+                debug_lines_draw_pass: pass::debug_lines_draw::pass(&self.shaders.lines),
             });
         }
     }
@@ -440,6 +465,7 @@ impl Renderer {
         self.shaders.cage_visual = pass::ShaderDebugCage::new_compiled();
         self.shaders.interface = gui::render::ShaderUiBasic::new_compiled();
         self.shaders.fd_preprocess = pass::ComputeShaderProcessCommand::new_compiled();
+        self.shaders.skybox = pass::ShaderSkybox::new_compiled();
 
         #[cfg(feature = "devmode")]
         {
