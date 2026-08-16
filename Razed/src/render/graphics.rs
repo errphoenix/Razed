@@ -88,17 +88,17 @@ pub mod materials {
                 #[allow(unused)]
                 pub const [< MATERIAL_ $macrogroup:upper _NAME_ $name:upper >]: &'static str =
                     concat!(
-                        "__", stringify!($macrogroup:lower),
-                        ".", stringify!($name:lower)
+                        "__", stringify!([< $macrogroup:lower >]),
+                        ".", stringify!([< $name:lower >])
                     );
 
                 $(
                     #[allow(unused)]
                     pub const [< MATEX_ $macrogroup:upper _NAME_ $name:upper _ $comp:upper >]: &'static str =
                         concat!(
-                            "__", stringify!($macrogroup:lower), ".",
-                            stringify!($name:lower),
-                            ".", stringify!($comp:lower)
+                            "__", stringify!([< $macrogroup:lower >]), ".",
+                            stringify!([< $name:lower >]),
+                            ".", stringify!([< $comp:lower >])
                         );
                 )+
 
