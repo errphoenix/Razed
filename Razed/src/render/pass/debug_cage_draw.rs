@@ -1,4 +1,4 @@
-use ethel::shader::{GlslUniform, ShaderKind, ShaderProgram};
+use ethel::shader::ShaderKind;
 use rendrs::pipeline::DrawPass;
 
 use crate::data::CagePartitionedBuffer;

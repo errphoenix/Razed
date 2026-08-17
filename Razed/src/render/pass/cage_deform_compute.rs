@@ -1,6 +1,6 @@
 use ethel::{
     render::buffer::{PartitionedTriBuffer, TriBuffer},
-    shader::{Constant, GlslLib, GlslStruct, GlslUniform, ShaderProgram, WriteValue},
+    shader::{Constant, GlslLib, GlslStruct, WriteValue},
 };
 use rendrs::pipeline::ComputePass;
 

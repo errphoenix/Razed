@@ -1,5 +1,5 @@
 use ethel::render::buffer::PartitionedTriBuffer;
-use ethel::shader::{GlslStruct, GlslUniform, ShaderKind, ShaderProgram};
+use ethel::shader::{GlslStruct, ShaderKind};
 use ethel::state::data::IndirectIndex;
 use rendrs::pipeline::DrawPass;
 

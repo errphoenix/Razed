@@ -5,7 +5,7 @@ use ethel::{
         buffer::{PartitionedTriBuffer, TriBuffer},
         command::{DrawArraysIndirectCommand, GpuCommandDispatch},
     },
-    shader::{GlslUniform, ShaderKind, ShaderProgram},
+    shader::ShaderKind,
 };
 use rendrs::{
     graphics::material::{MaterialGroup, MaterialLocationRegistry},

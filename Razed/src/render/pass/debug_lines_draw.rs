@@ -1,7 +1,4 @@
-use ethel::{
-    render::buffer::PartitionedTriBuffer,
-    shader::{GlslUniform, ShaderKind, ShaderProgram},
-};
+use ethel::{render::buffer::PartitionedTriBuffer, shader::ShaderKind};
 use rendrs::pipeline::DrawPass;
 
 use crate::data::LayoutDebugLinesData;

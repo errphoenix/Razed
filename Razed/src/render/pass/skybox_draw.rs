@@ -1,4 +1,4 @@
-use ethel::shader::{Constant, GlslUniform, ShaderKind, ShaderProgram};
+use ethel::shader::{Constant, ShaderKind};
 use rendrs::pipeline::{DrawPass, SamplerObject};
 
 pub type SkyboxDrawPass = DrawPass<(), 1, 0>;

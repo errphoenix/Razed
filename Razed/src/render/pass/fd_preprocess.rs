@@ -20,7 +20,7 @@ use ethel::{
         buffer::{PartitionedTriBuffer, TriBuffer},
         command::DrawArraysIndirectCommand,
     },
-    shader::{GlslStruct, ShaderProgram},
+    shader::GlslStruct,
 };
 use rendrs::pipeline::ComputePass;
 
