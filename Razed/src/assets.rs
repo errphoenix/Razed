@@ -42,8 +42,12 @@ ethel::asset_registry! {
         ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_POSX => "assets/dev/env/larnaca_castle/posx.jpg";
         ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_POSY => "assets/dev/env/larnaca_castle/posy.jpg";
         ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_POSZ => "assets/dev/env/larnaca_castle/posz.jpg";
+
+        ENVMAP_EQUIRECT_ENV_NAME_CITRUS_ORCHARD => "assets/dev/env/citrus_orchard_puresky.hdr";
     }
 }
+
+pub const ENVMAP_EQUIRECT_ENV_NAME_CITRUS_ORCHARD: &str = "__dev.env.equirect.citrus-orchard";
 
 pub const ENVMAP_CUBE_ENV_NAME_LARNACACASTLE: &str = "__dev.env.cube.larnaca-castle";
 pub const ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_NEGX: &str =

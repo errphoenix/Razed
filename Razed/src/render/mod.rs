@@ -5,7 +5,7 @@ pub mod shader_commons;
 use std::sync::atomic::Ordering;
 
 use ethel::{
-    assets::Handle,
+    assets::{Handle, RawTexture},
     render::{Resolution, buffer::StorageSection, command::DrawGroups},
     state::camera::ViewPoint,
 };
@@ -17,10 +17,11 @@ use janus::{
     StringHash,
     context::DeltaTime,
     sync::TriCell,
-    texture::{ImageFormat, ImageType, MipLevels, TextureFiltering},
+    texture::{ImageFormat, ImageType, MipLevels, Texture, TextureFiltering},
 };
 use rendrs::pipeline::{
-    Pass, RenderPool, RenderTarget, RenderTargetDescriptor, RenderTargetId, SamplerObject,
+    ImageAccessKind, ImageObject, ImageObjectTarget, Pass, RenderPool, RenderTarget,
+    RenderTargetDescriptor, RenderTargetId, SamplerObject,
 };
 
 #[cfg(feature = "devmode")]
@@ -67,6 +68,7 @@ impl RenderTargetHandles {
 
 #[derive(Debug)]
 pub struct PersistentSamplers {
+    /// Citrus Orchard HDR
     dev_envmap_cubemap: SamplerObject,
 }
 impl PersistentSamplers {
@@ -117,6 +119,8 @@ pub struct RenderShaders {
 
     cage_deform: pass::ComputeShaderCageDeform,
     fd_preprocess: pass::ComputeShaderProcessCommand,
+
+    util_equirect_decode: pass::ComputeShaderEquirectDecode,
 
     #[cfg(feature = "devmode")]
     lines: pass::ShaderDebugLines,
@@ -400,19 +404,66 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         // init persistent samplers
         {
-            const DEV_ENV_CUBEMAP_NAME: &str = super::assets::ENVMAP_CUBE_ENV_NAME_LARNACACASTLE;
-            const DEV_ENV_CUBEMAP_ID: StringHash = janus::hash_string(DEV_ENV_CUBEMAP_NAME);
+            const DEV_ENV_NAME: &str = super::assets::ENVMAP_EQUIRECT_ENV_NAME_CITRUS_ORCHARD;
+            const DEV_ENV_ID: StringHash = janus::hash_string(DEV_ENV_NAME);
 
-            {
-                let dev_env_cubemap = graphics::pack_cubemap(texture_assets, DEV_ENV_CUBEMAP_NAME);
-                texture_assets.add_handle(Handle::from_gpu_resource(
-                    DEV_ENV_CUBEMAP_ID,
-                    dev_env_cubemap,
-                    texture_assets,
-                ));
+            loop {
+                let e = unsafe { janus::gl::GetError() };
+                if e == 0 {
+                    break;
+                } else {
+                    println!("glerr (pre): {e}");
+                }
             }
 
-            let dev_env_cubemap = texture_assets.get_gpu_view(DEV_ENV_CUBEMAP_ID).unwrap();
+            let equirect_tex = {
+                let raw = {
+                    let handle = texture_assets.get_mut(DEV_ENV_ID).unwrap();
+                    handle.load_to_memory(&()).unwrap();
+                    let raw = handle.take_from_memory().unwrap();
+                    let rgba = image::DynamicImage::ImageRgba32F(raw.0.into_rgba32f());
+                    RawTexture::new(rgba)
+                };
+                Texture::from_2d_image(raw.image(), MipLevels::default())
+            }
+            .unwrap();
+
+            const CUBEMAP_RESOLUTION: i32 = 1024;
+            let cubemap_tex = Texture::new_cubemap(
+                CUBEMAP_RESOLUTION,
+                CUBEMAP_RESOLUTION,
+                MipLevels::default(),
+                ImageType::Float16,
+                ImageFormat::Rgba,
+            );
+
+            let shader = &self.shaders.util_equirect_decode;
+            let decode_pass = pass::equirect_decode_compute::pass(shader);
+            let decode_ctx = pass::EquirectDecodeCtx {
+                shader,
+                src_equirect: ImageObjectTarget::new(
+                    ImageObject::from_direct_texture(equirect_tex.view()),
+                    ImageAccessKind::ReadOnly,
+                    pass::equirect_decode_compute::IMAGE_BINDING_SRC_EQUIRECT,
+                    None,
+                ),
+                dst_cubemap: ImageObjectTarget::new(
+                    ImageObject::from_direct_texture(cubemap_tex.view()),
+                    ImageAccessKind::WriteOnly,
+                    pass::equirect_decode_compute::IMAGE_BINDING_DST_CUBEMAP,
+                    None,
+                ),
+            };
+            decode_pass.execute(StorageSection::Spare, &self.render_pool, &decode_ctx);
+            janus::gl::barrier_shader_image();
+
+            texture_assets.add_handle(Handle::from_gpu_resource(
+                DEV_ENV_ID,
+                cubemap_tex,
+                texture_assets,
+            ));
+            let dev_env_cubemap = texture_assets.get_gpu_view(DEV_ENV_ID).unwrap();
+
             self.persistent_samplers = Some(PersistentSamplers {
                 dev_envmap_cubemap: SamplerObject::new(dev_env_cubemap),
             });
@@ -466,6 +517,7 @@ impl Renderer {
         self.shaders.interface = gui::render::ShaderUiBasic::new_compiled();
         self.shaders.fd_preprocess = pass::ComputeShaderProcessCommand::new_compiled();
         self.shaders.skybox = pass::ShaderSkybox::new_compiled();
+        self.shaders.util_equirect_decode = pass::ComputeShaderEquirectDecode::new_compiled();
 
         #[cfg(feature = "devmode")]
         {
