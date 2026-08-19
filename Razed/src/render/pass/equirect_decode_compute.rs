@@ -34,46 +34,10 @@ pub const fn pass(shader: &ComputeShaderEquirectDecode) -> EquirectDecodePass {
             )
         };
 
-        loop {
-            let e = unsafe { janus::gl::GetError() };
-            if e == 0 {
-                break;
-            } else {
-                println!("glerr (preu): {e}");
-            }
-        }
         shader.uniform_resolution_src_uvec2v([res_src]);
-        loop {
-            let e = unsafe { janus::gl::GetError() };
-            if e == 0 {
-                break;
-            } else {
-                println!("glerr (iunif): {e}");
-            }
-        }
         shader.uniform_resolution_face_uvec2v([res_dst]);
-
-        println!("{:?}", src_equirect.texture().metadata());
-        println!("{:?}", dst_cubemap.texture().metadata());
-
-        loop {
-            let e = unsafe { janus::gl::GetError() };
-            if e == 0 {
-                break;
-            } else {
-                println!("glerr (preb): {e}");
-            }
-        }
         src_equirect.bind();
         dst_cubemap.bind();
-        loop {
-            let e = unsafe { janus::gl::GetError() };
-            if e == 0 {
-                break;
-            } else {
-                println!("glerr (pbind): {e}");
-            }
-        }
 
         let wg_x = res_dst[0].div_ceil(WORKGROUP_SIZE_XY);
         let wg_y = res_dst[1].div_ceil(WORKGROUP_SIZE_XY);

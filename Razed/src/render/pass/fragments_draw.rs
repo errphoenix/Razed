@@ -7,6 +7,7 @@ use ethel::{
     },
     shader::ShaderKind,
 };
+use rendrs::pipeline::{OutputObject, RenderTargetAccessor};
 use rendrs::{
     graphics::material::{MaterialGroup, MaterialLocationRegistry},
     pipeline::DrawPass,
@@ -17,7 +18,7 @@ use crate::{
     render::shader_commons,
 };
 
-pub type FragmentsDrawPass = DrawPass<FragmentsDrawCtxWrapper, 1, 0>;
+pub type FragmentsDrawPass = DrawPass<FragmentsDrawCtxWrapper, 1, 2>;
 
 #[derive(Debug)]
 pub struct FragmentsDrawCtx<'data> {
@@ -31,12 +32,20 @@ pub struct FragmentsDrawCtx<'data> {
 
 rendrs::context_wrapper!(for<'ctx> FragmentsDrawCtx);
 
-pub const fn pass(shader: &ShaderFragment, dev_materials: &MaterialGroup) -> FragmentsDrawPass {
+pub const fn pass(
+    shader: &ShaderFragment,
+    dev_materials: &MaterialGroup,
+    hdr_output: RenderTargetAccessor,
+    depth_output: RenderTargetAccessor,
+) -> FragmentsDrawPass {
     let handle_view = shader.handle().view();
     FragmentsDrawPass::new(
         handle_view,
         [dev_materials.sampler()],
-        [],
+        [
+            OutputObject::Color(hdr_output),
+            OutputObject::Depth(depth_output),
+        ],
         |section, ctx| {
             let section = section.as_index();
 
@@ -100,7 +109,6 @@ use shader_commons::LIB_NDF_GGX;
 use shader_commons::LIB_NDF_GGX_LAMBDA;
 use shader_commons::LIB_NDF_LAMBDA_A_NOSQRT;
 use shader_commons::LIB_NDF_MASK_G2_SMITH_HEIGHT_GGX_HAMMON_APPROX;
-use shader_commons::LIB_TONEMAP_ACES_2015;
 
 ethel::shader_glsl! {
     struct Fragment > [460] {
@@ -153,8 +161,6 @@ ethel::shader_glsl! {
                 LIB_NDF_GGX_LAMBDA;
                 LIB_NDF_LAMBDA_A_NOSQRT;
                 LIB_NDF_MASK_G2_SMITH_HEIGHT_GGX_HAMMON_APPROX;
-
-                LIB_TONEMAP_ACES_2015;
             };
 
             src() {
@@ -258,10 +264,6 @@ ethel::shader_glsl! {
                 Lo += BRDF * Li * posNdotL;
 
                 vec3 color = Lo;
-                // tonemapping (Narkowicz 2015)
-                color = tonemap_ACES_2015(color);
-                // gamma correction
-                color = pow(color, vec3(1.0 / 2.2));
 
                 outColor = vec4(color, 1.0);
                 ";

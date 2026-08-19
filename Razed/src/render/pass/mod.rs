@@ -6,6 +6,7 @@ pub mod equirect_decode_compute;
 pub mod fd_preprocess;
 pub mod fragments_draw;
 pub mod skybox_draw;
+pub mod tonemap_compute;
 
 #[cfg(feature = "devmode")]
 pub mod debug_lines_draw;
@@ -14,6 +15,7 @@ pub mod debug_lines_draw;
 pub use self::{
     cage_deform_compute::*, debris_draw::*, debug_cage_draw::*, debug_lattice_draw::*,
     equirect_decode_compute::*, fd_preprocess::*, fragments_draw::*, skybox_draw::*,
+    tonemap_compute::*,
 };
 
 #[allow(unused_imports)]

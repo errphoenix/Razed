@@ -19,9 +19,12 @@ use janus::{
     sync::TriCell,
     texture::{ImageFormat, ImageType, MipLevels, Texture, TextureFiltering},
 };
-use rendrs::pipeline::{
-    ImageAccessKind, ImageObject, ImageObjectTarget, Pass, RenderPool, RenderTarget,
-    RenderTargetDescriptor, RenderTargetId, SamplerObject,
+use rendrs::{
+    graphics::PixelResolution,
+    pipeline::{
+        ImageAccessKind, ImageObject, ImageObjectTarget, OutputObject, Pass, RenderPool,
+        RenderTarget, RenderTargetDescriptor, RenderTargetId, SamplerObject,
+    },
 };
 
 #[cfg(feature = "devmode")]
@@ -88,6 +91,10 @@ pub struct RenderPipeline {
     debug_cage_draw_pass: pass::DebugCageDrawPass,
     interface_draw_pass: gui::render::UiDrawPass,
 
+    tonemap_vfx_pass: pass::TonemapVfxPass,
+    clear_pass: rendrs::ClearPass<3>,
+    blit_pass: rendrs::BlitPass,
+
     #[cfg(feature = "devmode")]
     debug_lines_draw_pass: pass::DebugLinesDrawPass,
 }
@@ -99,6 +106,9 @@ impl RenderPipeline {
         self.debug_lattice_draw_pass.revalidate(render_pool);
         self.debug_cage_draw_pass.revalidate(render_pool);
         self.interface_draw_pass.revalidate(render_pool);
+        self.tonemap_vfx_pass.revalidate(render_pool);
+        self.blit_pass.revalidate(render_pool);
+        self.clear_pass.revalidate(render_pool);
 
         #[cfg(feature = "devmode")]
         self.debug_lines_draw_pass.revalidate(render_pool);
@@ -122,6 +132,8 @@ pub struct RenderShaders {
 
     util_equirect_decode: pass::ComputeShaderEquirectDecode,
 
+    vfx_tonemap: pass::ComputeShaderTonemap,
+
     #[cfg(feature = "devmode")]
     lines: pass::ShaderDebugLines,
 }
@@ -136,6 +148,7 @@ pub struct Renderer {
     pipeline: Option<RenderPipeline>,
     target_handles: Option<RenderTargetHandles>,
     persistent_samplers: Option<PersistentSamplers>,
+    resolution: PixelResolution,
 
     render_pool: RenderPool,
     shaders: RenderShaders,
@@ -158,13 +171,16 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         self.last_frame_render = delta;
 
         {
-            let last_resolution = screen.resolution();
+            let last_resolution = self.resolution;
             screen.sync().unwrap();
 
             let resolution = screen.resolution();
+            self.resolution =
+                PixelResolution::new(resolution.width as u32, resolution.height as u32);
+
             if resolution.is_changed()
-                && last_resolution.width != resolution.width
-                && last_resolution.height != resolution.height
+                && last_resolution.width() != resolution.width as u32
+                && last_resolution.height() != resolution.height as u32
             {
                 let render_pool = &mut self.render_pool;
                 render_pool.revalidate_targets(resolution);
@@ -274,9 +290,14 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         // there is no barrier here: an ssbo barrier is set after
         // fd_preprocess, which does not depend on this pass
 
-        unsafe {
-            janus::gl::Clear(janus::gl::COLOR_BUFFER_BIT | janus::gl::DEPTH_BUFFER_BIT);
-        }
+        // unsafe {
+        //     janus::gl::Clear(janus::gl::COLOR_BUFFER_BIT | janus::gl::DEPTH_BUFFER_BIT);
+        // }
+
+        // clear all render-targets once
+        self.pipeline()
+            .clear_pass
+            .execute(section, render_pool, &());
 
         // fragments & debris (preprocess + draw)
         {
@@ -325,7 +346,35 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 self.pipeline()
                     .fragments_draw_pass
                     .execute(section, render_pool, &ctx);
+
+                // skybox draw pass
+                {
+                    self.pipeline()
+                        .skybox_draw_pass
+                        .execute(section, render_pool, &());
+                }
+
+                // --------------------------------------------------
+                // everything else currently draws on the default
+                // framebuffer, so perform tonemapping (& blit) now
+                // --------------------------------------------------
+
+                // tonemapping + gamma correction vfx pass
+                {
+                    let ctx = pass::TonemapVfxCtx {
+                        shader: &self.shaders.vfx_tonemap,
+                        resolution: self.resolution,
+                        gamma_override: None,
+                    };
+                    self.pipeline()
+                        .tonemap_vfx_pass
+                        .execute(section, render_pool, &ctx);
+                }
+
+                // blit specialized pass
+                self.pipeline().blit_pass.execute(section, render_pool, &());
             }
+            rendrs::framebuffer::bind_default();
             // debris draw pass
             {
                 let ctx = pass::DebrisDrawCtx {
@@ -336,13 +385,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     .debris_draw_pass
                     .execute(section, render_pool, &ctx);
             }
-        }
-
-        // skybox draw pass
-        {
-            self.pipeline()
-                .skybox_draw_pass
-                .execute(section, render_pool, &());
         }
 
         // cage draw pass
@@ -407,15 +449,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             const DEV_ENV_NAME: &str = super::assets::ENVMAP_EQUIRECT_ENV_NAME_CITRUS_ORCHARD;
             const DEV_ENV_ID: StringHash = janus::hash_string(DEV_ENV_NAME);
 
-            loop {
-                let e = unsafe { janus::gl::GetError() };
-                if e == 0 {
-                    break;
-                } else {
-                    println!("glerr (pre): {e}");
-                }
-            }
-
             let equirect_tex = {
                 let raw = {
                     let handle = texture_assets.get_mut(DEV_ENV_ID).unwrap();
@@ -474,23 +507,53 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             let dev_materials = &self.materials.groups().dev;
             let skybox_sampler = self.persistent_samplers().dev_envmap_cube();
 
+            let (base_hdr, base_depth, mapped_ldr) = {
+                let id_hdr = self.render_target_handles().hdr_base;
+                let id_depth = self.render_target_handles().base_depth;
+                let id_ldr = self.render_target_handles().ldr_mapped;
+                (
+                    self.render_pool.accessor(id_hdr).unwrap(),
+                    self.render_pool.accessor(id_depth).unwrap(),
+                    self.render_pool.accessor(id_ldr).unwrap(),
+                )
+            };
+
             self.pipeline = Some(RenderPipeline {
                 fd_preprocess_pass: pass::fd_preprocess::pass(&self.shaders.fd_preprocess),
                 fragments_draw_pass: pass::fragments_draw::pass(
                     &self.shaders.fragments,
                     dev_materials,
+                    base_hdr,
+                    base_depth,
                 ),
                 debris_draw_pass: pass::debris_draw::pass(&self.shaders.debris),
-                skybox_draw_pass: pass::skybox_draw::pass(&self.shaders.skybox, skybox_sampler),
+                skybox_draw_pass: pass::skybox_draw::pass(
+                    &self.shaders.skybox,
+                    skybox_sampler,
+                    base_hdr,
+                    base_depth,
+                ),
                 debug_lattice_draw_pass: pass::debug_lattice_draw::pass(&self.shaders.lattice),
                 cage_deform_compute_pass: pass::cage_deform_compute::pass(
                     &self.shaders.cage_deform,
                 ),
                 debug_cage_draw_pass: pass::debug_cage_draw::pass(&self.shaders.cage_visual),
                 interface_draw_pass: gui::render::pass(&self.shaders.interface),
+                tonemap_vfx_pass: pass::tonemap_compute::pass(
+                    &self.shaders.vfx_tonemap,
+                    base_hdr,
+                    mapped_ldr,
+                ),
 
                 #[cfg(feature = "devmode")]
                 debug_lines_draw_pass: pass::debug_lines_draw::pass(&self.shaders.lines),
+
+                blit_pass: rendrs::BlitPass::new(mapped_ldr),
+                clear_pass: rendrs::ClearPass::new([
+                    OutputObject::Color(base_hdr),
+                    OutputObject::Color(mapped_ldr),
+                    OutputObject::Depth(base_depth),
+                ]),
             });
         }
     }
@@ -508,6 +571,12 @@ impl Renderer {
             .expect("render pipeline must be present after resource initialization")
     }
 
+    fn render_target_handles(&self) -> &RenderTargetHandles {
+        self.target_handles
+            .as_ref()
+            .expect("render targethandles must be present after resource initialization")
+    }
+
     fn initialize_shaders(&mut self) {
         self.shaders.lattice = pass::ShaderDebugLattice::new_compiled();
         self.shaders.fragments = pass::ShaderFragment::new_compiled();
@@ -518,6 +587,7 @@ impl Renderer {
         self.shaders.fd_preprocess = pass::ComputeShaderProcessCommand::new_compiled();
         self.shaders.skybox = pass::ShaderSkybox::new_compiled();
         self.shaders.util_equirect_decode = pass::ComputeShaderEquirectDecode::new_compiled();
+        self.shaders.vfx_tonemap = pass::ComputeShaderTonemap::new_compiled();
 
         #[cfg(feature = "devmode")]
         {
@@ -532,10 +602,32 @@ impl Renderer {
     }
 
     fn initialize_render_targets(&mut self, resolution: Resolution) {
-        let base = self.render_pool.add(RenderTarget::new(
-            "base",
+        let hdr_base = self.render_pool.add(RenderTarget::new(
+            "base-drawbuffer-HDR",
             RenderTargetDescriptor::new(
-                ImageFormat::Rgb,
+                ImageFormat::Rgba,
+                ImageType::Float16,
+                TextureFiltering::Nearest,
+                MipLevels::default(),
+                1.0,
+            ),
+            resolution,
+        ));
+        let base_depth = self.render_pool.add(RenderTarget::new(
+            "base-drawbuffer-depth24",
+            RenderTargetDescriptor::new(
+                ImageFormat::Depth,
+                ImageType::Bits24,
+                TextureFiltering::Nearest,
+                MipLevels::default(),
+                1.0,
+            ),
+            resolution,
+        ));
+        let ldr_mapped = self.render_pool.add(RenderTarget::new(
+            "mapped-encoded-LDR",
+            RenderTargetDescriptor::new(
+                ImageFormat::Rgba,
                 ImageType::Bits8,
                 TextureFiltering::Nearest,
                 MipLevels::default(),
@@ -544,7 +636,11 @@ impl Renderer {
             resolution,
         ));
 
-        self.target_handles = Some(RenderTargetHandles { base });
+        self.target_handles = Some(RenderTargetHandles {
+            hdr_base,
+            base_depth,
+            ldr_mapped,
+        });
     }
 
     fn setup_debug_lines(&mut self, view: &TriCell<ViewPoint>) {

@@ -17,7 +17,7 @@ pub const ATTRIBS_PIXEL_MINIMAL: GlslAttribute = ethel::shader_glsl_attribs! {
     output outColor: vec4;
 };
 
-pub const CONST_AMBIENT_LIGHT: Constant<f32> = Constant::new("LIGHT_AMBIENT", 0.01);
+pub const CONST_AMBIENT_LIGHT: Constant<f32> = Constant::new("LIGHT_AMBIENT", 0.032);
 
 ethel::shader_glsl_struct! {
     struct IndirectIndex {

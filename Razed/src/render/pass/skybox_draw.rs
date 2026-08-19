@@ -1,17 +1,30 @@
 use ethel::shader::{Constant, ShaderKind};
-use rendrs::pipeline::{DrawPass, SamplerObject};
+use rendrs::pipeline::{DrawPass, OutputObject, RenderTargetAccessor, SamplerObject};
 
-pub type SkyboxDrawPass = DrawPass<(), 1, 0>;
+pub type SkyboxDrawPass = DrawPass<(), 1, 2>;
 
-pub const fn pass(shader: &ShaderSkybox, skybox_sampler: SamplerObject) -> SkyboxDrawPass {
+pub const fn pass(
+    shader: &ShaderSkybox,
+    skybox_sampler: SamplerObject,
+    hdr_output: RenderTargetAccessor,
+    depth_output: RenderTargetAccessor,
+) -> SkyboxDrawPass {
     let handle_view = shader.handle().view();
-    SkyboxDrawPass::new(handle_view, [skybox_sampler], [], |_, _| unsafe {
-        janus::gl::DepthFunc(janus::gl::GEQUAL);
-        janus::gl::DepthMask(janus::gl::FALSE);
-        janus::gl::DrawArrays(janus::gl::TRIANGLE_STRIP, 0, 24);
-        janus::gl::DepthMask(janus::gl::TRUE);
-        janus::gl::DepthFunc(crate::render::DEFAULT_DEPTH_FUNC);
-    })
+    SkyboxDrawPass::new(
+        handle_view,
+        [skybox_sampler],
+        [
+            OutputObject::Color(hdr_output),
+            OutputObject::Depth(depth_output),
+        ],
+        |_, _| unsafe {
+            janus::gl::DepthFunc(janus::gl::GEQUAL);
+            janus::gl::DepthMask(janus::gl::FALSE);
+            janus::gl::DrawArrays(janus::gl::TRIANGLE_STRIP, 0, 24);
+            janus::gl::DepthMask(janus::gl::TRUE);
+            janus::gl::DepthFunc(crate::render::DEFAULT_DEPTH_FUNC);
+        },
+    )
 }
 
 ethel::shader_glsl! {
