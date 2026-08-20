@@ -1,6 +1,6 @@
 use ethel::{
     render::buffer::TriBuffer,
-    shader::{GlslStruct, GlslUniform, ShaderKind, ShaderProgram},
+    shader::{GlslStruct, ShaderKind},
 };
 use janus::texture::{Tex, TextureView};
 use rendrs::pipeline::DrawPass;
@@ -96,11 +96,11 @@ pub const fn pass(shader: &ShaderUiBasic) -> UiDrawPass {
 
 ethel::shader_glsl_struct! {
     struct QuadElement {
-        position: [f32; 2] => vec2;
-        size: [f32; 2] => vec2;
-        color: [f32; 4] => vec4;
-        uv: [f32; 4] => vec4;
-        tex_unit: u32 => uint;
+        position: [f32; 2] => vec2,
+        size: [f32; 2] => vec2,
+        color: [f32; 4] => vec4,
+        uv: [f32; 4] => vec4,
+        tex_unit: u32 => uint
     }
 }
 

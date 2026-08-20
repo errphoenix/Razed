@@ -44,7 +44,7 @@ macro_rules! ssbo_binding {
 
 ethel::shader_glsl_struct! {
     struct Constraint {
-        nodes[2]: [IndirectIndex; 2] => IndirectIndex;
+        nodes[2]: [IndirectIndex; 2] => IndirectIndex
     }
 }
 

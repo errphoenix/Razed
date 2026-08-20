@@ -21,15 +21,15 @@ pub const CONST_AMBIENT_LIGHT: Constant<f32> = Constant::new("LIGHT_AMBIENT", 0.
 
 ethel::shader_glsl_struct! {
     struct IndirectIndex {
-        index: u32 => uint;
-        generation: u32 => uint;
+        index: u32 => uint,
+        generation: u32 => uint
     }
 }
 
 ethel::shader_glsl_struct! {
     struct DirectIndex {
-        index: u32 => uint;
-        generation: u32 => uint;
+        index: u32 => uint,
+        generation: u32 => uint
     }
 }
 
@@ -550,8 +550,8 @@ pub const LIB_NDF_MASK_G2_SMITH_HEIGHT_GGX_HAMMON_APPROX: GlslLib = ethel::shade
 
 ethel::shader_glsl_struct! {
     struct FresnelParams {
-        albedo  : glam::Vec3 => vec3;
-        fresnel : glam::Vec3 => vec3;
+        albedo  : glam::Vec3 => vec3,
+        fresnel : glam::Vec3 => vec3
     }
 }
 

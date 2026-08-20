@@ -93,20 +93,20 @@ pub const fn pass(shader: &ComputeShaderProcessCommand) -> FdPreprocessComputePa
 
 ethel::shader_glsl_struct! {
     struct DrawArraysIndirectCommand {
-        count: u32 => uint;
-        instance_count: u32 => uint;
-        first_vertex: u32 => uint;
-        base_instance: u32 => uint;
+        count: u32 => uint,
+        instance_count: u32 => uint,
+        first_vertex: u32 => uint,
+        base_instance: u32 => uint
     }
 }
 
 ethel::shader_glsl_struct! {
     struct DrawElementsIndirectCommand {
-        count: u32 => uint;
-        instance_count: u32 => uint;
-        first_vertex: u32 => uint;
-        base_vertex: i32 => int;
-        base_instance: u32 => uint;
+        count: u32 => uint,
+        instance_count: u32 => uint,
+        first_vertex: u32 => uint,
+        base_vertex: i32 => int,
+        base_instance: u32 => uint
     }
 }
 

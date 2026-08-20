@@ -127,18 +127,18 @@ pub const TYPE_CAGE_POINT_ATTACHMENTS_LIST: GlslStruct =
 
 ethel::shader_glsl_struct! {
     struct CagePoints {
-        list[8]: [glam::Vec4; cage::PER_CAGE_POINTS] => vec4;
+        list[8]: [glam::Vec4; cage::PER_CAGE_POINTS] => vec4
     }
 }
 ethel::shader_glsl_struct! {
     struct NodeAttachment {
-        index: u32 => uint;
-        weight: f32 => float;
+        index: u32 => uint,
+        weight: f32 => float
     }
 }
 ethel::shader_glsl_struct! {
     struct LatticeAttachments {
-        list[4]: [NodeAttachment; cage::PER_POINT_LATTICE_ATTACHMENTS] => NodeAttachment;
+        list[4]: [NodeAttachment; cage::PER_POINT_LATTICE_ATTACHMENTS] => NodeAttachment
     }
 }
 
