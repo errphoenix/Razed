@@ -5,7 +5,6 @@ pub mod shader_commons;
 use std::sync::atomic::Ordering;
 
 use ethel::{
-    assets::{Handle, RawTexture},
     render::{Resolution, buffer::StorageSection, command::DrawGroups},
     state::camera::ViewPoint,
 };
@@ -14,21 +13,15 @@ use gui::{
     text::{GlyphAtlasTexture, GlyphRaster},
 };
 use janus::{
-    StringHash,
     context::DeltaTime,
     sync::TriCell,
-    texture::{
-        ImageFormat, ImageType, MipLevels, Tex, Texture, TextureFiltering, TextureKind, TextureView,
-    },
+    texture::{ImageFormat, ImageType, MipLevels, Texture, TextureFiltering},
 };
 use rendrs::{
-    graphics::{
-        PixelResolution,
-        reflection_filtering::{BSplineDownscaleCtx, ComputeShaderBSplineDownscale},
-    },
+    graphics::PixelResolution,
     pipeline::{
-        ImageAccessKind, ImageObject, ImageObjectTarget, OutputObject, Pass, RenderPool,
-        RenderTarget, RenderTargetDescriptor, RenderTargetId, SamplerObject,
+        OutputObject, Pass, RenderPool, RenderTarget, RenderTargetDescriptor, RenderTargetId,
+        SamplerObject,
     },
 };
 
@@ -70,6 +63,7 @@ pub struct RenderTargetHandles {
     base_depth: RenderTargetId,
     ldr_mapped: RenderTargetId,
 }
+#[allow(unused)]
 impl RenderTargetHandles {
     pub const fn hdr_base(&self) -> RenderTargetId {
         self.hdr_base
@@ -88,6 +82,9 @@ impl RenderTargetHandles {
 pub struct PersistentSamplers {
     /// Citrus Orchard HDR
     dev_envmap_cubemap: SamplerObject,
+
+    reflection_map: Texture,
+    baked_brdf_specular: Texture,
 }
 impl PersistentSamplers {
     pub const fn dev_envmap_cube(&self) -> SamplerObject {
@@ -461,59 +458,14 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         // init persistent samplers
         {
-            const DEV_ENV_NAME: &str = super::assets::ENVMAP_EQUIRECT_ENV_NAME_CITRUS_ORCHARD;
-            const DEV_ENV_ID: StringHash = janus::hash_string(DEV_ENV_NAME);
-
-            let equirect_tex = {
-                let raw = {
-                    let handle = texture_assets.get_mut(DEV_ENV_ID).unwrap();
-                    handle.load_to_memory(&()).unwrap();
-                    let raw = handle.take_from_memory().unwrap();
-                    let rgba = image::DynamicImage::ImageRgba32F(raw.0.into_rgba32f());
-                    RawTexture::new(rgba)
-                };
-                Texture::from_2d_image(raw.image(), MipLevels::default())
-            }
-            .unwrap();
-
-            const CUBEMAP_RESOLUTION: i32 = 1024;
-            let cubemap_tex = Texture::new_cubemap(
-                CUBEMAP_RESOLUTION,
-                CUBEMAP_RESOLUTION,
-                MipLevels::default(),
-                ImageType::Float16,
-                ImageFormat::Rgba,
-            );
-
-            let shader = &self.shaders.util_equirect_decode;
-            let decode_pass = pass::equirect_decode_compute::pass(shader);
-            let decode_ctx = pass::EquirectDecodeCtx {
-                shader,
-                src_equirect: ImageObjectTarget::new(
-                    ImageObject::from_direct_texture(equirect_tex.view()),
-                    ImageAccessKind::ReadOnly,
-                    pass::equirect_decode_compute::IMAGE_BINDING_SRC_EQUIRECT,
-                    None,
-                ),
-                dst_cubemap: ImageObjectTarget::new(
-                    ImageObject::from_direct_texture(cubemap_tex.view()),
-                    ImageAccessKind::WriteOnly,
-                    pass::equirect_decode_compute::IMAGE_BINDING_DST_CUBEMAP,
-                    None,
-                ),
-            };
-            decode_pass.execute(StorageSection::Spare, &self.render_pool, &decode_ctx);
-            janus::gl::barrier_shader_image();
-
-            texture_assets.add_handle(Handle::from_gpu_resource(
-                DEV_ENV_ID,
-                cubemap_tex,
-                texture_assets,
-            ));
-            let dev_env_cubemap = texture_assets.get_gpu_view(DEV_ENV_ID).unwrap();
+            let dev_env_cubemap = graphics::load_environment_map(texture_assets);
+            let baked_brdf_specular = graphics::bake_brdf_specular();
+            let dev_reflection_map = graphics::debug_probe_reflection(dev_env_cubemap);
 
             self.persistent_samplers = Some(PersistentSamplers {
-                dev_envmap_cubemap: SamplerObject::new(dev_env_cubemap),
+                dev_envmap_cubemap: SamplerObject::with_mip_view(dev_env_cubemap, 0),
+                baked_brdf_specular,
+                reflection_map: dev_reflection_map,
             });
         }
 

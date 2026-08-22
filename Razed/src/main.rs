@@ -105,6 +105,7 @@ fn main() {
 
 #[derive(Debug)]
 struct FragmentGroup {
+    #[allow(unused)]
     pub cubic_area: glam::Vec3,
     pub voronoi: CubeVoronoi,
     pub mapping: FxSpatialHash<ethel::mesh::Id>,

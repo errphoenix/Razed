@@ -27,6 +27,7 @@ pub struct FragmentsDrawCtx<'data> {
     pub fragments_data: &'data PartitionedTriBuffer<{ FRAGMENTS_STORAGE_PARTS }>,
     pub fragments_commands: &'data TriBuffer<DrawArraysIndirectCommand>,
 
+    #[allow(unused, reason = "todo; will be used")]
     pub material_registry: &'data MaterialLocationRegistry,
 }
 
