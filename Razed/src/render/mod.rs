@@ -17,10 +17,15 @@ use janus::{
     StringHash,
     context::DeltaTime,
     sync::TriCell,
-    texture::{ImageFormat, ImageType, MipLevels, Texture, TextureFiltering},
+    texture::{
+        ImageFormat, ImageType, MipLevels, Tex, Texture, TextureFiltering, TextureKind, TextureView,
+    },
 };
 use rendrs::{
-    graphics::PixelResolution,
+    graphics::{
+        PixelResolution,
+        reflection_filtering::{BSplineDownscaleCtx, ComputeShaderBSplineDownscale},
+    },
     pipeline::{
         ImageAccessKind, ImageObject, ImageObjectTarget, OutputObject, Pass, RenderPool,
         RenderTarget, RenderTargetDescriptor, RenderTargetId, SamplerObject,
@@ -61,11 +66,21 @@ impl DrawGroups for RenderGroup {
 
 #[derive(Debug, Clone, Copy)]
 pub struct RenderTargetHandles {
-    base: RenderTargetId,
+    hdr_base: RenderTargetId,
+    base_depth: RenderTargetId,
+    ldr_mapped: RenderTargetId,
 }
 impl RenderTargetHandles {
-    pub const fn base(&self) -> RenderTargetId {
-        self.base
+    pub const fn hdr_base(&self) -> RenderTargetId {
+        self.hdr_base
+    }
+
+    pub const fn base_depth(&self) -> RenderTargetId {
+        self.base_depth
+    }
+
+    pub const fn ldr_mapped(&self) -> RenderTargetId {
+        self.ldr_mapped
     }
 }
 
