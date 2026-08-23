@@ -17,7 +17,16 @@ pub const ATTRIBS_PIXEL_MINIMAL: GlslAttribute = ethel::shader_glsl_attribs! {
     output outColor: vec4;
 };
 
-pub const CONST_AMBIENT_LIGHT: Constant<f32> = Constant::new("LIGHT_AMBIENT", 0.032);
+/// Creates a `LIGHT_AMBIENT` `float` constant set to `0.1`.
+pub const CONST_AMBIENT_LIGHT: Constant<f32> = Constant::new("LIGHT_AMBIENT", 0.1);
+
+/// Creates a `REFLECTION_MAX_LOD` `float` constant set to
+/// [`rendrs::graphics::reflection_filtering::FILTERING_MIP_COUNT`], cast to a
+/// `float`.
+pub const CONST_REFLECTION_MAX_LOD: Constant<f32> = Constant::new(
+    "REFLECTION_MAX_LOD",
+    rendrs::graphics::reflection_filtering::FILTERING_MIP_COUNT as f32,
+);
 
 ethel::shader_glsl_struct! {
     struct IndirectIndex {

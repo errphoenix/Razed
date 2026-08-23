@@ -7,7 +7,7 @@ use ethel::{
     },
     shader::ShaderKind,
 };
-use rendrs::pipeline::{OutputObject, RenderTargetAccessor};
+use rendrs::pipeline::{OutputObject, RenderTargetAccessor, SamplerObject};
 use rendrs::{
     graphics::material::{MaterialGroup, MaterialLocationRegistry},
     pipeline::DrawPass,
@@ -18,7 +18,7 @@ use crate::{
     render::shader_commons,
 };
 
-pub type FragmentsDrawPass = DrawPass<FragmentsDrawCtxWrapper, 1, 2>;
+pub type FragmentsDrawPass = DrawPass<FragmentsDrawCtxWrapper, 3, 2>;
 
 #[derive(Debug)]
 pub struct FragmentsDrawCtx<'data> {
@@ -38,11 +38,17 @@ pub const fn pass(
     dev_materials: &MaterialGroup,
     hdr_output: RenderTargetAccessor,
     depth_output: RenderTargetAccessor,
+    debug_reflection_probe: SamplerObject,
+    baked_brdf_specular: SamplerObject,
 ) -> FragmentsDrawPass {
     let handle_view = shader.handle().view();
     FragmentsDrawPass::new(
         handle_view,
-        [dev_materials.sampler()],
+        [
+            dev_materials.sampler(),
+            baked_brdf_specular,
+            debug_reflection_probe,
+        ],
         [
             OutputObject::Color(hdr_output),
             OutputObject::Depth(depth_output),
@@ -131,9 +137,13 @@ ethel::shader_glsl! {
             };
 
             uniform {
-                length 16, texture_map: sampler2DArray => i32;
                 length 1, camera_forward: vec3 => glam::Vec3;
                 length 1, camera_position: vec3 => glam::Vec3;
+            };
+            sampler {
+                on 0, for 1 => texture_map   : sampler2DArray;
+                on 1 => baked_brdf_spec      : sampler2D;
+                on 2 => debug_reflection_env : samplerCube;
             };
 
             type {
@@ -212,12 +222,13 @@ ethel::shader_glsl! {
                 vec3 F0     = fresnel.fresnel;
 
                 // surface outgoing radiance accumulation
-                vec3 Lo = vec3(LIGHT_AMBIENT) * diffuse;
+                vec3 Lo = vec3(0.0);
 
                 // ------ global view-specific ------
                 vec3 to_camera = camera_position - world;
                 vec3 N = normal;
                 vec3 V = normalize(to_camera);
+                vec3 R = reflect(-V, N); // reflection vector
                 float NdotV = dot(N, V);
                 float absNdotV = abs(NdotV);
 
@@ -263,8 +274,23 @@ ethel::shader_glsl! {
                 vec3 BRDF_diff = albedo / 3.14159;
                 vec3 BRDF = BRDF_diff + BRDF_spec;
                 Lo += BRDF * Li * posNdotL;
+                // end light
 
-                vec3 color = Lo;
+                // --- evironmental lighting ---
+                // environmental specular term
+                // (constant)
+                vec3 E_diff = LIGHT_AMBIENT * diffuse;
+                // environmental specular term
+                float LODspec = roughness * REFLECTION_MAX_LOD;
+                vec3 E_spec_Fres = fresnel_Schlick(max(0.0, NdotV), F0);
+                vec3 E_spec_envf = textureLod(debug_reflection_env, R, LODspec).rgb;
+                vec2 E_spec_brdf = texture(baked_brdf_spec, vec2(max(0.0, NdotV), roughness)).rg;
+                vec3 E_spec = E_spec_envf * (E_spec_Fres * E_spec_brdf.x + E_spec_brdf.y);
+
+                vec3 E = albedo * E_diff + E_spec;
+                E *= occlusion;
+
+                vec3 color = Lo + E;
 
                 outColor = vec4(color, 1.0);
                 ";

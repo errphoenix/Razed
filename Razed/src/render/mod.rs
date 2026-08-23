@@ -485,6 +485,13 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 )
             };
 
+            let (baked_brdf_spec, debug_env_refprobe) = {
+                (
+                    SamplerObject::new(self.persistent_samplers().baked_brdf_specular.view()),
+                    SamplerObject::new(self.persistent_samplers().reflection_map.view()),
+                )
+            };
+
             self.pipeline = Some(RenderPipeline {
                 fd_preprocess_pass: pass::fd_preprocess::pass(&self.shaders.fd_preprocess),
                 fragments_draw_pass: pass::fragments_draw::pass(
@@ -492,6 +499,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     dev_materials,
                     base_hdr,
                     base_depth,
+                    debug_env_refprobe,
+                    baked_brdf_spec,
                 ),
                 debris_draw_pass: pass::debris_draw::pass(&self.shaders.debris),
                 skybox_draw_pass: pass::skybox_draw::pass(

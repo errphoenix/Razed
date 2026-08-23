@@ -19,7 +19,7 @@ use crate::render::pass::{
 };
 
 pub const ENVMAP_MIPS: i32 = FILTERING_MIP_COUNT as i32;
-pub const ENVMAP_RESOLUTION: i32 = 128;
+pub const ENVMAP_RESOLUTION: i32 = 256;
 
 type TextureRegistry = AssetRegistry<RawTexture, TextureMetadata>;
 
