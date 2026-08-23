@@ -263,6 +263,7 @@ ethel::shader_glsl! {
                 float NdotM = dot(N, H);
 
                 vec3 F = fresnel_Schlick(max(0.0, MdotL), F0);
+                vec3 kD = vec3(1.0) - F;
                 float D = ndf_GGX(NdotM, a);
                 float G2 = ndf_G2_SmithHeight(absNdotV, absNdotL, a); // hammon approx.
                 // G2 uses the Hammon approximation, so the denominator is no
@@ -272,22 +273,23 @@ ethel::shader_glsl! {
                 vec3 BRDF_spec = t_FD * G2;
 
                 vec3 BRDF_diff = albedo / 3.14159;
-                vec3 BRDF = BRDF_diff + BRDF_spec;
+                vec3 BRDF = kD * BRDF_diff + BRDF_spec;
                 Lo += BRDF * Li * posNdotL;
                 // end light
 
                 // --- evironmental lighting ---
                 // environmental specular term
-                // (constant)
-                vec3 E_diff = LIGHT_AMBIENT * diffuse;
-                // environmental specular term
                 float LODspec = roughness * REFLECTION_MAX_LOD;
-                vec3 E_spec_Fres = fresnel_Schlick(max(0.0, NdotV), F0);
                 vec3 E_spec_envf = textureLod(debug_reflection_env, R, LODspec).rgb;
                 vec2 E_spec_brdf = texture(baked_brdf_spec, vec2(max(0.0, NdotV), roughness)).rg;
-                vec3 E_spec = E_spec_envf * (E_spec_Fres * E_spec_brdf.x + E_spec_brdf.y);
-
-                vec3 E = albedo * E_diff + E_spec;
+                vec3 E_spec_F    = F0 * E_spec_brdf.x + E_spec_brdf.y;
+                vec3 E_spec = E_spec_envf * E_spec_F;
+                // environmental specular term
+                // (constant)
+                vec3 E_diff = LIGHT_AMBIENT * albedo;
+                vec3 E_kD   = vec3(1.0) - E_spec_F; // diffuse energy conservation
+                // environmental term evaluation
+                vec3 E = E_kD * E_diff + E_spec;
                 E *= occlusion;
 
                 vec3 color = Lo + E;
