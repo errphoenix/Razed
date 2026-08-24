@@ -186,8 +186,10 @@ ethel::shader_glsl! {
                 }
             };
             uniform {
-                length 16, texture_map: sampler2D => i32;
                 length 16, texture_masks: uint => u32;
+            };
+            sampler {
+                on 0, for 16 => texture_map : sampler2D;
             };
 
             src() {

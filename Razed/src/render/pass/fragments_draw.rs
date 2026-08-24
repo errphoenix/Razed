@@ -8,7 +8,7 @@ use ethel::{
     shader::ShaderKind,
 };
 use rendrs::graphics::ShCoeffsBuffer;
-use rendrs::pipeline::{OutputObject, RenderTargetAccessor, SamplerObject};
+use rendrs::pipeline::{OutputObject, RenderTargetAccessor, Sampler, SamplerObject};
 use rendrs::{
     graphics::material::{MaterialGroup, MaterialLocationRegistry},
     pipeline::DrawPass,
@@ -47,9 +47,9 @@ pub const fn pass(
     FragmentsDrawPass::new(
         handle_view,
         [
-            dev_materials.sampler(),
-            baked_brdf_specular,
-            debug_reflection_probe,
+            Sampler::wrap(dev_materials.sampler(), SAMPLER_UNIT_TEXTURE_MAP),
+            Sampler::wrap(baked_brdf_specular, SAMPLER_UNIT_BAKED_BRDF_SPEC),
+            Sampler::wrap(debug_reflection_probe, SAMPLER_UNIT_DEBUG_REFLECTION_PROBE),
         ],
         [
             OutputObject::Color(hdr_output),
@@ -127,6 +127,10 @@ use shader_commons::LIB_NDF_GGX_LAMBDA;
 use shader_commons::LIB_NDF_LAMBDA_A_NOSQRT;
 use shader_commons::LIB_NDF_MASK_G2_SMITH_HEIGHT_GGX_HAMMON_APPROX;
 
+pub const SAMPLER_UNIT_TEXTURE_MAP: u32 = 0;
+pub const SAMPLER_UNIT_BAKED_BRDF_SPEC: u32 = 1;
+pub const SAMPLER_UNIT_DEBUG_REFLECTION_PROBE: u32 = 2;
+
 ethel::shader_glsl! {
     struct Fragment > [460] {
         common {
@@ -151,9 +155,9 @@ ethel::shader_glsl! {
                 length 1, camera_position: vec3 => glam::Vec3;
             };
             sampler {
-                on 0, for 1 => texture_map   : sampler2DArray;
-                on 1 => baked_brdf_spec      : sampler2D;
-                on 2 => debug_reflection_env : samplerCube;
+                on SAMPLER_UNIT_TEXTURE_MAP, for 1     => texture_map          : sampler2DArray;
+                on SAMPLER_UNIT_BAKED_BRDF_SPEC        => baked_brdf_spec      : sampler2D;
+                on SAMPLER_UNIT_DEBUG_REFLECTION_PROBE => debug_reflection_env : samplerCube;
             };
 
             type {
@@ -175,32 +179,6 @@ ethel::shader_glsl! {
                 shader_commons::CONST_AMBIENT_LIGHT
                 shader_commons::CONST_REFLECTION_MAX_LOD
                 Constant::new("DEV_MATERIAL_GROUP", 0u32)
-
-                // road
-                Constant::new("DIFFUSE_ALPHA_PAGE", 3f32)
-                Constant::new("NORMAL_EMISSIVE_PAGE", 4f32)
-                Constant::new("ORMD_PAGE", 5f32)
-
-                // concrete
-                // Constant::new("DIFFUSE_ALPHA_PAGE", 6f32)
-                // Constant::new("NORMAL_EMISSIVE_PAGE", 7f32)
-                // Constant::new("ORMD_PAGE", 8f32)
-
-                // bricks
-                // Constant::new("DIFFUSE_ALPHA_PAGE", 9f32)
-                // Constant::new("NORMAL_EMISSIVE_PAGE", 10f32)
-                // Constant::new("ORMD_PAGE", 11f32)
-
-                // metal 1
-                // Constant::new("DIFFUSE_ALPHA_PAGE", 12f32)
-                // Constant::new("NORMAL_EMISSIVE_PAGE", 13f32)
-                // Constant::new("ORMD_PAGE", 14f32)
-
-                // metal 2
-                // Constant::new("DIFFUSE_ALPHA_PAGE", 15f32)
-                // Constant::new("NORMAL_EMISSIVE_PAGE", 16f32)
-                // Constant::new("ORMD_PAGE", 17f32)
-
                 Constant::new("UV_SCALE", 0.25)
             };
 
@@ -323,7 +301,7 @@ ethel::shader_glsl! {
 
                 // --- evironmental lighting ---
                 // environmental specular term
-                float LODspec = roughness * REFLECTION_MAX_LOD;
+                float LODspec = a * REFLECTION_MAX_LOD;
                 vec3 E_spec_envf = textureLod(debug_reflection_env, R, LODspec).rgb;
                 vec2 E_spec_brdf = texture(baked_brdf_spec, vec2(max(0.0, NdotV), roughness)).rg;
                 vec3 E_spec_F    = F0 * E_spec_brdf.x + E_spec_brdf.y;
@@ -331,7 +309,7 @@ ethel::shader_glsl! {
                 // environmental diffuse term
                 ShCoeffs E_diff_SH = irradiance_sh;
                 vec3 E_diff_L = rendrs_EvalSH_L2(E_diff_SH, N);
-                vec3 E_diff = E_diff_L * albedo;
+                vec3 E_diff = E_diff_L * albedo / 3.14159;
                 vec3 E_kD   = vec3(1.0) - E_spec_F; // diffuse energy conservation
                 // environmental term evaluation
                 vec3 E = E_kD * E_diff + E_spec;

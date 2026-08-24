@@ -1,5 +1,5 @@
 use ethel::shader::{Constant, ShaderKind};
-use rendrs::pipeline::{DrawPass, OutputObject, RenderTargetAccessor, SamplerObject};
+use rendrs::pipeline::{DrawPass, OutputObject, RenderTargetAccessor, Sampler, SamplerObject};
 
 pub type SkyboxDrawPass = DrawPass<(), 1, 2>;
 
@@ -12,7 +12,7 @@ pub const fn pass(
     let handle_view = shader.handle().view();
     SkyboxDrawPass::new(
         handle_view,
-        [skybox_sampler],
+        [Sampler::wrap(skybox_sampler, SAMPLER_UNIT_ENVMAP)],
         [
             OutputObject::Color(hdr_output),
             OutputObject::Depth(depth_output),
@@ -27,6 +27,8 @@ pub const fn pass(
     )
 }
 
+pub const SAMPLER_UNIT_ENVMAP: u32 = 0;
+
 ethel::shader_glsl! {
     struct Skybox > [460] {
         common {};
@@ -39,8 +41,8 @@ ethel::shader_glsl! {
                 }
             };
 
-            uniform {
-                length 1, environment_map: samplerCube => i32;
+            sampler {
+                on SAMPLER_UNIT_ENVMAP => environment_map : samplerCube;
             };
 
             src() {

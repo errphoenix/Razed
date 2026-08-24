@@ -239,34 +239,34 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             ..
         } = &self.shaders;
 
-        interface.bind();
+        //interface.bind();
         interface.uniform_projection_mat4v([*ortho_proj]);
 
-        lattice.bind();
+        //lattice.bind();
         lattice.uniform_projection_mat4v([*proj]);
         lattice.uniform_view_mat4v([view_mat]);
 
-        cage_visual.bind();
+        //cage_visual.bind();
         cage_visual.uniform_projection_mat4v([*proj]);
         cage_visual.uniform_view_mat4v([view_mat]);
 
         #[cfg(feature = "devmode")]
         {
-            lines.bind();
+            //lines.bind();
             lines.uniform_projection_mat4v([*proj]);
             lines.uniform_view_mat4v([view_mat]);
         }
 
-        skybox.bind();
+        //skybox.bind();
         skybox.uniform_projection_mat4v([*proj]);
         skybox.uniform_view_mat4v([view_mat]);
 
-        debris.bind();
+        //debris.bind();
         debris.uniform_camera_forward_vec3v([cam_forward]);
         debris.uniform_projection_mat4v([*proj]);
         debris.uniform_view_mat4v([view_mat]);
 
-        frags.bind();
+        //frags.bind();
         frags.uniform_camera_forward_vec3v([cam_forward]);
         frags.uniform_camera_position_vec3v([cam_position]);
         frags.uniform_projection_mat4v([*proj]);
@@ -602,11 +602,11 @@ impl Renderer {
             self.shaders.lines = pass::ShaderDebugLines::new_compiled();
         }
 
-        let sampler_uniforms = std::array::from_fn(|i| i as i32);
-        self.shaders.interface.bind();
-        self.shaders
-            .interface
-            .uniform_texture_map_sampler2Dv(sampler_uniforms);
+        // let sampler_uniforms = std::array::from_fn(|i| i as i32);
+        // self.shaders.interface.bind();
+        // self.shaders
+        //     .interface
+        //     .uniform_texture_map_sampler2Dv(sampler_uniforms);
     }
 
     fn initialize_render_targets(&mut self, resolution: Resolution) {
