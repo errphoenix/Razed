@@ -45,7 +45,7 @@ ethel::shader_glsl! {
 
             src() {
                 "
-                outColor = texture(environment_map, fs_uvw);
+                outColor = textureLod(environment_map, fs_uvw, 0);
                 ";
             }
         ];

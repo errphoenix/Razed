@@ -36,29 +36,10 @@ ethel::asset_registry! {
         MATEX_DEV_NAME_METAL063_ROUGHNESS    => "assets/dev/metal063/roughness.jpg";
         MATEX_DEV_NAME_METAL063_DISPLACEMENT => "assets/dev/metal063/displacement.jpg";
 
-        ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_NEGX => "assets/dev/env/larnaca_castle/negx.jpg";
-        ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_NEGY => "assets/dev/env/larnaca_castle/negy.jpg";
-        ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_NEGZ => "assets/dev/env/larnaca_castle/negz.jpg";
-        ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_POSX => "assets/dev/env/larnaca_castle/posx.jpg";
-        ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_POSY => "assets/dev/env/larnaca_castle/posy.jpg";
-        ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_POSZ => "assets/dev/env/larnaca_castle/posz.jpg";
-
-        ENVMAP_EQUIRECT_ENV_NAME_CITRUS_ORCHARD => "assets/dev/env/citrus_orchard_puresky.hdr";
+        ENVMAP_NAME_CITRUS_ORCHARD => "assets/dev/env/citrus_orchard_puresky.hdr";
+        ENVMAP_NAME_759_HDRI_SKIES_COM => "assets/dev/env/759-hdri-skies-com.hdr";
     }
 }
 
-pub const ENVMAP_EQUIRECT_ENV_NAME_CITRUS_ORCHARD: &str = "__dev.env.equirect.citrus-orchard";
-
-pub const ENVMAP_CUBE_ENV_NAME_LARNACACASTLE: &str = "__dev.env.cube.larnaca-castle";
-pub const ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_NEGX: &str =
-    concatcp!(ENVMAP_CUBE_ENV_NAME_LARNACACASTLE, ".negx");
-pub const ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_NEGY: &str =
-    concatcp!(ENVMAP_CUBE_ENV_NAME_LARNACACASTLE, ".negy");
-pub const ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_NEGZ: &str =
-    concatcp!(ENVMAP_CUBE_ENV_NAME_LARNACACASTLE, ".negz");
-pub const ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_POSX: &str =
-    concatcp!(ENVMAP_CUBE_ENV_NAME_LARNACACASTLE, ".posx");
-pub const ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_POSY: &str =
-    concatcp!(ENVMAP_CUBE_ENV_NAME_LARNACACASTLE, ".posy");
-pub const ENVMAP_CUBE_ENV_NAME_LARNACACASTLE_POSZ: &str =
-    concatcp!(ENVMAP_CUBE_ENV_NAME_LARNACACASTLE, ".posz");
+pub const ENVMAP_NAME_CITRUS_ORCHARD: &str = "__dev.env.citrus-orchard";
+pub const ENVMAP_NAME_759_HDRI_SKIES_COM: &str = "__dev.env.759-hdri-skies.com";

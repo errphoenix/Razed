@@ -28,7 +28,7 @@ pub const ENVMAP_RESOLUTION: i32 = 256;
 type TextureRegistry = AssetRegistry<RawTexture, TextureMetadata>;
 
 pub fn load_environment_map(texture_assets: &mut TextureRegistry) -> TextureView {
-    const DEV_ENV_NAME: &str = crate::assets::ENVMAP_EQUIRECT_ENV_NAME_CITRUS_ORCHARD;
+    const DEV_ENV_NAME: &str = crate::assets::ENVMAP_NAME_759_HDRI_SKIES_COM;
     const DEV_ENV_ID: StringHash = janus::hash_string(DEV_ENV_NAME);
 
     let equirect_tex = {
@@ -105,11 +105,6 @@ pub fn bake_brdf_specular() -> Texture {
 /// [`BSplineDownscalePass`]: rendrs::graphics::passes::reflection_filtering::BSplineDownscalePass
 pub fn debug_irradiance(texture: TextureView, output: &ShCoeffsBuffer) {
     debug_assert_eq!(texture.target_kind(), TextureKind::CubeMap);
-
-    // let mip = {
-    //     let size = texture.size().0 as u32;
-    //     (0..10).find(|&mip| size >> mip == 16)
-    //     }.expect("the source radiance texture or one of its mips do not match 16x16 resolution for irradiance convolution");
 
     let shader = ComputeShaderIrradianceHarmonics::new_compiled();
     rendrs::graphics::irradiance_harmonics(&shader, SamplerObject::new(texture)).execute(
