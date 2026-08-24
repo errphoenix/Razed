@@ -5,7 +5,11 @@ pub mod shader_commons;
 use std::sync::atomic::Ordering;
 
 use ethel::{
-    render::{Resolution, buffer::StorageSection, command::DrawGroups},
+    render::{
+        Resolution,
+        buffer::{SingleBuffer, StorageSection},
+        command::DrawGroups,
+    },
     state::camera::ViewPoint,
 };
 use gui::{
@@ -18,7 +22,7 @@ use janus::{
     texture::{ImageFormat, ImageType, MipLevels, Texture, TextureFiltering},
 };
 use rendrs::{
-    graphics::PixelResolution,
+    graphics::{PixelResolution, ShCoeffsBuffer},
     pipeline::{
         OutputObject, Pass, RenderPool, RenderTarget, RenderTargetDescriptor, RenderTargetId,
         SamplerObject,
@@ -127,6 +131,18 @@ impl RenderPipeline {
     }
 }
 
+#[derive(Debug)]
+pub struct PersistentShaderBuffers {
+    pub irradiance_sh_coeffs: ShCoeffsBuffer,
+}
+impl Default for PersistentShaderBuffers {
+    fn default() -> Self {
+        Self {
+            irradiance_sh_coeffs: SingleBuffer::zeroed(1),
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct RenderShaders {
     fragments: pass::ShaderFragment,
@@ -160,6 +176,7 @@ pub struct Renderer {
     pipeline: Option<RenderPipeline>,
     target_handles: Option<RenderTargetHandles>,
     persistent_samplers: Option<PersistentSamplers>,
+    shader_buffers: Option<PersistentShaderBuffers>,
     resolution: PixelResolution,
 
     render_pool: RenderPool,
@@ -348,11 +365,14 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
             // fragments draw pass
             {
+                let irradiance_sh_buf = &self.shader_buffers().irradiance_sh_coeffs;
+
                 let ctx = pass::FragmentsDrawCtx {
                     cages_data: cages_buf,
                     cages_map: &frame_data.cage_map,
                     fragments_data: frags_buf,
                     fragments_commands: frags_cmd,
+                    irradiance_sh: irradiance_sh_buf,
                     material_registry: self.materials.locations(),
                 };
                 self.pipeline()
@@ -450,6 +470,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
     }
 
     fn init_resources(&mut self, resolution: Resolution) {
+        self.shader_buffers = Some(PersistentShaderBuffers::default());
+
         self.initialize_shaders();
         self.initialize_render_targets(resolution);
 
@@ -461,6 +483,10 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             let dev_env_cubemap = graphics::load_environment_map(texture_assets);
             let baked_brdf_specular = graphics::bake_brdf_specular();
             let dev_reflection_map = graphics::debug_probe_reflection(dev_env_cubemap);
+            graphics::debug_irradiance(
+                dev_env_cubemap,
+                &self.shader_buffers().irradiance_sh_coeffs,
+            );
 
             self.persistent_samplers = Some(PersistentSamplers {
                 dev_envmap_cubemap: SamplerObject::with_mip_view(dev_env_cubemap, 0),
@@ -535,6 +561,12 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
     }
 }
 impl Renderer {
+    fn shader_buffers(&self) -> &PersistentShaderBuffers {
+        self.shader_buffers
+            .as_ref()
+            .expect("persistent shader buffers must be present after resource initialization")
+    }
+
     fn persistent_samplers(&self) -> &PersistentSamplers {
         self.persistent_samplers
             .as_ref()

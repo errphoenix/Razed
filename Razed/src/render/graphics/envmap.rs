@@ -7,11 +7,15 @@ use janus::{
     texture::{ImageFormat, ImageType, MipLevels, Tex, Texture, TextureKind, TextureView},
 };
 use rendrs::{
-    graphics::reflection_filtering::{
-        BSplineDownscaleCtx, ComputeShaderBSplineDownscale, ComputeShaderPrefilterCubemap,
-        FILTERING_MIP_COUNT, PrefilterCubemapCtx,
+    graphics::{
+        ShCoeffsBuffer,
+        irradiance_harmonics::{ComputeShaderIrradianceHarmonics, IrradianceHarmonicsCtx},
+        reflection_filtering::{
+            BSplineDownscaleCtx, ComputeShaderBSplineDownscale, ComputeShaderPrefilterCubemap,
+            FILTERING_MIP_COUNT, PrefilterCubemapCtx,
+        },
     },
-    pipeline::{ImageAccessKind, ImageObject, ImageObjectTarget, Pass, RenderPool},
+    pipeline::{ImageAccessKind, ImageObject, ImageObjectTarget, Pass, RenderPool, SamplerObject},
 };
 
 use crate::render::pass::{
@@ -90,7 +94,34 @@ pub fn bake_brdf_specular() -> Texture {
     tex
 }
 
-/// Writes mips to `texture` (so it must allocate for atleast
+/// Sources radiance from `texture` to build an irradiance map with
+/// spherical harmonics on the given ssbo.
+///
+/// `texture` must contain the environment map and it (or any of its mips) must
+/// be of 16x16 resolution. The texture on which mips were created by
+/// [`debug_probe_reflection`] through [`BSplineDownscalePass`] is perfect
+/// for this.
+///
+/// [`BSplineDownscalePass`]: rendrs::graphics::passes::reflection_filtering::BSplineDownscalePass
+pub fn debug_irradiance(texture: TextureView, output: &ShCoeffsBuffer) {
+    debug_assert_eq!(texture.target_kind(), TextureKind::CubeMap);
+
+    // let mip = {
+    //     let size = texture.size().0 as u32;
+    //     (0..10).find(|&mip| size >> mip == 16)
+    //     }.expect("the source radiance texture or one of its mips do not match 16x16 resolution for irradiance convolution");
+
+    let shader = ComputeShaderIrradianceHarmonics::new_compiled();
+    rendrs::graphics::irradiance_harmonics(&shader, SamplerObject::new(texture)).execute(
+        StorageSection::Back,
+        &RenderPool::dummy(),
+        &IrradianceHarmonicsCtx {
+            output_coefficients: output,
+        },
+    );
+}
+
+/// Writes mips to `texture` (so the caller must allocate for atleast
 /// [`FILTERING_MIP_COUNT`] mip levels) and writes the filtered reflection
 /// map to a newly allocated texture.
 ///

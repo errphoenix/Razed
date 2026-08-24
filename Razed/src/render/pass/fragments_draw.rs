@@ -7,6 +7,7 @@ use ethel::{
     },
     shader::ShaderKind,
 };
+use rendrs::graphics::ShCoeffsBuffer;
 use rendrs::pipeline::{OutputObject, RenderTargetAccessor, SamplerObject};
 use rendrs::{
     graphics::material::{MaterialGroup, MaterialLocationRegistry},
@@ -26,6 +27,7 @@ pub struct FragmentsDrawCtx<'data> {
     pub cages_map: &'data TriBuffer<DirectIndex>,
     pub fragments_data: &'data PartitionedTriBuffer<{ FRAGMENTS_STORAGE_PARTS }>,
     pub fragments_commands: &'data TriBuffer<DrawArraysIndirectCommand>,
+    pub irradiance_sh: &'data ShCoeffsBuffer,
 
     #[allow(unused, reason = "todo; will be used")]
     pub material_registry: &'data MaterialLocationRegistry,
@@ -66,6 +68,9 @@ pub const fn pass(
             ctx.cages_map
                 .bind_shader_storage(section, SSBO_INDEX_IMAP_CAGES, 0);
 
+            ctx.irradiance_sh
+                .bind_shader_storage(SSBO_INDEX_IRRADIANCE_SH, 0);
+
             ctx.fragments_data.bind_shader_storage(section);
             // SAFETY: safe access to the commands buffer is guaranteed by the
             // correct triple-buffer section index
@@ -99,6 +104,10 @@ macro_rules! ssbo_binding {
     (IMap_Cages) => {
         6
     };
+
+    (_devIrradianceSh) => {
+        12
+    };
 }
 
 pub const SSBO_INDEX_POD_BINDPOSE: u32 = ssbo_binding!(POD_BindPose);
@@ -108,6 +117,7 @@ pub const SSBO_INDEX_POD_CAGES_LOCALPOINTS: u32 = ssbo_binding!(POD_Cages_LocalP
 pub const SSBO_INDEX_POD_CAGES_LOCALPOINTS_BIND: u32 = ssbo_binding!(POD_Cages_LocalPoints_Bind);
 pub const SSBO_INDEX_POD_CAGES_BINDREF: u32 = ssbo_binding!(POD_Cages_BindRef);
 pub const SSBO_INDEX_IMAP_CAGES: u32 = ssbo_binding!(IMap_Cages);
+pub const SSBO_INDEX_IRRADIANCE_SH: u32 = ssbo_binding!(_devIrradianceSh);
 
 use shader_commons::FresnelParamsGlslStruct;
 use shader_commons::LIB_FRESNEL_PARAMS;
@@ -149,21 +159,55 @@ ethel::shader_glsl! {
             type {
                 rendrs::graphics::material::shader::TYPE_MATERIAL_ENTRY_LOCATION
                 rendrs::graphics::material::shader::TYPE_MATERIAL_LOCATION
+                rendrs::graphics::irradiance_harmonics::TYPE_SH_COEFFS
                 FresnelParamsGlslStruct::as_definition()
+            };
+
+            ssbo {
+                ethel::shader_glsl_ssbo! {
+                    buf _devIrradianceSh => {
+                        ShCoeffs : irradiance_sh;
+                    }
+                }
             };
 
             const {
                 shader_commons::CONST_AMBIENT_LIGHT
+                shader_commons::CONST_REFLECTION_MAX_LOD
                 Constant::new("DEV_MATERIAL_GROUP", 0u32)
-                Constant::new("DIFFUSE_ALPHA_PAGE", 12f32)
-                Constant::new("NORMAL_EMISSIVE_PAGE", 13f32)
-                Constant::new("ORMD_PAGE", 14f32)
-                Constant::new("UV_SCALE", 2.0)
+
+                // road
+                Constant::new("DIFFUSE_ALPHA_PAGE", 3f32)
+                Constant::new("NORMAL_EMISSIVE_PAGE", 4f32)
+                Constant::new("ORMD_PAGE", 5f32)
+
+                // concrete
+                // Constant::new("DIFFUSE_ALPHA_PAGE", 6f32)
+                // Constant::new("NORMAL_EMISSIVE_PAGE", 7f32)
+                // Constant::new("ORMD_PAGE", 8f32)
+
+                // bricks
+                // Constant::new("DIFFUSE_ALPHA_PAGE", 9f32)
+                // Constant::new("NORMAL_EMISSIVE_PAGE", 10f32)
+                // Constant::new("ORMD_PAGE", 11f32)
+
+                // metal 1
+                // Constant::new("DIFFUSE_ALPHA_PAGE", 12f32)
+                // Constant::new("NORMAL_EMISSIVE_PAGE", 13f32)
+                // Constant::new("ORMD_PAGE", 14f32)
+
+                // metal 2
+                // Constant::new("DIFFUSE_ALPHA_PAGE", 15f32)
+                // Constant::new("NORMAL_EMISSIVE_PAGE", 16f32)
+                // Constant::new("ORMD_PAGE", 17f32)
+
+                Constant::new("UV_SCALE", 0.25)
             };
 
             lib {
                 rendrs::pack::DERIVE_COTANGENT;
 
+                rendrs::graphics::irradiance_harmonics::LIB_EVALUATE_SH_L2;
                 rendrs::graphics::light::LIB_LIGHT_ATTENUATE_ISQ_WINDOWED_CURVE;
 
                 LIB_FRESNEL_PARAMS;
@@ -284,9 +328,10 @@ ethel::shader_glsl! {
                 vec2 E_spec_brdf = texture(baked_brdf_spec, vec2(max(0.0, NdotV), roughness)).rg;
                 vec3 E_spec_F    = F0 * E_spec_brdf.x + E_spec_brdf.y;
                 vec3 E_spec = E_spec_envf * E_spec_F;
-                // environmental specular term
-                // (constant)
-                vec3 E_diff = LIGHT_AMBIENT * albedo;
+                // environmental diffuse term
+                ShCoeffs E_diff_SH = irradiance_sh;
+                vec3 E_diff_L = rendrs_EvalSH_L2(E_diff_SH, N);
+                vec3 E_diff = E_diff_L * albedo;
                 vec3 E_kD   = vec3(1.0) - E_spec_F; // diffuse energy conservation
                 // environmental term evaluation
                 vec3 E = E_kD * E_diff + E_spec;
