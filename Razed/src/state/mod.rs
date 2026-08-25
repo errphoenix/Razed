@@ -147,6 +147,8 @@ pub struct State {
     selection: Option<IndirectIndex>,
     dead_fragments: Vec<IndirectIndex>,
 
+    selected_material: u32,
+
     pub frag_meshmap: FxSpatialHash<ethel::mesh::Id>,
 }
 
@@ -184,6 +186,7 @@ impl Default for State {
             glyph_atlas: Default::default(),
             render_frame_time: Default::default(),
             perf_avg: Default::default(),
+            selected_material: 1,
             glyph_pipe: None,
         }
     }
@@ -270,6 +273,9 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             let _ = self
                 .render_frame_time
                 .set_and_advance(storage.render_frame_last_duration.get());
+            let _ = storage
+                .debug_material_index
+                .set_and_advance(self.selected_material);
 
             // load cage deformation feedback data
             {
@@ -576,6 +582,16 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 
         if screen.resolution().is_changed() {
             self.ui_system.set_resolution(screen.resolution());
+        }
+
+        if let Some(character) = self
+            .local_keyev_buf
+            .iter()
+            .filter_map(InputEvent::text)
+            .filter(|txt| txt.0.is_ascii_digit())
+            .last()
+        {
+            self.selected_material = character.0.to_digit(10).unwrap_or_default();
         }
 
         {

@@ -153,6 +153,11 @@ ethel::shader_glsl! {
             uniform {
                 length 1, camera_forward: vec3 => glam::Vec3;
                 length 1, camera_position: vec3 => glam::Vec3;
+
+                // 0 = diffuse + alpha
+                // 1 = normal + emissive
+                // 2 = ormd
+                length 3, dev_material_pages: uint => u32;
             };
             sampler {
                 on SAMPLER_UNIT_TEXTURE_MAP, for 1     => texture_map          : sampler2DArray;
@@ -200,17 +205,21 @@ ethel::shader_glsl! {
                 "
                 vec2 scaled_uv = fs_uv * UV_SCALE;
 
+                uint DIFFUSE_ALPHA_PAGE = dev_material_pages[0];
+                uint NORMAL_EMISSIVE_PAGE = dev_material_pages[1];
+                uint ORMD_PAGE = dev_material_pages[2];
+
                 vec4 qDiffuseAlpha = texture(
                     texture_map[DEV_MATERIAL_GROUP],
-                    vec3(scaled_uv, DIFFUSE_ALPHA_PAGE)
+                    vec3(scaled_uv, float(DIFFUSE_ALPHA_PAGE))
                 );
                 vec4 qNormalEmissive = texture(
                     texture_map[DEV_MATERIAL_GROUP],
-                    vec3(scaled_uv, NORMAL_EMISSIVE_PAGE)
+                    vec3(scaled_uv, float(NORMAL_EMISSIVE_PAGE))
                 );
                 vec4 qOrmd = texture(
                     texture_map[DEV_MATERIAL_GROUP],
-                    vec3(scaled_uv, ORMD_PAGE)
+                    vec3(scaled_uv, float(ORMD_PAGE))
                 );
 
                 vec3 diffuse = pow(qDiffuseAlpha.rgb, vec3(2.2));

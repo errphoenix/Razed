@@ -375,6 +375,11 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     irradiance_sh: irradiance_sh_buf,
                     material_registry: self.materials.locations(),
                 };
+
+                let fs = &self.shaders.fragments;
+                let mat_id = frame_data.debug_material_index.get();
+                fs.uniform_dev_material_pages_uintv([mat_id * 3, mat_id * 3 + 1, mat_id * 3 + 2]);
+
                 self.pipeline()
                     .fragments_draw_pass
                     .execute(section, render_pool, &ctx);

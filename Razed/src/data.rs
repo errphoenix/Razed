@@ -227,6 +227,8 @@ pub struct FrameDataBuffers {
     pub interface_commands: UiCommandsBuffer,
 
     pub render_frame_last_duration: TriCell<DeltaTime>,
+
+    pub debug_material_index: TriCell<u32>,
 }
 
 impl FrameDataBuffers {
@@ -273,6 +275,8 @@ impl FrameDataBuffers {
             interface_storage: TriBuffer::zeroed(INTERFACE_INSTANCES_ALLOC),
 
             render_frame_last_duration: TriCell::new(DeltaTime::default()),
+
+            debug_material_index: TriCell::new(0),
         }
     }
 }
