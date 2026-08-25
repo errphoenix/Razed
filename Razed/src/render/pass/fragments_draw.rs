@@ -269,6 +269,9 @@ ethel::shader_glsl! {
                 // equal to V because this is a camera point light
                 vec3 to_light = to_camera;
                 vec3 L = V; // dir to light
+                // test non-camera light
+                // to_light = vec3(25.0, 20.0, 25.0) - world;
+                // L = normalize(to_light);
 
                 // eval. geometric angles
                 float NdotL    = dot(N, L);

@@ -8,7 +8,7 @@ use janus::{
 };
 use rendrs::{
     graphics::{
-        ShCoeffsBuffer,
+        ImageTargetFormat, ShCoeffsBuffer,
         brdf_bake_specular::ComputeShaderBrdfBakingSpecular,
         irradiance_harmonics::{ComputeShaderIrradianceHarmonics, IrradianceHarmonicsCtx},
         reflection_filtering::{
@@ -25,10 +25,14 @@ use crate::render::pass::{
 
 pub const ENVMAP_MIPS: i32 = FILTERING_MIP_COUNT as i32;
 pub const ENVMAP_RESOLUTION: i32 = 128;
+pub const TRUENV_CUBEMAP_RES: i32 = 1024;
 
 type TextureRegistry = AssetRegistry<RawTexture, TextureMetadata>;
 
-pub fn load_environment_map(texture_assets: &mut TextureRegistry) -> TextureView {
+/// Returns the full-resolution cubemap environment view, and a new texture
+/// of a downscaled environment cubemap that matches the necessary probe
+/// resolution for a reflection cubemap.
+pub fn load_environment_map(texture_assets: &mut TextureRegistry) -> (TextureView, Texture) {
     const DEV_ENV_NAME: &str = crate::assets::ENVMAP_NAME_759_HDRI_SKIES_COM;
     const DEV_ENV_ID: StringHash = janus::hash_string(DEV_ENV_NAME);
 
@@ -44,41 +48,82 @@ pub fn load_environment_map(texture_assets: &mut TextureRegistry) -> TextureView
     }
     .unwrap();
 
+    // find mip of source env. map that matches (debug) probe resolution
+    let mips_to_match = {
+        let mut res = TRUENV_CUBEMAP_RES;
+        let mut i = 1;
+        while res > ENVMAP_RESOLUTION {
+            res >>= 1;
+            i += 1;
+        }
+        i
+    };
+
     let cubemap_tex = Texture::new_cubemap(
+        TRUENV_CUBEMAP_RES,
+        TRUENV_CUBEMAP_RES,
+        MipLevels::try_new(mips_to_match).unwrap_or_default(),
+        ImageType::Float16,
+        ImageFormat::Rgba,
+    );
+
+    {
+        // equirectangular to cubemap conversion
+        let shader = ComputeShaderEquirectDecode::new_compiled();
+        let decode_pass = equirect_decode_compute::pass(&shader);
+        let decode_ctx = EquirectDecodeCtx {
+            shader: &shader,
+            src_equirect: ImageObjectTarget::new(
+                ImageObject::from_direct_texture(equirect_tex.view()),
+                ImageAccessKind::ReadOnly,
+                equirect_decode_compute::IMAGE_BINDING_SRC_EQUIRECT,
+                None,
+            ),
+            dst_cubemap: ImageObjectTarget::new(
+                ImageObject::from_direct_texture(cubemap_tex.view()),
+                ImageAccessKind::WriteOnly,
+                equirect_decode_compute::IMAGE_BINDING_DST_CUBEMAP,
+                None,
+            ),
+        };
+        decode_pass.execute(StorageSection::Spare, &RenderPool::dummy(), &decode_ctx);
+        janus::gl::barrier_shader_image();
+        cubemap_tex.generate_mipmaps();
+        texture_assets.add_handle(Handle::from_gpu_resource(
+            DEV_ENV_ID,
+            cubemap_tex,
+            texture_assets,
+        ));
+    }
+
+    unsafe {
+        janus::gl::Finish();
+    }
+
+    let fullres = texture_assets.get_gpu_view(DEV_ENV_ID).unwrap();
+
+    // downscale for reflection cubemap
+    let downscaled = Texture::new_cubemap(
         ENVMAP_RESOLUTION,
         ENVMAP_RESOLUTION,
         MipLevels::try_new(ENVMAP_MIPS).unwrap(),
         ImageType::Float16,
         ImageFormat::Rgba,
     );
-
-    let shader = ComputeShaderEquirectDecode::new_compiled();
-    let decode_pass = equirect_decode_compute::pass(&shader);
-    let decode_ctx = EquirectDecodeCtx {
-        shader: &shader,
-        src_equirect: ImageObjectTarget::new(
-            ImageObject::from_direct_texture(equirect_tex.view()),
-            ImageAccessKind::ReadOnly,
-            equirect_decode_compute::IMAGE_BINDING_SRC_EQUIRECT,
+    for i in 0..6 {
+        rendrs::graphics::image_blit(
+            ImageTargetFormat::Rgba16f,
+            ImageObject::DirectTexture(fullres),
+            ImageObject::DirectTexture(downscaled.view()),
+            Some(mips_to_match - 1),
             None,
-        ),
-        dst_cubemap: ImageObjectTarget::new(
-            ImageObject::from_direct_texture(cubemap_tex.view()),
-            ImageAccessKind::WriteOnly,
-            equirect_decode_compute::IMAGE_BINDING_DST_CUBEMAP,
-            None,
-        ),
-    };
-    decode_pass.execute(StorageSection::Spare, &RenderPool::dummy(), &decode_ctx);
+            Some(i),
+            Some(i),
+        );
+    }
     janus::gl::barrier_shader_image();
-    cubemap_tex.generate_mipmaps();
 
-    texture_assets.add_handle(Handle::from_gpu_resource(
-        DEV_ENV_ID,
-        cubemap_tex,
-        texture_assets,
-    ));
-    texture_assets.get_gpu_view(DEV_ENV_ID).unwrap()
+    (fullres, downscaled)
 }
 
 pub fn bake_brdf_specular() -> Texture {

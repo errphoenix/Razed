@@ -84,15 +84,20 @@ impl RenderTargetHandles {
 
 #[derive(Debug)]
 pub struct PersistentSamplers {
-    /// Citrus Orchard HDR
-    dev_envmap_cubemap: SamplerObject,
+    dev_env_fullres: SamplerObject,
 
+    dev_env_downres: Texture,
     reflection_map: Texture,
     baked_brdf_specular: Texture,
 }
 impl PersistentSamplers {
-    pub const fn dev_envmap_cube(&self) -> SamplerObject {
-        self.dev_envmap_cubemap
+    pub const fn dev_env_fullscale(&self) -> SamplerObject {
+        self.dev_env_fullres
+    }
+
+    /// Matches resolution of reflection probes cubemaps
+    pub const fn dev_env_downscale(&self) -> &Texture {
+        &self.dev_env_downres
     }
 }
 
@@ -485,16 +490,15 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         // init persistent samplers
         {
-            let dev_env_cubemap = graphics::load_environment_map(texture_assets);
+            let (env_fs, env_ds) = graphics::load_environment_map(texture_assets);
             let baked_brdf_specular = graphics::bake_brdf_specular();
-            let dev_reflection_map = graphics::debug_probe_reflection(dev_env_cubemap);
-            graphics::debug_irradiance(
-                dev_env_cubemap,
-                &self.shader_buffers().irradiance_sh_coeffs,
-            );
+            let dev_reflection_map = graphics::debug_probe_reflection(env_ds.view());
+            let irr_sh = &self.shader_buffers().irradiance_sh_coeffs;
+            graphics::debug_irradiance(env_ds.view(), irr_sh);
 
             self.persistent_samplers = Some(PersistentSamplers {
-                dev_envmap_cubemap: SamplerObject::with_mip_view(dev_env_cubemap, 0),
+                dev_env_fullres: SamplerObject::with_mip_view(env_fs, 0),
+                dev_env_downres: env_ds,
                 baked_brdf_specular,
                 reflection_map: dev_reflection_map,
             });
@@ -503,7 +507,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         // init pipeline
         {
             let dev_materials = &self.materials.groups().dev;
-            let skybox_sampler = self.persistent_samplers().dev_envmap_cube();
+            let skybox_sampler = self.persistent_samplers().dev_env_fullscale();
 
             let (base_hdr, base_depth, mapped_ldr) = {
                 let id_hdr = self.render_target_handles().hdr_base;
