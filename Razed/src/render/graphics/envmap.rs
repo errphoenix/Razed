@@ -9,6 +9,7 @@ use janus::{
 use rendrs::{
     graphics::{
         ShCoeffsBuffer,
+        brdf_bake_specular::ComputeShaderBrdfBakingSpecular,
         irradiance_harmonics::{ComputeShaderIrradianceHarmonics, IrradianceHarmonicsCtx},
         reflection_filtering::{
             BSplineDownscaleCtx, ComputeShaderBSplineDownscale, ComputeShaderPrefilterCubemap,
@@ -23,7 +24,7 @@ use crate::render::pass::{
 };
 
 pub const ENVMAP_MIPS: i32 = FILTERING_MIP_COUNT as i32;
-pub const ENVMAP_RESOLUTION: i32 = 256;
+pub const ENVMAP_RESOLUTION: i32 = 128;
 
 type TextureRegistry = AssetRegistry<RawTexture, TextureMetadata>;
 
@@ -81,6 +82,8 @@ pub fn load_environment_map(texture_assets: &mut TextureRegistry) -> TextureView
 }
 
 pub fn bake_brdf_specular() -> Texture {
+    let shader = ComputeShaderBrdfBakingSpecular::new_compiled();
+
     const RESOLUTION: i32 = 256;
     let tex = Texture::new_2d(
         RESOLUTION,
@@ -89,8 +92,12 @@ pub fn bake_brdf_specular() -> Texture {
         ImageType::Float16,
         ImageFormat::DualChannel,
     );
-    rendrs::graphics::brdf_bake_specular(Default::default(), tex.view());
-    janus::gl::barrier_shader_image();
+
+    let elapsed = janus::gl::synchronous(|| {
+        rendrs::graphics::brdf_bake_specular(&shader, tex.view());
+    });
+
+    println!("env. spec. brdf bake time: {elapsed} nanos");
     tex
 }
 
@@ -107,13 +114,18 @@ pub fn debug_irradiance(texture: TextureView, output: &ShCoeffsBuffer) {
     debug_assert_eq!(texture.target_kind(), TextureKind::CubeMap);
 
     let shader = ComputeShaderIrradianceHarmonics::new_compiled();
-    rendrs::graphics::irradiance_harmonics(&shader, SamplerObject::new(texture)).execute(
-        StorageSection::Back,
-        &RenderPool::dummy(),
-        &IrradianceHarmonicsCtx {
-            output_coefficients: output,
-        },
-    );
+
+    let elapsed = janus::gl::synchronous(|| {
+        rendrs::graphics::irradiance_harmonics(&shader, SamplerObject::new(texture)).execute(
+            StorageSection::Back,
+            &RenderPool::dummy(),
+            &IrradianceHarmonicsCtx {
+                output_coefficients: output,
+            },
+        );
+    });
+
+    println!("irradiance sh time: {elapsed} nanos");
 }
 
 /// Writes mips to `texture` (so the caller must allocate for atleast
@@ -129,17 +141,20 @@ pub fn debug_probe_reflection(texture: TextureView) -> Texture {
     let shader = ComputeShaderBSplineDownscale::new_compiled();
     let pass = rendrs::graphics::rf_bspline_downsample(&shader);
 
-    for i in 1..ENVMAP_MIPS {
-        pass.execute(
-            StorageSection::Back,
-            &RenderPool::dummy(),
-            &BSplineDownscaleCtx {
-                target: texture,
-                mip_level: MipLevels::try_new(i).unwrap(),
-            },
-        );
-        janus::gl::barrier_shader_image();
-    }
+    let elapsed_0 = janus::gl::synchronous(|| {
+        for i in 1..ENVMAP_MIPS {
+            pass.execute(
+                StorageSection::Back,
+                &RenderPool::dummy(),
+                &BSplineDownscaleCtx {
+                    target: texture,
+                    mip_level: MipLevels::try_new(i).unwrap(),
+                },
+            );
+            janus::gl::barrier_shader_image();
+        }
+    });
+    println!("downscale time: {elapsed_0} nanos");
 
     let prefiltered = Texture::new_cubemap(
         ENVMAP_RESOLUTION,
@@ -150,12 +165,17 @@ pub fn debug_probe_reflection(texture: TextureView) -> Texture {
     );
     let shader = &ComputeShaderPrefilterCubemap::new_compiled();
     let pass = rendrs::graphics::rf_prefilter_cubemap(&shader, texture, prefiltered.view());
-    pass.execute(
-        StorageSection::Back,
-        &RenderPool::dummy(),
-        &PrefilterCubemapCtx::new(ENVMAP_RESOLUTION as u32),
-    );
-    janus::gl::barrier_shader_image();
+
+    let elapsed_1 = janus::gl::synchronous(|| {
+        pass.execute(
+            StorageSection::Back,
+            &RenderPool::dummy(),
+            &PrefilterCubemapCtx::new(ENVMAP_RESOLUTION as u32),
+        );
+    });
+
+    println!("prefilter time: {elapsed_1} nanos");
+    println!("total time: {} nanos", elapsed_0 + elapsed_1);
 
     prefiltered
 }
