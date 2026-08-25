@@ -1,3 +1,5 @@
+#![allow(unused, reason = "wip feature")]
+
 use ethel::state::data::hash::{Cell, FxSpatialHash};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]

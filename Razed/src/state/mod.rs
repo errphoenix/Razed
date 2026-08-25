@@ -31,6 +31,7 @@ use ethel::{
         command::{DrawArraysIndirectCommand, GpuCommandQueue},
     },
     state::{
+        InputEvent,
         camera::{self, ViewPoint},
         cross::{Cross, Producer},
         data::{
@@ -45,11 +46,7 @@ use gui::{
     InterfaceSystem,
     text::{GlyphAtlas, GlyphRaster},
 };
-use janus::{
-    context::DeltaTime,
-    input::{Cursor, KeyEvent},
-    sync::TriCell,
-};
+use janus::{context::DeltaTime, input::Cursor, sync::TriCell};
 use physics::rigid::RbVelocity;
 use tracing::{Level, event};
 
@@ -114,7 +111,7 @@ impl Default for SimCtl {
 pub struct State {
     sim_control: SimCtl,
 
-    local_keyev_buf: Vec<KeyEvent>,
+    local_keyev_buf: Vec<InputEvent>,
 
     profiler: ethel::profile::Profiler,
     render_frame_time: TriCell<DeltaTime>,
@@ -561,7 +558,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         });
     }
 
-    fn on_key_event(&mut self, event: KeyEvent) {
+    fn on_input_event(&mut self, event: InputEvent) {
         self.local_keyev_buf.push(event);
     }
 
@@ -750,14 +747,17 @@ impl State {
         env.insert(SIM_CTL_SPEED, self.sim_control.speed);
     }
 
+    #[allow(unused)]
     pub fn cage_system(&self) -> &CageSystem {
         &self.cage
     }
 
+    #[allow(unused)]
     pub fn cage_system_mut(&mut self) -> &mut CageSystem {
         &mut self.cage
     }
 
+    #[allow(unused)]
     pub fn ui_system(&self) -> &InterfaceSystem {
         &self.ui_system
     }
@@ -776,7 +776,7 @@ impl State {
         let x = cursor.x_f32();
         let y = cursor.y_f32();
         self.ui_system.process_hover_events(x, y, delta);
-        self.ui_system.feed_key_events(&self.local_keyev_buf, delta);
+        self.ui_system.feed_input(&self.local_keyev_buf, delta);
     }
 
     pub fn ui_composite_batches(&mut self) {
@@ -784,21 +784,6 @@ impl State {
         let texture_metadata = &self.textures_metadata_registry;
         self.ui_system.clear_compositor_layers();
         self.ui_system.composite_layers(texture_metadata);
-    }
-
-    pub fn create_generic_object(
-        &mut self,
-        mesh: ethel::mesh::Id,
-        position: glam::Vec3,
-        rotation: glam::Quat,
-        scale: glam::Vec3,
-    ) -> IndirectIndex {
-        self.generic_objects.insert((
-            mesh,
-            position.to_homogeneous(),
-            rotation,
-            scale.to_homogeneous(),
-        ))
     }
 
     fn upload_gpu_commands(

@@ -89,7 +89,7 @@ pub struct DebrisBuffer {
     pub volumes: Vec<::physics::Sphere>,
     pub direct_indices: Vec<DirectIndex>,
 }
-
+#[allow(unused)]
 impl DebrisBuffer {
     pub fn new() -> Self {
         Self::default()
@@ -140,12 +140,13 @@ struct RubberStaticEntity {
 struct RubberVolumeStage {
     entities: Vec<RubberStaticEntity>,
 }
-
 impl RubberVolumeStage {
+    #[allow(unused)]
     pub fn new() -> Self {
         Self::default()
     }
 
+    #[allow(unused)]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             entities: Vec::with_capacity(capacity),
@@ -159,6 +160,7 @@ impl RubberVolumeStage {
         });
     }
 
+    #[allow(unused)]
     pub fn clear(&mut self) {
         self.entities.clear();
     }
@@ -201,12 +203,13 @@ impl Default for DebrisSystem {
         }
     }
 }
-
 impl DebrisSystem {
+    #[allow(unused)]
     pub fn new() -> Self {
         Self::default()
     }
 
+    #[allow(unused)]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             debris: DebrisRowTable::with_capacity(capacity),
@@ -251,6 +254,7 @@ impl DebrisSystem {
         }
     }
 
+    #[allow(unused, reason = "wip?")]
     pub fn delete_rubber(&mut self, handle: IndirectIndex) {
         let direct = self.rubber.solve_indirect(handle);
 

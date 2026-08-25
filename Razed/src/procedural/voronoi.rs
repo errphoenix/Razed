@@ -92,10 +92,12 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
         }
     }
 
+    #[allow(unused)]
     pub fn meshes(&self) -> &[Convex<polys::TriFace>] {
         &self.meshes
     }
 
+    #[allow(unused)]
     pub fn meshes_mut(&mut self) -> &mut Vec<Convex<polys::TriFace>> {
         &mut self.meshes
     }

@@ -1,4 +1,3 @@
-use const_format::concatcp;
 use ethel::assets::TextureMetadata;
 
 pub type Texture = ethel::assets::RawTexture;

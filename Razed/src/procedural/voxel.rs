@@ -51,6 +51,7 @@ impl VoxelGridOptions {
         }
     }
 
+    #[allow(unused)]
     pub fn with_cell_size(self, cell_size: f32) -> Self {
         Self {
             cell_size,

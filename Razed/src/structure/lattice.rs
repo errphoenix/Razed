@@ -93,6 +93,7 @@ impl LatticeSystem {
         }
     }
 
+    #[allow(unused)]
     pub fn with_capacity(solver: XpbdSolver, capacity: usize) -> Self {
         Self {
             solver,
@@ -102,6 +103,7 @@ impl LatticeSystem {
         }
     }
 
+    #[allow(unused)]
     pub fn with_data(solver: XpbdSolver, nodes: NodesRowTable, links: LinksRowTable) -> Self {
         Self {
             solver,
@@ -277,6 +279,7 @@ impl LatticeSystem {
     }
 
     #[inline]
+    #[allow(unused, reason = "wip feature")]
     pub fn apply_forces(&mut self, index: IndirectIndex, force: glam::Vec3) {
         if let Some(node) = self.nodes.solve_indirect(index) {
             let mass = *unsafe { self.nodes.mass_slice().get_unchecked(node.as_index()) };
@@ -290,6 +293,7 @@ impl LatticeSystem {
     }
 
     #[inline]
+    #[allow(unused, reason = "wip feature")]
     pub fn apply_forces_multi(&mut self, indices: &[IndirectIndex], force: glam::Vec3) {
         for &index in indices {
             self.apply_forces(index, force);
@@ -320,23 +324,27 @@ impl LatticeSystem {
     }
 
     #[inline]
+    #[allow(unused)]
     pub fn links_mut(&mut self) -> &mut LinksRowTable {
         &mut self.links
     }
 
     #[inline]
+    #[allow(unused)]
     pub fn nodes_links_mut(&mut self) -> (&mut NodesRowTable, &mut LinksRowTable) {
         (&mut self.nodes, &mut self.links)
     }
 
     /// See [`physics::xpbd::XpbdSolver::broken_links`].
     #[inline]
+    #[allow(unused)]
     pub fn frame_broken_links(&self) -> &[IndirectIndex] {
         self.solver.broken_links()
     }
 
     /// See [`physics::xpbd::XpbdSolver::degenerate_nodes`].
     #[inline]
+    #[allow(unused)]
     pub fn frame_degenerate_nodes(&self) -> &[IndirectIndex] {
         self.solver.degenerate_nodes()
     }

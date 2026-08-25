@@ -5,6 +5,7 @@ use ethel::mesh::MeshStaging;
 pub use voronoi::{CubeVoronoi, CubeVoronoiGenerator};
 pub use voxel::{VoxelGrid, VoxelGridOptions};
 
+#[allow(unused)]
 pub fn cubic_voronoi_alloc(
     seeds: &[glam::Vec3],
     volume: glam::Vec3,
@@ -50,6 +51,7 @@ pub fn voxel_grid(width: f32, height: f32, depth: f32, cell_size: f32) -> VoxelG
     )
 }
 
+#[allow(unused)]
 pub fn voxel_grid_by(
     width: f32,
     height: f32,

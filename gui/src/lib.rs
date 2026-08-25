@@ -4,7 +4,10 @@ use cosmic_text::FontSystem;
 use ethel::{
     assets::{AssetMetadataRegistry, TextureId, TextureMetadata},
     render::Resolution,
-    state::data::{Column, DirectIndex, IndirectIndex},
+    state::{
+        InputEvent,
+        data::{Column, DirectIndex, IndirectIndex},
+    },
 };
 
 use janus::{StringHash, context::DeltaTime, input::KeyEvent};
@@ -605,7 +608,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         }
     }
 
-    fn process_key_event(&mut self, table_index: usize, event: KeyEvent, delta: DeltaTime) {
+    fn process_key_input(&mut self, table_index: usize, event: KeyEvent, delta: DeltaTime) {
         let delta = delta.as_f32();
         let hovered = &self.commons.hovered;
         let pressed = &mut self.commons.pressed;
@@ -633,11 +636,13 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         {}
     }
 
-    pub fn feed_key_events(&mut self, events: &[KeyEvent], delta: DeltaTime) {
+    pub fn feed_input(&mut self, events: &[InputEvent], delta: DeltaTime) {
         let count = self.commons.len();
         for i in 1..count {
             for event in events {
-                self.process_key_event(i, *event, delta);
+                if let Some(event) = event.key() {
+                    self.process_key_input(i, event, delta);
+                }
             }
         }
     }

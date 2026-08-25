@@ -74,8 +74,6 @@ pub struct FragmentSystem {
     fragments: FragmentsRowTable,
     uninitialised: Vec<UninitFragment>,
 
-    /// sparse map of deform ID to sequence of fragment IDs
-    deform_map: Vec<Vec<IndirectIndex>>,
     /// sparse map of node ID to sequence of fragment IDs
     node_map: Vec<Vec<IndirectIndex>>,
 
@@ -97,22 +95,15 @@ impl FragmentSystem {
         Self {
             fragments: FragmentsRowTable::new(),
             uninitialised: Vec::new(),
-
-            // account for degenerate
-            deform_map: vec![Vec::new()],
-            // account for degenerate
-            node_map: vec![Vec::new()],
-
             fragment_damage_frame: Vec::new(),
             disabled_frags_frame: FxHashSet::default(),
+            // account for degenerate
+            node_map: vec![Vec::new()],
         }
     }
 
+    #[allow(unused)]
     pub fn with_capacity(capacity: usize) -> Self {
-        // account for degenerate
-        let mut deform_map = Vec::with_capacity(capacity + 1);
-        deform_map.push(Vec::new());
-
         // account for degenerate
         let mut node_map = Vec::with_capacity(capacity + 1);
         node_map.push(Vec::new());
@@ -120,12 +111,9 @@ impl FragmentSystem {
         Self {
             fragments: FragmentsRowTable::with_capacity(capacity),
             uninitialised: Vec::with_capacity(capacity),
-
-            deform_map,
-            node_map,
-
             fragment_damage_frame: Vec::new(),
             disabled_frags_frame: FxHashSet::default(),
+            node_map,
         }
     }
 
@@ -137,6 +125,7 @@ impl FragmentSystem {
     ///
     /// This will not panic if the `node` has no associated fragments: an empty
     /// slice will be returned instead.
+    #[allow(unused)]
     pub fn fragments_of_node(&self, node: IndirectIndex) -> &[IndirectIndex] {
         &self.node_map[node.as_index()]
     }
@@ -144,27 +133,9 @@ impl FragmentSystem {
     /// Get a mutable slice to the fragments IDs associated to `node` ID.
     ///
     /// See [`FragmentSystem::fragments_of_node`] for details on panics.
+    #[allow(unused)]
     pub fn fragments_of_node_mut(&mut self, node: IndirectIndex) -> &mut [IndirectIndex] {
         &mut self.node_map[node.as_index()]
-    }
-
-    /// Get a slice to the fragments IDs associated to `deform` ID.
-    ///
-    /// # Panics
-    /// Will panic if `deform` is out-of-bounds; i.e. the deform has not been
-    /// registered with [`FragmentSystem::bind_deforms`].
-    ///
-    /// This will not panic if the `deform` has no associated fragments: an
-    /// empty slice will be returned instead.
-    pub fn fragments_of_deform(&self, deform: IndirectIndex) -> &[IndirectIndex] {
-        &self.deform_map[deform.as_index()]
-    }
-
-    /// Get a mutable slice to the fragments IDs associated to `deform` ID.
-    ///
-    /// See [`FragmentSystem::fragments_of_deform`] for details on panics.
-    pub fn fragments_of_deform_mut(&mut self, deform: IndirectIndex) -> &mut [IndirectIndex] {
-        &mut self.deform_map[deform.as_index()]
     }
 
     pub fn data(&self) -> &FragmentsRowTable {
@@ -175,8 +146,8 @@ impl FragmentSystem {
         &mut self.fragments
     }
 
+    #[allow(unused)]
     pub fn reset(&mut self) {
-        self.deform_map.clear();
         self.node_map.clear();
     }
 
@@ -255,6 +226,7 @@ impl FragmentSystem {
     /// These are unstable and may be invalidated on the next frame; they are
     /// intended for use only during the same frame this was populated in and
     /// before any operation that might add/remove elements to the table.
+    #[allow(unused)]
     pub fn frame_damaged_fragments(&self) -> &[(DirectIndex, DamagedNode)] {
         &self.fragment_damage_frame
     }

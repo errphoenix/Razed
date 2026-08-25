@@ -129,6 +129,7 @@ impl CageSystem {
         &self.local_delete_buf
     }
 
+    #[allow(unused, reason = "wip feature")]
     pub fn delete_cage(&mut self, cage_id: IndirectIndex) {
         let direct = self.gpu_map.solve_indirect(cage_id);
         if direct.is_some_and(|d| d.as_int() == 0) || direct.is_none() {

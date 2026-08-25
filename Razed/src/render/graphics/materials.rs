@@ -1,5 +1,3 @@
-use ethel::assets::{AssetRegistry, Handle, HasMetadata, RawTexture, TextureMetadata};
-use janus::texture::{ImageFormat, ImageType, MipLevels, Tex, Texture};
 use rendrs::graphics::material::{MaterialGroup, MaterialLocationRegistry};
 
 use crate::assets::TextureRegistry;
