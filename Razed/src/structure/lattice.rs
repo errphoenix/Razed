@@ -352,7 +352,7 @@ impl LatticeSystem {
     #[inline]
     pub fn import_lattice(&mut self, lattice: RawXpbdLattice) {
         let node_count = lattice.nodes.len();
-        let cd = node_count - self.node_id_buffer.capacity();
+        let cd = node_count.saturating_sub(self.node_id_buffer.capacity());
         if cd > 0 {
             self.node_id_buffer.reserve(cd);
         }
