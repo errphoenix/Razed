@@ -324,10 +324,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         // there is no barrier here: an ssbo barrier is set after
         // fd_preprocess, which does not depend on this pass
 
-        // unsafe {
-        //     janus::gl::Clear(janus::gl::COLOR_BUFFER_BIT | janus::gl::DEPTH_BUFFER_BIT);
-        // }
-
         // clear all render-targets once
         self.pipeline()
             .clear_pass

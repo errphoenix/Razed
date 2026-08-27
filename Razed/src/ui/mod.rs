@@ -1,17 +1,69 @@
-use ethel::render::Resolution;
+use ethel::{data::IndirectIndex, render::Resolution};
 use gui::{
-    ContainerLayout, ContentAlignment, CoreElementParams, ElementParams, InterfaceSystem,
-    ItemAlignment, LayoutOptions, LayoutPosition, Point, Rectangle, TextContents, TextNode,
-    TextParams, Value, Wrap, style::FlexDirection,
+    ButtonCallback, ButtonParams, ContainerLayout, ContentAlignment, CoreElementParams,
+    ElementParams, InterfaceSystem, ItemAlignment, LayoutOptions, LayoutPosition, PanelParams,
+    Point, Rectangle, TextContents, TextNode, TextParams, Value, WidgetId, Wrap,
+    style::FlexDirection,
 };
+use janus::{StringHash, StringMap};
 
-pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
+pub const COLORTINT_HOVER_INVARIANT: glam::Vec4 = glam::vec4(0f32, 0f32, 0f32, 1f32);
+
+pub fn initialize_default(
+    resolution: Resolution,
+) -> (InterfaceSystem, StringMap<(WidgetId, IndirectIndex)>) {
     let mut system = InterfaceSystem::new(resolution);
-
-    let debug_panel = system
+    let mut map = StringMap::default();
+    let root = system
         .create_element(ElementParams::Panel(
             CoreElementParams {
                 parent: None,
+                children: None,
+                layer: 5,
+                layout_options: LayoutOptions {
+                    container: ContainerLayout::Flexbox {
+                        direction: FlexDirection::Column,
+                        wrap: Wrap::Wrap,
+                        justify_content: ContentAlignment::Auto,
+                        align_content: ContentAlignment::Auto,
+                        align_items: ItemAlignment::Auto,
+                    },
+                    align_self: ItemAlignment::Stretch,
+                    justify_self: ItemAlignment::Stretch,
+                    layout_position: LayoutPosition::Relative,
+                    size: Some(Point::new(
+                        Value::Absolute(2560f32),
+                        Value::Absolute(1440f32),
+                    )),
+                    ..Default::default()
+                },
+            },
+            PanelParams {
+                hover_tint: glam::Vec4::ZERO,
+                opacity: 0f32,
+                ..Default::default()
+            },
+        ))
+        .unwrap()
+        .0;
+
+    debug_infopanel(&mut system, root);
+    debug_ctlpanel(&mut system, root, &mut map);
+
+    (system, map)
+}
+
+pub const DEBUG_CTL_VSYNC_BUTTON: StringHash = janus::hash_string("__debug.ctl.vsync:button");
+
+fn debug_ctlpanel(
+    system: &mut InterfaceSystem,
+    root: WidgetId,
+    map: &mut StringMap<(WidgetId, IndirectIndex)>,
+) {
+    let debug_panel = system
+        .create_element(ElementParams::Panel(
+            CoreElementParams {
+                parent: Some(root),
                 children: None,
                 layout_options: LayoutOptions {
                     container: ContainerLayout::Flexbox {
@@ -21,6 +73,78 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
                         align_content: ContentAlignment::Stretch,
                         align_items: ItemAlignment::Stretch,
                     },
+                    justify_self: ItemAlignment::Center,
+                    align_self: ItemAlignment::End,
+                    layout_position: LayoutPosition::Relative,
+                    size: Some(Point {
+                        x: Value::Absolute(400f32),
+                        y: Value::Absolute(340f32),
+                    }),
+                    margin: Some(Rectangle::splat(Value::Absolute(8f32))),
+                    ..Default::default()
+                },
+                layer: 5,
+            },
+            Default::default(),
+        ))
+        .unwrap()
+        .0;
+
+    let params_dbg_button = |text: &'static str, cb: ButtonCallback| ButtonParams {
+        text: TextParams {
+            contents: TextContents::from_node(TextNode::Static(text)),
+            never_invalidate: true,
+            ..Default::default()
+        },
+        bg_color: glam::Vec3::ZERO,
+        bg_hover_tint: COLORTINT_HOVER_INVARIANT,
+        bg_press_tint: COLORTINT_HOVER_INVARIANT,
+        callback: cb,
+    };
+
+    let dbg_button_vsync = system
+        .create_element(ElementParams::Button(
+            CoreElementParams {
+                parent: Some(debug_panel),
+                children: None,
+                layout_options: LayoutOptions {
+                    align_self: ItemAlignment::Start,
+                    justify_self: ItemAlignment::Start,
+                    ..Default::default()
+                },
+                layer: 5,
+            },
+            params_dbg_button(
+                "V-SYNC",
+                ButtonCallback::Once(|env| {
+                    if let Some(vsync) = env.get_mut(&env_names::DEBUG_CTL_VSYNC) {
+                        let v = vsync.as_boolean_mut().unwrap();
+                        *v = !*v;
+                    }
+                }),
+            ),
+        ))
+        .unwrap();
+
+    map.insert(DEBUG_CTL_VSYNC_BUTTON, dbg_button_vsync);
+}
+
+fn debug_infopanel(system: &mut InterfaceSystem, root: WidgetId) {
+    let debug_panel = system
+        .create_element(ElementParams::Panel(
+            CoreElementParams {
+                parent: Some(root),
+                children: None,
+                layout_options: LayoutOptions {
+                    container: ContainerLayout::Flexbox {
+                        direction: FlexDirection::Column,
+                        wrap: Wrap::Wrap,
+                        justify_content: ContentAlignment::Stretch,
+                        align_content: ContentAlignment::Stretch,
+                        align_items: ItemAlignment::Stretch,
+                    },
+                    justify_self: ItemAlignment::Start,
+                    align_self: ItemAlignment::Start,
                     layout_position: LayoutPosition::Absolute {
                         x: Some(Value::Absolute(8f32)),
                         y: Some(Value::Absolute(8f32)),
@@ -107,8 +231,6 @@ pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
         TextNode::Static("Sim::speed = "),
         TextNode::Variable(env_names::SIM_CTL_SPEED),
     ]));
-
-    system
 }
 
 pub mod env_names {
@@ -131,4 +253,6 @@ pub mod env_names {
     pub const DEBUG_COUNTER_FRAGMENTS: StringHash = janus::hash_string("__debug.counter.fragments");
     pub const DEBUG_COUNTER_CAGES: StringHash = janus::hash_string("__debug.counter.cages");
     pub const DEBUG_COUNTER_DEBRIS: StringHash = janus::hash_string("__debug.counter.debris");
+
+    pub const DEBUG_CTL_VSYNC: StringHash = janus::hash_string("__debug.control.vsync");
 }

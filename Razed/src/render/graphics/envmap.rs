@@ -95,11 +95,6 @@ pub fn load_environment_map(texture_assets: &mut TextureRegistry) -> (TextureVie
             texture_assets,
         ));
     }
-
-    unsafe {
-        janus::gl::Finish();
-    }
-
     let fullres = texture_assets.get_gpu_view(DEV_ENV_ID).unwrap();
 
     // downscale for reflection cubemap

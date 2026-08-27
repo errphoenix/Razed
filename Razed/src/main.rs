@@ -30,6 +30,11 @@ fn main() {
     tracing_subscriber::FmtSubscriber::builder().init();
 
     let (input_system, input_dispatch) = janus::input::stream();
+    input_system.surface_options().update(|mut flags| {
+        flags.set_window_vsync(true);
+        flags.set_dirty(true)
+    });
+
     let mut start_handler = StartupHandler::new(input_system, || FrameDataBuffers::new());
 
     let mut textures_master_registry = assets::TextureRegistryBuilder::build();

@@ -14,12 +14,13 @@ use crate::{
     procedural::{VoxelGrid, VoxelGridOptions},
     render::RenderGroup,
     structure::{
-        CageSystem, DebrisSystem, FragmentSystem, FragmentsRowTableView,
+        self, CageSystem, DebrisSystem, FragmentSystem, FragmentsRowTableView,
         cage::OffsetRotation,
         create_structure_lattice,
         debris::MotionAccumulator,
         lattice::{LatticeSystem, NodesRowTableView},
     },
+    ui::DEBUG_CTL_VSYNC_BUTTON,
 };
 use ::physics::xpbd::{RawXpbdLattice, XpbdOptions, XpbdSolver};
 use ethel::{
@@ -43,10 +44,10 @@ use ethel::{
 };
 use glam::Vec4Swizzles;
 use gui::{
-    InterfaceSystem,
+    InterfaceSystem, WidgetId,
     text::{GlyphAtlas, GlyphRaster},
 };
-use janus::{context::DeltaTime, input::Cursor, sync::TriCell};
+use janus::{StringMap, context::DeltaTime, input::Cursor, sync::TriCell};
 use physics::rigid::RbVelocity;
 use tracing::{Level, event};
 
@@ -109,6 +110,7 @@ impl Default for SimCtl {
 
 #[derive(Debug)]
 pub struct State {
+    first_frame: bool,
     sim_control: SimCtl,
 
     local_keyev_buf: Vec<InputEvent>,
@@ -119,6 +121,8 @@ pub struct State {
     perf_avg: PerfAverages,
 
     ui_system: InterfaceSystem,
+    ui_map: StringMap<(WidgetId, IndirectIndex)>,
+
     pub glyph_atlas: GlyphAtlas,
     pub glyph_pipe: Option<crossbeam::channel::Sender<GlyphRaster>>,
 
@@ -158,9 +162,12 @@ const CAMERA_PITCH_CLAMP: std::ops::Range<f32> =
 
 impl Default for State {
     fn default() -> Self {
+        let (ui_system, ui_map) = crate::ui::initialize_default(Resolution::default());
         Self {
+            ui_system,
+            ui_map,
+            first_frame: true,
             sim_control: SimCtl::default(),
-            ui_system: crate::ui::initialize_default(Resolution::default()),
             lattice: LatticeSystem::new(XpbdSolver::new(
                 XpbdOptions::default().with_ground_level(Some(GROUND_LEVEL)),
             )),
@@ -537,6 +544,10 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         let t1 = Instant::now();
         self.profiler.log_explicit("transfer", t1 - t0);
         self.profiler.pop_trace();
+
+        if self.first_frame {
+            self.first_frame = false;
+        }
     }
 
     fn fixed_step(
@@ -631,7 +642,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 
         let vp_prev = view_point.get();
 
-        if !input.cursor_options().check_grabbed() {
+        let surface_options = input.surface_options().read();
+        if !surface_options.cursor_grabbed() {
             screen.sync().unwrap();
             self.select_lattice_raycast(input, screen.get(), view_point);
         } else {
@@ -677,13 +689,30 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         if input.keys().key_pressed(janus::input::KeyCode::KeyH) {
             self.spawn_debug_structure(&view_point);
         }
+        if input.keys().key_pressed(janus::input::KeyCode::KeyJ) {
+            self.spawn_debug_bridge(&view_point);
+        }
 
         const CAMERA_KEY: janus::input::KeyCode = janus::input::KeyCode::Tab;
-        if input.keys().key_pressed(CAMERA_KEY) {
-            input.cursor_options().set_grabbed(true);
-        }
-        if input.keys().key_released(CAMERA_KEY) {
-            input.cursor_options().set_grabbed(false);
+        {
+            let grabbed = input.keys().key_down(CAMERA_KEY);
+            let vsync = self
+                .ui_system()
+                .env()
+                .get(&crate::ui::env_names::DEBUG_CTL_VSYNC)
+                .and_then(|v| v.as_boolean())
+                .unwrap_or_default();
+
+            input.surface_options().update(|mut flags| {
+                let prev_grabbed = flags.cursor_grabbed();
+                let prev_vsync = flags.windows_has_vsync();
+                flags.set_cursor_grab(grabbed);
+                flags.set_window_vsync(vsync);
+
+                let d_grabbed = prev_grabbed != grabbed;
+                let d_vsync = prev_vsync != vsync;
+                flags.set_dirty(d_grabbed || d_vsync);
+            });
         }
 
         self.local_keyev_buf.clear();
@@ -730,6 +759,10 @@ impl State {
         use crate::ui::env_names::*;
 
         let env = self.ui_system.env_mut();
+        if self.first_frame {
+            env.insert(DEBUG_CTL_VSYNC, true);
+        }
+
         if self.perf_avg.update() {
             let render_time_avg = self.perf_avg.render_time_average.average();
             let simul_time_avg = self.perf_avg.simul_time_average.average();
@@ -761,6 +794,18 @@ impl State {
             },
         );
         env.insert(SIM_CTL_SPEED, self.sim_control.speed);
+
+        if let Some(env_vsync) = env.get(&DEBUG_CTL_VSYNC).and_then(|v| v.as_boolean()) {
+            if let Some((_, id)) = self.ui_map.get(&DEBUG_CTL_VSYNC_BUTTON).copied() {
+                let buttons = self.ui_system_mut().button_data_mut();
+                let did = buttons.solve_indirect(id).unwrap();
+                buttons.base_color[did.as_index()] = if env_vsync {
+                    glam::Vec3::Y
+                } else {
+                    glam::Vec3::X
+                };
+            }
+        }
     }
 
     #[allow(unused)]
