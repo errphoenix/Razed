@@ -1,9 +1,12 @@
-use ethel::{data::IndirectIndex, render::Resolution};
+use ethel::{
+    data::{Column, IndirectIndex},
+    render::Resolution,
+};
 use gui::{
     ButtonCallback, ButtonParams, ContainerLayout, ContentAlignment, CoreElementParams,
-    ElementParams, InterfaceSystem, ItemAlignment, LayoutOptions, LayoutPosition, PanelParams,
-    Point, Rectangle, TextContents, TextNode, TextParams, Value, WidgetId, Wrap,
-    style::FlexDirection,
+    ElementParams, InterfaceButtonRowTable, InterfaceSystem, ItemAlignment, LayoutOptions,
+    LayoutPosition, PanelParams, Point, Rectangle, TextContents, TextNode, TextParams, Value,
+    WidgetId, Wrap, env::UiEnv, style::FlexDirection,
 };
 use janus::{StringHash, StringMap};
 
@@ -127,6 +130,23 @@ fn debug_ctlpanel(
         .unwrap();
 
     map.insert(DEBUG_CTL_VSYNC_BUTTON, dbg_button_vsync);
+}
+
+pub(crate) fn button_color_state(
+    env_id_map: &[(StringHash, StringHash)],
+    ui_map: &StringMap<(WidgetId, IndirectIndex)>,
+    buttons: &mut InterfaceButtonRowTable,
+    env: &UiEnv,
+) {
+    env_id_map.iter().for_each(|(var, id)| {
+        if let Some(var) = env.get(var).and_then(|v| v.as_boolean()) {
+            if let Some((_, id)) = ui_map.get(id).copied() {
+                let did = buttons.solve_indirect(id).unwrap();
+                buttons.base_color[did.as_index()] =
+                    if var { glam::Vec3::Y } else { glam::Vec3::X };
+            }
+        }
+    });
 }
 
 fn debug_infopanel(system: &mut InterfaceSystem, root: WidgetId) {

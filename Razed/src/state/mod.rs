@@ -758,54 +758,51 @@ impl State {
     pub fn update_environment(&mut self) {
         use crate::ui::env_names::*;
 
-        let env = self.ui_system.env_mut();
-        if self.first_frame {
-            env.insert(DEBUG_CTL_VSYNC, true);
-        }
-
-        if self.perf_avg.update() {
-            let render_time_avg = self.perf_avg.render_time_average.average();
-            let simul_time_avg = self.perf_avg.simul_time_average.average();
-            let fps_avg = self.perf_avg.fps_average.average();
-            let tps_total = self.perf_avg.tps_average.accumulated();
-            let lattice_node_count = self.lattice.nodes().len();
-            let lattice_constr_count = self.lattice.links().len();
-            let fragment_count = self.fragments.data().len();
-            let cages_count = self.cage.gpu_map().len();
-            let debris_count = self.debris.data().len();
-
-            env.insert(DEBUG_PERF_FPS_AVG, fps_avg as u32);
-            env.insert(DEBUG_PERF_TPS_TOTAL, tps_total);
-            env.insert(DEBUG_PERF_LAST_SIMUL_FRAME_TIME_MILLIS, simul_time_avg);
-            env.insert(DEBUG_PERF_LAST_RENDER_FRAME_TIME_MILLIS, render_time_avg);
-            env.insert(DEBUG_COUNTER_LATTICE_NODES, lattice_node_count);
-            env.insert(DEBUG_COUNTER_LATTICE_CONSTRAINTS, lattice_constr_count);
-            env.insert(DEBUG_COUNTER_FRAGMENTS, fragment_count);
-            env.insert(DEBUG_COUNTER_CAGES, cages_count);
-            env.insert(DEBUG_COUNTER_DEBRIS, debris_count);
-        }
-
-        env.insert(
-            SIM_CTL_STATE,
-            if self.sim_control.running {
-                "running"
-            } else {
-                "paused"
-            },
-        );
-        env.insert(SIM_CTL_SPEED, self.sim_control.speed);
-
-        if let Some(env_vsync) = env.get(&DEBUG_CTL_VSYNC).and_then(|v| v.as_boolean()) {
-            if let Some((_, id)) = self.ui_map.get(&DEBUG_CTL_VSYNC_BUTTON).copied() {
-                let buttons = self.ui_system_mut().button_data_mut();
-                let did = buttons.solve_indirect(id).unwrap();
-                buttons.base_color[did.as_index()] = if env_vsync {
-                    glam::Vec3::Y
-                } else {
-                    glam::Vec3::X
-                };
+        {
+            let env = self.ui_system.env_mut();
+            if self.first_frame {
+                env.insert(DEBUG_CTL_VSYNC, true);
             }
+
+            if self.perf_avg.update() {
+                let render_time_avg = self.perf_avg.render_time_average.average();
+                let simul_time_avg = self.perf_avg.simul_time_average.average();
+                let fps_avg = self.perf_avg.fps_average.average();
+                let tps_total = self.perf_avg.tps_average.accumulated();
+                let lattice_node_count = self.lattice.nodes().len();
+                let lattice_constr_count = self.lattice.links().len();
+                let fragment_count = self.fragments.data().len();
+                let cages_count = self.cage.gpu_map().len();
+                let debris_count = self.debris.data().len();
+
+                env.insert(DEBUG_PERF_FPS_AVG, fps_avg as u32);
+                env.insert(DEBUG_PERF_TPS_TOTAL, tps_total);
+                env.insert(DEBUG_PERF_LAST_SIMUL_FRAME_TIME_MILLIS, simul_time_avg);
+                env.insert(DEBUG_PERF_LAST_RENDER_FRAME_TIME_MILLIS, render_time_avg);
+                env.insert(DEBUG_COUNTER_LATTICE_NODES, lattice_node_count);
+                env.insert(DEBUG_COUNTER_LATTICE_CONSTRAINTS, lattice_constr_count);
+                env.insert(DEBUG_COUNTER_FRAGMENTS, fragment_count);
+                env.insert(DEBUG_COUNTER_CAGES, cages_count);
+                env.insert(DEBUG_COUNTER_DEBRIS, debris_count);
+            }
+
+            env.insert(
+                SIM_CTL_STATE,
+                if self.sim_control.running {
+                    "running"
+                } else {
+                    "paused"
+                },
+            );
+            env.insert(SIM_CTL_SPEED, self.sim_control.speed);
         }
+
+        crate::ui::button_color_state(
+            &[(DEBUG_CTL_VSYNC, DEBUG_CTL_VSYNC_BUTTON)],
+            &self.ui_map,
+            &mut self.ui_system.buttons,
+            &self.ui_system.environment,
+        );
     }
 
     #[allow(unused)]

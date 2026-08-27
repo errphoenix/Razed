@@ -333,11 +333,11 @@ pub struct InterfaceSystem<const LAYERS: usize = 10> {
 
     resolution: Resolution,
 
-    commons: InterfaceCommonRowTable,
-    panels: InterfacePanelRowTable,
-    texts: InterfaceTextRowTable,
-    images: InterfaceImageRowTable,
-    buttons: InterfaceButtonRowTable,
+    pub commons: InterfaceCommonRowTable,
+    pub panels: InterfacePanelRowTable,
+    pub texts: InterfaceTextRowTable,
+    pub images: InterfaceImageRowTable,
+    pub buttons: InterfaceButtonRowTable,
 
     intermediate_buffer: Vec<InterfaceObject>,
     compositor: BatchingLayerCompositor<LAYERS>,
@@ -345,7 +345,7 @@ pub struct InterfaceSystem<const LAYERS: usize = 10> {
     text_composer: TextComposer,
     font_library: FontLibrary,
 
-    environment: UiEnv,
+    pub environment: UiEnv,
     text_resolve_buf: String,
 
     /// list of text elements that may invalidate
