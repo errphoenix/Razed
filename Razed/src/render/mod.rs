@@ -143,7 +143,7 @@ pub struct PersistentShaderBuffers {
 impl Default for PersistentShaderBuffers {
     fn default() -> Self {
         Self {
-            irradiance_sh_coeffs: SingleBuffer::zeroed(1),
+            irradiance_sh_coeffs: SingleBuffer::zeroed(32),
         }
     }
 }
@@ -409,6 +409,24 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                         .execute(section, render_pool, &ctx);
                 }
 
+                // debug lattice draw pass
+                {
+                    unsafe {
+                        janus::gl::Disable(janus::gl::DEPTH_TEST);
+                    }
+                    let count = frame_data.lattice_constraint_count.load(Ordering::Acquire);
+                    let ctx = pass::DebugLatticeDrawCtx {
+                        lattice_data: &frame_data.lattice_debug,
+                        constraints_count: count as i32,
+                    };
+                    self.pipeline()
+                        .debug_lattice_draw_pass
+                        .execute(section, render_pool, &ctx);
+                    unsafe {
+                        janus::gl::Enable(janus::gl::DEPTH_TEST);
+                    }
+                }
+
                 // blit specialized pass
                 self.pipeline().blit_pass.execute(section, render_pool, &());
             }
@@ -446,18 +464,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             };
             self.pipeline()
                 .interface_draw_pass
-                .execute(section, render_pool, &ctx);
-        }
-
-        // debug lattice draw pass
-        {
-            let count = frame_data.lattice_constraint_count.load(Ordering::Acquire);
-            let ctx = pass::DebugLatticeDrawCtx {
-                lattice_data: &frame_data.lattice_debug,
-                constraints_count: count as i32,
-            };
-            self.pipeline()
-                .debug_lattice_draw_pass
                 .execute(section, render_pool, &ctx);
         }
 
@@ -540,7 +546,10 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     base_hdr,
                     base_depth,
                 ),
-                debug_lattice_draw_pass: pass::debug_lattice_draw::pass(&self.shaders.lattice),
+                debug_lattice_draw_pass: pass::debug_lattice_draw::pass(
+                    &self.shaders.lattice,
+                    mapped_ldr,
+                ),
                 cage_deform_compute_pass: pass::cage_deform_compute::pass(
                     &self.shaders.cage_deform,
                 ),

@@ -1,11 +1,11 @@
 use ethel::render::buffer::PartitionedTriBuffer;
 use ethel::shader::{GlslStruct, ShaderKind};
 use ethel::state::data::IndirectIndex;
-use rendrs::pipeline::DrawPass;
+use rendrs::pipeline::{DrawPass, OutputObject, RenderTargetAccessor};
 
 use crate::render::shader_commons;
 
-pub type DebugLatticeDrawPass = DrawPass<DebugLatticeDrawCtxWrapper, 0, 0>;
+pub type DebugLatticeDrawPass = DrawPass<DebugLatticeDrawCtxWrapper, 0, 1>;
 
 #[derive(Debug)]
 pub struct DebugLatticeDrawCtx<'data> {
@@ -15,16 +15,24 @@ pub struct DebugLatticeDrawCtx<'data> {
 
 rendrs::context_wrapper!(for<'ctx> DebugLatticeDrawCtx);
 
-pub const fn pass(shader: &ShaderDebugLattice) -> DebugLatticeDrawPass {
+pub const fn pass(
+    shader: &ShaderDebugLattice,
+    ldr_output: RenderTargetAccessor,
+) -> DebugLatticeDrawPass {
     let handle_view = shader.handle().view();
-    DebugLatticeDrawPass::new(handle_view, [], [], |section, ctx| {
-        let section = section.as_index();
-        ctx.lattice_data.bind_shader_storage(section);
-        let count = ctx.constraints_count;
-        unsafe {
-            janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 2, count);
-        }
-    })
+    DebugLatticeDrawPass::new(
+        handle_view,
+        [],
+        [OutputObject::Color(ldr_output)],
+        |section, ctx| {
+            let section = section.as_index();
+            ctx.lattice_data.bind_shader_storage(section);
+            let count = ctx.constraints_count;
+            unsafe {
+                janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 2, count);
+            }
+        },
+    )
 }
 
 macro_rules! ssbo_binding {
@@ -132,6 +140,7 @@ ethel::shader_glsl! {
             src() {
                 "
                 out_Color = fs_color;
+                out_Color.a = 0.25;
                 ";
             }
         ];
