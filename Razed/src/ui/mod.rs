@@ -6,19 +6,21 @@ use gui::{
     ButtonParams, ContainerLayout, ContentAlignment, CoreElementParams, ElementParams,
     InteractableCallback, InteractionTime, InterfaceButtonRowTable, InterfaceSystem, ItemAlignment,
     LayoutOptions, LayoutPosition, PanelParams, Point, Rectangle, SliderParams, TextContents,
-    TextNode, TextParams, Value, WidgetId, Wrap, env::UiEnv, style::FlexDirection,
+    TextNode, TextParams, Value, WidgetId, Wrap,
+    env::{EnvValue, UiEnv},
+    style::FlexDirection,
 };
 use janus::{StringHash, StringMap};
 
 use env_names::*;
 
-use crate::ui::env_names::{
-    DEBUG_COUNTER_LATTICE_NODES, DEBUG_PERF_FPS_AVG, DEBUG_PERF_LAST_RENDER_FRAME_TIME_MILLIS,
-    DEBUG_PERF_LAST_SIMUL_FRAME_TIME_MILLIS, DEBUG_PERF_TPS_TOTAL,
-};
+use crate::render::graphics::Gamma;
 
-pub const DEBUG_CONTROL_GRAPHICS_GAMMA_RANGE: f32 = 3.4;
-pub const DEBUG_CONTROL_GRAPHICS_GAMMA_DEFAULT: f32 = crate::render::pass::GAMMA_DEFAULT;
+#[allow(unused_imports)]
+use crate::{
+    render::graphics,
+    ui::{env_names::*, widget_names::*},
+};
 
 pub const COLORTINT_HOVER_INVARIANT: glam::Vec4 = glam::vec4(0f32, 0f32, 0f32, 1f32);
 
@@ -65,8 +67,6 @@ pub fn initialize_default(
 
     (system, map)
 }
-
-pub const DEBUG_CTL_VSYNC_BUTTON: StringHash = janus::hash_string("__debug.ctl.vsync:button");
 
 fn debug_ctlpanel(
     system: &mut InterfaceSystem,
@@ -141,8 +141,6 @@ fn debug_ctlpanel(
         .unwrap();
     map.insert(DEBUG_CTL_VSYNC_BUTTON, dbg_button_vsync);
 
-    const SLIDER_GAMMA_DEFAULT_VALUE: f32 =
-        DEBUG_CONTROL_GRAPHICS_GAMMA_DEFAULT / DEBUG_CONTROL_GRAPHICS_GAMMA_RANGE;
     system
         .create_element(ElementParams::Slider(
             CoreElementParams {
@@ -164,13 +162,19 @@ fn debug_ctlpanel(
                 text: Some(TextParams {
                     contents: TextContents::from_nodes(&[
                         TextNode::Static("graphics.gamma = "),
-                        TextNode::Variable(DEBUG_CTL_GRAPHICS_GAMMA),
-                        TextNode::Static(" * 3.4"),
+                        TextNode::VariableAnd {
+                            env_id: DEBUG_CTL_GRAPHICS_GAMMA,
+                            operation: |value| {
+                                let gamma_norm = value.as_float().unwrap_or_default();
+                                let gamma_param = Gamma::from_normalized(gamma_norm);
+                                EnvValue::Float(gamma_param.as_f32())
+                            },
+                        },
                     ]),
                     ..Default::default()
                 }),
 
-                value_init: SLIDER_GAMMA_DEFAULT_VALUE,
+                value_init: graphics::Gamma::DEFAULT_NORMALIZED,
                 value_sync_handle: Some(DEBUG_CTL_GRAPHICS_GAMMA),
                 callback: InteractableCallback::Repeating(|env, v| {
                     env.insert(DEBUG_CTL_GRAPHICS_GAMMA, *v);
@@ -301,6 +305,13 @@ fn debug_infopanel(system: &mut InterfaceSystem, root: WidgetId) {
         TextNode::Static("Sim::speed = "),
         TextNode::Variable(SIM_CTL_SPEED),
     ]));
+}
+
+pub mod widget_names {
+    use janus::StringHash;
+
+    pub const DEBUG_CTL_VSYNC_BUTTON: StringHash =
+        janus::hash_string("__debug.control.display.vsync:button");
 }
 
 pub mod env_names {

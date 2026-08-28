@@ -2,7 +2,7 @@ use ethel::assets::TextureMetadata;
 
 pub type Texture = ethel::assets::RawTexture;
 
-pub use crate::render::graphics::*;
+pub use crate::render::graphics::materials::*;
 
 ethel::asset_registry! {
     struct Texture: TextureMetadata {

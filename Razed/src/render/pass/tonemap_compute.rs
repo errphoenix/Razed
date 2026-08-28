@@ -5,16 +5,15 @@ use rendrs::{
     },
 };
 
+use crate::render::graphics::RenderParams;
+
 pub type TonemapVfxPass = ComputePass<TonemapVfxCtxWrapper, 0, 2>;
 
 #[derive(Debug)]
 pub struct TonemapVfxCtx<'ctx> {
     pub shader: &'ctx ComputeShaderTonemap,
     pub resolution: PixelResolution,
-    /// Optionally provide an override gamma value.
-    ///
-    /// If `None`, it will default to a standard value of `2.2`.
-    pub gamma_override: Option<f32>,
+    pub render_params: &'ctx RenderParams,
 }
 
 rendrs::context_wrapper!(for<'ctx> TonemapVfxCtx);
@@ -44,7 +43,9 @@ pub const fn pass(
         ],
         |_, ctx| {
             let resolution = ctx.resolution;
-            let gamma = ctx.gamma_override.unwrap_or(GAMMA_DEFAULT);
+
+            let gamma = ctx.render_params.gamma.as_f32();
+            //let exposure = ctx.render_params.exposure...;
 
             let res = [resolution.width(), resolution.height()];
             ctx.shader.uniform_resolution_uvec2v([res]);
@@ -57,7 +58,6 @@ pub const fn pass(
     )
 }
 
-pub const GAMMA_DEFAULT: f32 = 2.2;
 pub const IMAGE_BINDING_SRC: u32 = 0;
 pub const IMAGE_BINDING_DST: u32 = 1;
 pub const WORKGROUP_SIZE_XY: u32 = 8;

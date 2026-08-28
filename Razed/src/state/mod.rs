@@ -13,16 +13,13 @@ use crate::{
     },
     procedural::{VoxelGrid, VoxelGridOptions},
     render::RenderGroup,
+    render::graphics::Gamma,
     structure::{
         CageSystem, DebrisSystem, FragmentSystem, FragmentsRowTableView,
         cage::OffsetRotation,
         create_structure_lattice,
         debris::MotionAccumulator,
         lattice::{LatticeSystem, NodesRowTableView},
-    },
-    ui::{
-        DEBUG_CONTROL_GRAPHICS_GAMMA_DEFAULT, DEBUG_CONTROL_GRAPHICS_GAMMA_RANGE,
-        DEBUG_CTL_VSYNC_BUTTON,
     },
 };
 use ::physics::xpbd::{RawXpbdLattice, XpbdOptions, XpbdSolver};
@@ -286,6 +283,22 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             let _ = storage
                 .debug_material_index
                 .set_and_advance(self.selected_material);
+
+            // upload render params
+            {
+                let render_params = &storage.render_params;
+
+                use crate::ui::env_names::*;
+                if let Some(gamma_n) = self
+                    .ui_system
+                    .env()
+                    .get(&DEBUG_CTL_GRAPHICS_GAMMA)
+                    .and_then(|v| v.as_float())
+                {
+                    let gamma = Gamma::from_normalized(gamma_n);
+                    render_params.gamma.set_and_advance(gamma).unwrap();
+                }
+            }
 
             // load cage deformation feedback data
             {
@@ -758,15 +771,13 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 impl State {
     pub fn update_environment(&mut self) {
         use crate::ui::env_names::*;
+        use crate::ui::widget_names::*;
 
         {
             let env = self.ui_system.env_mut();
             if self.first_frame {
                 env.insert(DEBUG_CTL_DISPLAY_VSYNC, true);
-                env.insert(
-                    DEBUG_CTL_GRAPHICS_GAMMA,
-                    DEBUG_CONTROL_GRAPHICS_GAMMA_DEFAULT / DEBUG_CONTROL_GRAPHICS_GAMMA_RANGE,
-                );
+                env.insert(DEBUG_CTL_GRAPHICS_GAMMA, Gamma::DEFAULT_NORMALIZED);
             }
 
             if self.perf_avg.update() {

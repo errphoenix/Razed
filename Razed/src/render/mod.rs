@@ -399,10 +399,11 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
                 // tonemapping + gamma correction vfx pass
                 {
+                    let render_params = &frame_data.render_params;
                     let ctx = pass::TonemapVfxCtx {
                         shader: &self.shaders.vfx_tonemap,
                         resolution: self.resolution,
-                        gamma_override: None,
+                        render_params,
                     };
                     self.pipeline()
                         .tonemap_vfx_pass
