@@ -12,7 +12,7 @@ use rendrs::batch::{Batch, BatchGroupIndex, BatchManager, BatchUnitIndex};
 
 use crate::{
     InterfaceButtonRowTableView, InterfaceCommonRowTableView, InterfaceImageRowTableView,
-    InterfacePanelRowTableView, InterfaceTextRowTableView,
+    InterfacePanelRowTableView, InterfaceSliderRowTableView, InterfaceTextRowTableView,
     env::UiEnv,
     text::{GlyphAtlas, TextComposer},
 };
@@ -25,6 +25,7 @@ pub struct InterfaceAggregator<'t> {
     pub texts: InterfaceTextRowTableView<'t>,
     pub images: InterfaceImageRowTableView<'t>,
     pub buttons: InterfaceButtonRowTableView<'t>,
+    pub sliders: InterfaceSliderRowTableView<'t>,
     pub text_resolve_buf: &'t mut String,
 }
 impl InterfaceAggregator<'_> {
@@ -53,6 +54,9 @@ impl InterfaceAggregator<'_> {
                 }
                 crate::ComponentKind::Text(indirect_index) => {
                     self.gather_text(index, indirect_index, text_composer, glyph_atlas, buffer);
+                }
+                crate::ComponentKind::Slider { handle, .. } => {
+                    self.gather_slider(index, handle, buffer);
                 }
             };
         }
@@ -169,6 +173,56 @@ impl InterfaceAggregator<'_> {
             position: bounds.min,
             size: bounds.size(),
             color,
+            attachment: None,
+            layer,
+        });
+    }
+
+    fn gather_slider(
+        &self,
+        common_handle: usize,
+        slider_index: IndirectIndex,
+        out: &mut Vec<InterfaceObject>,
+    ) {
+        let hovered = self.commons.hovered[common_handle];
+        let pressed = self.commons.pressed[common_handle];
+
+        let slider_direct = self.sliders.solve(slider_index).as_index();
+        let knob_color = self.sliders.knob_color[slider_direct];
+        let knob_hover_tint = self.sliders.knob_hover_tint[slider_direct];
+        let knob_press_tint = self.sliders.knob_press_tint[slider_direct];
+        let track_color = self.sliders.track_color[slider_direct];
+        let value = self.sliders.value_cache[slider_direct];
+
+        let hover_f = (hovered & !pressed) as u32 as f32;
+        let press_f = pressed as u32 as f32;
+
+        let mut knob_color = glam::vec4(knob_color.x, knob_color.y, knob_color.z, 1.0);
+        knob_color = knob_color * (1.0 - hover_f) + hover_f * knob_hover_tint;
+        knob_color = knob_color * (1.0 - press_f) + press_f * knob_press_tint;
+        knob_color.w = 1.0; // knob is always opaque
+        let track_color = glam::vec4(track_color.x, track_color.y, track_color.z, 1.0);
+
+        let bounds = self.commons.feedback_bounds[common_handle];
+        let layer = self.commons.layer[common_handle];
+
+        let bounds_size = bounds.size();
+        let knob_size = bounds_size.y;
+        const TRACK_THICKNESS: f32 = 0.1; //10% of height
+        let track_size = glam::vec2(bounds_size.x, knob_size * TRACK_THICKNESS);
+        let knob_posx = (bounds_size.x - knob_size) * value;
+
+        out.push(InterfaceObject {
+            position: bounds.min + glam::vec2(0f32, knob_size * 0.5),
+            size: track_size,
+            color: track_color,
+            attachment: None,
+            layer,
+        });
+        out.push(InterfaceObject {
+            position: bounds.min + glam::vec2(knob_posx, 0f32),
+            size: glam::Vec2::splat(knob_size),
+            color: knob_color,
             attachment: None,
             layer,
         });

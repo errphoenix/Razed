@@ -30,6 +30,10 @@ impl UiEnv {
         self.map.remove(id)
     }
 
+    pub fn modify_or_default<F: FnOnce(&mut EnvValue)>(&mut self, id: StringHash, modify_op: F) {
+        modify_op(self.map.entry(id).or_default());
+    }
+
     pub fn get(&self, id: &StringHash) -> Option<&EnvValue> {
         self.map.get(id)
     }

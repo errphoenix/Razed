@@ -1,4 +1,7 @@
-use std::{fmt::Write, sync::RwLock};
+use std::{
+    fmt::{Debug, Write},
+    sync::RwLock,
+};
 
 use cosmic_text::FontSystem;
 use ethel::{
@@ -126,7 +129,6 @@ ethel::table_spec! {
         press_time: InteractionTime;
     }
 }
-
 ethel::table_spec! {
     struct InterfacePanel {
         background_color: glam::Vec3;
@@ -134,7 +136,6 @@ ethel::table_spec! {
         opacity: f32;
     }
 }
-
 ethel::table_spec! {
     struct InterfaceText {
         contents: TextContents;
@@ -145,7 +146,6 @@ ethel::table_spec! {
         measure: TextMeasurement;
     }
 }
-
 ethel::table_spec! {
     struct InterfaceImage {
         tint: glam::Vec4;
@@ -153,7 +153,6 @@ ethel::table_spec! {
         texture: TextureId;
     }
 }
-
 ethel::table_spec! {
     struct InterfaceButton {
         // handle in text table
@@ -163,16 +162,34 @@ ethel::table_spec! {
         hover_tint: glam::Vec4;
         press_tint: glam::Vec4;
 
-        callback: ButtonCallback;
+        callback: InteractableCallback<InteractionTime>;
+    }
+}
+ethel::table_spec! {
+    struct InterfaceSlider {
+        // handle in text table, if has label
+        text_id: Option<IndirectIndex>;
+
+        knob_color: glam::Vec3;
+        knob_hover_tint: glam::Vec4;
+        knob_press_tint: glam::Vec4;
+        track_color: glam::Vec3;
+
+        scroll_step: f32;
+        value_cache: f32;
+        // if the slider value may be affected by external systems, its value
+        // will be polled every frame from the environment before other updates
+        value_sync: Option<StringHash>;
+        callback: InteractableCallback<f32>;
     }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub enum ButtonCallback {
+pub enum InteractableCallback<T: Clone + Copy + Debug + Default> {
     #[default]
     None,
-    Once(fn(&mut UiEnv)),
-    Repeating(fn(&mut UiEnv)),
+    Once(fn(&mut UiEnv, &mut T)),
+    Repeating(fn(&mut UiEnv, &mut T)),
 }
 
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -204,6 +221,11 @@ pub enum ComponentKind {
         /// text root id
         text_handle: WidgetId,
     },
+    Slider {
+        handle: IndirectIndex,
+        /// text root id, if has a label
+        text_handle: Option<WidgetId>,
+    },
 }
 impl std::fmt::Display for ComponentKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -213,6 +235,7 @@ impl std::fmt::Display for ComponentKind {
             ComponentKind::Text(_) => write!(f, "text"),
             ComponentKind::Image(_) => write!(f, "image"),
             ComponentKind::Button { .. } => write!(f, "button"),
+            ComponentKind::Slider { .. } => write!(f, "slider"),
         }
     }
 }
@@ -338,6 +361,7 @@ pub struct InterfaceSystem<const LAYERS: usize = 10> {
     pub texts: InterfaceTextRowTable,
     pub images: InterfaceImageRowTable,
     pub buttons: InterfaceButtonRowTable,
+    pub sliders: InterfaceSliderRowTable,
 
     intermediate_buffer: Vec<InterfaceObject>,
     compositor: BatchingLayerCompositor<LAYERS>,
@@ -354,14 +378,10 @@ pub struct InterfaceSystem<const LAYERS: usize = 10> {
     text_dynamic_list: Vec<WidgetId>,
 }
 /// Safety:
-/// TaffyTree is !Send due to internal implementation details related to raw
-/// const* function pointers. This implementation is required for ethel's
-/// threads initialization.
+/// TaffyTree is !Send and !SYnc due to internal implementation details
+/// related to raw const* function pointers. This implementation is required
+/// for ethel's threads initialization.
 unsafe impl<const LAYERS: usize> Send for InterfaceSystem<LAYERS> {}
-/// Safety:
-/// TaffyTree is !Sync due to internal implementation details related to raw
-/// const* function pointers. This implementation is required for ethel's
-/// threads initialization.
 unsafe impl<const LAYERS: usize> Sync for InterfaceSystem<LAYERS> {}
 impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     pub fn new(resolution: Resolution) -> Self {
@@ -395,52 +415,8 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             texts: InterfaceTextRowTable::new(),
             images: InterfaceImageRowTable::new(),
             buttons: InterfaceButtonRowTable::new(),
+            sliders: InterfaceSliderRowTable::new(),
             intermediate_buffer: Vec::new(),
-            compositor: BatchingLayerCompositor::new(),
-            text_composer: TextComposer::new(),
-            font_library: FontLibrary::new(),
-            environment,
-            text_resolve_buf: String::new(),
-            text_dynamic_list: Vec::new(),
-        }
-    }
-
-    pub fn with_capacity(resolution: Resolution, capacity: usize) -> Self {
-        Self::with_environment_and_capacity(resolution, UiEnv::new(), capacity)
-    }
-
-    pub fn with_environment_and_capacity(
-        resolution: Resolution,
-        environment: UiEnv,
-        capacity: usize,
-    ) -> Self {
-        let mut layout = TaffyTree::with_capacity(capacity + 1);
-        const ROOT_ID: WidgetId = WidgetId(IndirectIndex::null(0));
-
-        let tree_id = layout
-            .new_leaf_with_context(Style::default(), ROOT_ID)
-            .unwrap();
-
-        let root_node = NodeJointId {
-            table_id: ROOT_ID,
-            #[cfg(feature = "taffy")]
-            tree_id,
-        };
-
-        // initialise root taffy id in data table
-        let mut commons = InterfaceCommonRowTable::new();
-        commons.taffy_id[ROOT_ID.0.as_index()] = TaffyNodeId(tree_id);
-
-        Self {
-            layout,
-            root_node,
-            resolution,
-            commons,
-            panels: InterfacePanelRowTable::with_capacity(capacity),
-            texts: InterfaceTextRowTable::with_capacity(capacity),
-            images: InterfaceImageRowTable::with_capacity(capacity),
-            buttons: InterfaceButtonRowTable::with_capacity(capacity),
-            intermediate_buffer: Vec::with_capacity(capacity),
             compositor: BatchingLayerCompositor::new(),
             text_composer: TextComposer::new(),
             font_library: FontLibrary::new(),
@@ -504,6 +480,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             texts: InterfaceTextRowTableView::from(&self.texts),
             images: InterfaceImageRowTableView::from(&self.images),
             buttons: InterfaceButtonRowTableView::from(&self.buttons),
+            sliders: InterfaceSliderRowTableView::from(&self.sliders),
         };
         aggregator.gather_quad_elements(
             &mut self.text_composer,
@@ -534,6 +511,24 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         &mut self.compositor
     }
 
+    /// Poll environment changes made by external systems.
+    ///
+    /// Must run before interface input updates to ensure correct
+    /// behaviour.
+    pub fn poll_environment_changes(&mut self) {
+        let env = &self.environment;
+        {
+            let sliders = &mut self.sliders;
+            let caches = &mut sliders.value_cache;
+            let handles = &sliders.value_sync;
+            for (id, cache) in handles.iter().zip(caches).filter(|(id, _)| id.is_some()) {
+                let id = id.as_ref().unwrap();
+                let env_value = env.get(id).and_then(|v| v.as_float());
+                *cache = env_value.unwrap_or_default();
+            }
+        }
+    }
+
     pub fn process_widget_states(&mut self, delta: DeltaTime) {
         let delta = delta.as_f32();
         let count = self.commons.len();
@@ -545,6 +540,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         let press_time = &mut self.commons.press_time;
 
         let button_callbacks = &self.buttons.callback;
+        let slider_callbacks = &self.sliders.callback;
 
         for i in 1..count {
             let archetype = archetypes[i];
@@ -555,14 +551,39 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                     if pressed {
                         let direct = self.buttons.solve_indirect(handle).unwrap();
                         let callback = button_callbacks[direct.as_index()];
+                        let press_time = &mut press_time[i];
                         match callback {
-                            ButtonCallback::None => {}
-                            ButtonCallback::Once(cb) => {
-                                if press_time[i].frames == 1 {
-                                    cb(&mut self.environment)
+                            InteractableCallback::None => {}
+                            InteractableCallback::Once(cb) => {
+                                if press_time.frames == 1 {
+                                    cb(&mut self.environment, press_time)
                                 }
                             }
-                            ButtonCallback::Repeating(cb) => cb(&mut self.environment),
+                            InteractableCallback::Repeating(cb) => {
+                                cb(&mut self.environment, press_time)
+                            }
+                        }
+                    }
+                }
+                ComponentKind::Slider { handle, .. } => {
+                    let direct = self.sliders.solve_indirect(handle).unwrap();
+                    let callback = slider_callbacks[direct.as_index()];
+                    let pressed = pressed[i];
+                    let value = &mut self.sliders.value_cache[direct.as_index()];
+
+                    match callback {
+                        InteractableCallback::None => {}
+                        InteractableCallback::Once(cb) => {
+                            // only call once slider is release
+                            if !pressed {
+                                cb(&mut self.environment, value)
+                            }
+                        }
+                        InteractableCallback::Repeating(cb) => {
+                            // call contiuously as slider changes
+                            if pressed {
+                                cb(&mut self.environment, value)
+                            }
                         }
                     }
                 }
@@ -636,7 +657,27 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         {}
     }
 
-    pub fn feed_input(&mut self, events: &[InputEvent], delta: DeltaTime) {
+    fn process_scroll_input(&mut self, table_index: usize, scroll_delta: f32) {
+        if !self.commons.hovered[table_index] {
+            return;
+        };
+
+        if let ComponentKind::Slider { handle, .. } = self.commons.archetype[table_index] {
+            let press_time = &self.commons.press_time;
+            let pressed = &mut self.commons.pressed;
+
+            let slider_index = self.sliders.solve_indirect(handle).unwrap().as_index();
+            let vd = self.sliders.scroll_step[slider_index] * scroll_delta;
+            let v = self.sliders.value_cache[slider_index];
+            self.sliders.value_cache[slider_index] = (v + vd).clamp(0.0, 1.0);
+
+            if press_time[table_index].frames == 0 {
+                pressed[table_index] = true;
+            }
+        }
+    }
+
+    pub fn feed_input(&mut self, events: &[InputEvent], scroll_delta: f32, delta: DeltaTime) {
         let count = self.commons.len();
         for i in 1..count {
             for event in events {
@@ -644,6 +685,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                     self.process_key_input(i, event, delta);
                 }
             }
+            self.process_scroll_input(i, scroll_delta);
         }
     }
 
@@ -887,7 +929,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         base_color: glam::Vec3,
         hover_tint: glam::Vec4,
         press_tint: glam::Vec4,
-        callback: ButtonCallback,
+        callback: InteractableCallback<InteractionTime>,
     ) -> Result<IndirectIndex, WidgetError> {
         if let Some(commons_id) = self.commons.solve_indirect(root_id.0) {
             self.assert_null_archetype(commons_id)?;
@@ -898,6 +940,53 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 text_handle: text_root_id,
             };
             Ok(button_id)
+        } else {
+            Err(WidgetError::InvalidWidgetHandle(root_id.0.as_int()))
+        }
+    }
+
+    pub fn make_slider(
+        &mut self,
+        root_id: WidgetId,
+        text_ids: Option<(WidgetId, IndirectIndex)>,
+        knob_base_color: glam::Vec3,
+        knob_hover_tint: glam::Vec4,
+        knob_press_tint: glam::Vec4,
+        track_color: glam::Vec3,
+        scroll_step: f32,
+        value_init: f32,
+        value_sync: Option<StringHash>,
+        callback: InteractableCallback<f32>,
+    ) -> Result<IndirectIndex, WidgetError> {
+        if let Some(commons_id) = self.commons.solve_indirect(root_id.0) {
+            self.assert_null_archetype(commons_id)?;
+
+            let value_cache = if let Some(sync_v) = value_sync {
+                self.environment
+                    .get(&sync_v)
+                    .and_then(|v| v.as_float())
+                    .unwrap_or(value_init)
+            } else {
+                value_init
+            };
+
+            let slider_element = (
+                text_ids.map(|(_, id)| id),
+                knob_base_color,
+                knob_hover_tint,
+                knob_press_tint,
+                track_color,
+                scroll_step,
+                value_cache,
+                value_sync,
+                callback,
+            );
+            let slider_id = self.sliders.insert(slider_element);
+            self.commons.archetype[commons_id.as_index()] = ComponentKind::Slider {
+                handle: slider_id,
+                text_handle: text_ids.map(|(rid, _)| rid),
+            };
+            Ok(slider_id)
         } else {
             Err(WidgetError::InvalidWidgetHandle(root_id.0.as_int()))
         }
@@ -1016,6 +1105,14 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         &mut self.buttons
     }
 
+    pub fn slider_data(&self) -> &InterfaceSliderRowTable {
+        &self.sliders
+    }
+
+    pub fn slider_data_mut(&mut self) -> &mut InterfaceSliderRowTable {
+        &mut self.sliders
+    }
+
     pub fn create_element(
         &mut self,
         parameters: ElementParams,
@@ -1086,6 +1183,40 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 image_params.opacity,
                 image_params.texture,
             ),
+            ElementParams::Slider(core, slider_params) => {
+                let mut text_ids = None;
+                if let Some(text) = &slider_params.text {
+                    const SLIDER_LABEL_LAYOUT: LayoutOptions = LayoutOptions::new();
+
+                    let root_text_id =
+                        self.add_new(Some(root_id), None, SLIDER_LABEL_LAYOUT, core.layer)?;
+                    let special_text_id = self.make_text(
+                        root_text_id,
+                        text.contents,
+                        text.font_name,
+                        text.color,
+                        FontMetrics {
+                            font_size: text.font_size,
+                            line_height: text.line_height,
+                        },
+                        text.never_invalidate,
+                    )?;
+                    text_ids = Some((root_text_id, special_text_id));
+                };
+
+                self.make_slider(
+                    root_id,
+                    text_ids,
+                    slider_params.knob_color,
+                    slider_params.knob_hover_tint,
+                    slider_params.knob_press_tint,
+                    slider_params.track_color,
+                    slider_params.scroll_step,
+                    slider_params.value_init,
+                    slider_params.value_sync_handle,
+                    slider_params.callback,
+                )
+            }
         }?;
 
         Ok((root_id, special_id))
@@ -1141,7 +1272,7 @@ pub struct ButtonParams {
     pub bg_color: glam::Vec3,
     pub bg_hover_tint: glam::Vec4,
     pub bg_press_tint: glam::Vec4,
-    pub callback: ButtonCallback,
+    pub callback: InteractableCallback<InteractionTime>,
 }
 impl Default for ButtonParams {
     fn default() -> Self {
@@ -1150,7 +1281,7 @@ impl Default for ButtonParams {
             bg_color: DEFAULT_GENERIC_COLOR,
             bg_hover_tint: DEFAULT_GENERIC_HOVER_TINT,
             bg_press_tint: DEFAULT_GENERIC_PRESS_TINT,
-            callback: ButtonCallback::default(),
+            callback: InteractableCallback::default(),
         }
     }
 }
@@ -1209,11 +1340,46 @@ impl Default for ImageParams {
 }
 
 #[derive(Clone, Debug)]
+pub struct SliderParams {
+    pub text: Option<TextParams>,
+    pub knob_color: glam::Vec3,
+    pub knob_hover_tint: glam::Vec4,
+    pub knob_press_tint: glam::Vec4,
+    pub track_color: glam::Vec3,
+    pub scroll_step: f32,
+    /// Normalized (0.0, 1.0)
+    pub value_init: f32,
+    pub value_sync_handle: Option<StringHash>,
+    pub callback: InteractableCallback<f32>,
+}
+impl SliderParams {
+    pub const DEFAULT_TRACK_COLOR: glam::Vec3 = glam::Vec3::splat(0.65);
+    /// 5%
+    pub const DEFAULT_SCROLL_STEP: f32 = 0.05;
+}
+impl Default for SliderParams {
+    fn default() -> Self {
+        Self {
+            text: None,
+            knob_color: DEFAULT_GENERIC_COLOR,
+            knob_hover_tint: DEFAULT_GENERIC_HOVER_TINT,
+            knob_press_tint: DEFAULT_GENERIC_PRESS_TINT,
+            track_color: Self::DEFAULT_TRACK_COLOR,
+            scroll_step: Self::DEFAULT_SCROLL_STEP,
+            value_init: 0f32,
+            value_sync_handle: None,
+            callback: InteractableCallback::None,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub enum ElementParams<'children> {
     Panel(CoreElementParams<'children>, PanelParams),
     Button(CoreElementParams<'children>, ButtonParams),
     Text(CoreElementParams<'children>, TextParams),
     Image(CoreElementParams<'children>, ImageParams),
+    Slider(CoreElementParams<'children>, SliderParams),
 }
 impl ElementParams<'_> {
     pub fn core(&'_ self) -> &CoreElementParams<'_> {
@@ -1222,6 +1388,7 @@ impl ElementParams<'_> {
             ElementParams::Button(core_element_params, _) => core_element_params,
             ElementParams::Text(core_element_params, _) => core_element_params,
             ElementParams::Image(core_element_params, _) => core_element_params,
+            ElementParams::Slider(core_element_params, _) => core_element_params,
         }
     }
 }
