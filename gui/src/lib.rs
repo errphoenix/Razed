@@ -28,7 +28,7 @@ use taffy::prelude::*;
 
 use crate::{
     draw::{BatchingLayerCompositor, InterfaceAggregator, InterfaceObject, Quad},
-    env::UiEnv,
+    env::{EnvValue, UiEnv},
     text::{FontMetrics, GlyphAtlas, TextComposer, TextMeasurement, font::FontLibrary},
 };
 
@@ -53,7 +53,7 @@ pub struct InteractionTime {
     pub frames: u32,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct TextContents(pub [TextNode; Self::NODE_COUNT]);
 impl TextContents {
     pub const NODE_COUNT: usize = 8;
@@ -93,13 +93,19 @@ impl TextContents {
                         value.write(out).unwrap()
                     }
                 }
+                TextNode::VariableAnd { env_id, operation } => {
+                    if let Some(value) = env.get(env_id) {
+                        let value = operation(value);
+                        value.write(out).unwrap()
+                    }
+                }
                 _ => {}
             }
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, Default, Hash)]
 pub enum TextNode {
     #[default]
     Empty,
@@ -107,6 +113,10 @@ pub enum TextNode {
     /// Variable, dynamic String text content polled from the
     /// [`environment`](env::UiEnv).
     Variable(StringHash),
+    VariableAnd {
+        env_id: StringHash,
+        operation: fn(&EnvValue) -> EnvValue,
+    },
 }
 
 ethel::table_spec! {
