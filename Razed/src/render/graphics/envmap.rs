@@ -98,6 +98,23 @@ pub fn load_environment_map(texture_assets: &mut TextureRegistry) -> (TextureVie
     let fullres = texture_assets.get_gpu_view(DEV_ENV_ID).unwrap();
 
     // downscale for reflection cubemap
+    {
+        let shader = &ComputeShaderBSplineDownscale::new_compiled();
+        let pass = rendrs::graphics::rf_bspline_downsample(&shader);
+
+        for i in 1..=mips_to_match {
+            pass.execute(
+                StorageSection::Back,
+                &RenderPool::dummy(),
+                &BSplineDownscaleCtx {
+                    target: fullres,
+                    mip_level: MipLevels::try_new(i).unwrap(),
+                },
+            );
+            janus::gl::barrier_shader_image();
+        }
+    }
+
     let downscaled = Texture::new_cubemap(
         ENVMAP_RESOLUTION,
         ENVMAP_RESOLUTION,

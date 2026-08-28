@@ -719,7 +719,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 
             input.surface_options().update(|mut flags| {
                 let prev_grabbed = flags.cursor_grabbed();
-                let prev_vsync = flags.windows_has_vsync();
+                let prev_vsync = flags.window_has_vsync();
                 flags.set_cursor_grab(grabbed);
                 flags.set_window_vsync(vsync);
 
