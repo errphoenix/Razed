@@ -33,8 +33,8 @@ pub fn create_structure_lattice(
     const MASS: f32 = 100.0;
 
     const VERY_STIFF_COMPL: f32 = 0.1e-8;
-    const STIFF_COMPL: f32 = 0.1e-7;
-    const SOFT_COMPL: f32 = 0.1e-6;
+    const STIFF_COMPL: f32 = 0.15e-7;
+    const SOFT_COMPL: f32 = 0.2e-6;
 
     const STRONG_LINK: XpbdLinkOptions = XpbdLinkOptions::new(VERY_STIFF_COMPL);
     const MID_LINK: XpbdLinkOptions = XpbdLinkOptions::new(STIFF_COMPL);
@@ -112,10 +112,10 @@ pub fn create_structure_lattice(
 
         // top loop
         {
-            lattice.link_nodes(back_left, back_right, STRONG_LINK);
-            lattice.link_nodes(back_right, front_right, STRONG_LINK);
-            lattice.link_nodes(front_right, front_left, STRONG_LINK);
-            lattice.link_nodes(front_left, back_left, STRONG_LINK);
+            lattice.link_nodes(back_left, back_right, MID_LINK);
+            lattice.link_nodes(back_right, front_right, MID_LINK);
+            lattice.link_nodes(front_right, front_left, MID_LINK);
+            lattice.link_nodes(front_left, back_left, MID_LINK);
         }
         // pillars
         {

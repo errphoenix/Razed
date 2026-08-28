@@ -340,8 +340,8 @@ pub struct RawXpbdLattice {
 }
 
 pub const DEFAULT_SOLVE_ITERATIONS: u32 = 8;
-pub const DEFAULT_SUB_STEPS: u32 = 4;
-pub const DAMPING: f32 = 0.9985;
+pub const DEFAULT_SUB_STEPS: u32 = 5;
+pub const DAMPING: f32 = 0.925;
 
 /// Indicates that a data table constrains node SoA data.
 pub trait HasNodes {
@@ -721,15 +721,11 @@ impl XpbdSolver {
                 .zip(compliances)
                 .skip(1)
             {
-                const BREAK_THRESHOLD: f32 = 220.0;
+                const BREAK_THRESHOLD: f32 = 500.0;
 
                 let force_strain = (*lambda / self.h2) * eff_mass;
                 let threshold = integrity * BREAK_THRESHOLD;
-                let compression_threshold = integrity.exp() - 1.0;
-
-                if force_strain > threshold
-                    || force_strain < -compression_threshold * BREAK_THRESHOLD
-                {
+                if force_strain > threshold || force_strain < -threshold * 0.5 {
                     self.broken_links.push(*handle);
                 }
             }

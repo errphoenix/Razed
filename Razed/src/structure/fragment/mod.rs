@@ -272,6 +272,16 @@ impl FragmentSystem {
         self.node_map.resize_with(lattice.size(), || Vec::new());
         let mut near_buf = Vec::with_capacity(PARENTS_COUNT);
 
+        let height = {
+            let mut cye = lattice_hash.axis_extents().y;
+            if cye > 9999 {
+                cye = 10;
+            }
+            cye as f32 * lattice_hash.resolution.get()
+        };
+        const MASS_BASE: f32 = 200.0;
+        let mass_curve = |y: f32| (-y).exp() * MASS_BASE * 6.0;
+
         self.uninitialised.iter_mut().for_each(|frag| {
             let fragment_world = frag.position;
             let fragment_mesh = frag.mesh_id;
@@ -317,14 +327,18 @@ impl FragmentSystem {
             };
 
             let position = glam::vec4(fragment_world.x, fragment_world.y, fragment_world.z, 1.0);
+
+            let yt = position.y / height;
+            let mass_contrib = mass_curve(yt);
+
             let handle = self.fragments.insert((
                 parents,
                 weights,
                 IndirectIndex::default(),
                 position,
-                50.0, // todo: health contribution
-                1.0,  // todo: debris rigid body
-                1.0,  // todo: damage and integrity
+                mass_contrib,
+                1.0, // todo: debris rigid body
+                1.0, // todo: damage and integrity
                 fragment_mesh,
             ));
             frag.stage = UninitFragmentStage::Unfinished { indirect: handle };
