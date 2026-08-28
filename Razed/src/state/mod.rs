@@ -14,13 +14,16 @@ use crate::{
     procedural::{VoxelGrid, VoxelGridOptions},
     render::RenderGroup,
     structure::{
-        self, CageSystem, DebrisSystem, FragmentSystem, FragmentsRowTableView,
+        CageSystem, DebrisSystem, FragmentSystem, FragmentsRowTableView,
         cage::OffsetRotation,
         create_structure_lattice,
         debris::MotionAccumulator,
         lattice::{LatticeSystem, NodesRowTableView},
     },
-    ui::DEBUG_CTL_VSYNC_BUTTON,
+    ui::{
+        DEBUG_CONTROL_GRAPHICS_GAMMA_DEFAULT, DEBUG_CONTROL_GRAPHICS_GAMMA_RANGE,
+        DEBUG_CTL_VSYNC_BUTTON,
+    },
 };
 use ::physics::xpbd::{RawXpbdLattice, XpbdOptions, XpbdSolver};
 use ethel::{
@@ -636,8 +639,9 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         }
 
         self.update_environment();
+        self.ui_system.poll_environment_changes();
         self.ui_update_layout();
-        self.ui_process_input(input.cursor(), delta);
+        self.ui_process_input(input.cursor(), input.mouse_wheel(), delta);
         self.ui_system.process_widget_states(delta);
 
         let vp_prev = view_point.get();
@@ -689,9 +693,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         if input.keys().key_pressed(janus::input::KeyCode::KeyH) {
             self.spawn_debug_structure(&view_point);
         }
-        if input.keys().key_pressed(janus::input::KeyCode::KeyJ) {
-            self.spawn_debug_bridge(&view_point);
-        }
 
         const CAMERA_KEY: janus::input::KeyCode = janus::input::KeyCode::Tab;
         {
@@ -699,7 +700,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             let vsync = self
                 .ui_system()
                 .env()
-                .get(&crate::ui::env_names::DEBUG_CTL_VSYNC)
+                .get(&crate::ui::env_names::DEBUG_CTL_DISPLAY_VSYNC)
                 .and_then(|v| v.as_boolean())
                 .unwrap_or_default();
 
@@ -761,7 +762,11 @@ impl State {
         {
             let env = self.ui_system.env_mut();
             if self.first_frame {
-                env.insert(DEBUG_CTL_VSYNC, true);
+                env.insert(DEBUG_CTL_DISPLAY_VSYNC, true);
+                env.insert(
+                    DEBUG_CTL_GRAPHICS_GAMMA,
+                    DEBUG_CONTROL_GRAPHICS_GAMMA_DEFAULT / DEBUG_CONTROL_GRAPHICS_GAMMA_RANGE,
+                );
             }
 
             if self.perf_avg.update() {
@@ -798,7 +803,7 @@ impl State {
         }
 
         crate::ui::button_color_state(
-            &[(DEBUG_CTL_VSYNC, DEBUG_CTL_VSYNC_BUTTON)],
+            &[(DEBUG_CTL_DISPLAY_VSYNC, DEBUG_CTL_VSYNC_BUTTON)],
             &self.ui_map,
             &mut self.ui_system.buttons,
             &self.ui_system.environment,
@@ -830,11 +835,12 @@ impl State {
         self.ui_system.synchronise_layout();
     }
 
-    pub fn ui_process_input(&mut self, cursor: &Cursor, delta: DeltaTime) {
+    pub fn ui_process_input(&mut self, cursor: &Cursor, scroll_delta: f32, delta: DeltaTime) {
         let x = cursor.x_f32();
         let y = cursor.y_f32();
         self.ui_system.process_hover_events(x, y, delta);
-        self.ui_system.feed_input(&self.local_keyev_buf, delta);
+        self.ui_system
+            .feed_input(&self.local_keyev_buf, scroll_delta, delta);
     }
 
     pub fn ui_composite_batches(&mut self) {

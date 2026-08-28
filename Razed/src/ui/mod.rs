@@ -3,12 +3,22 @@ use ethel::{
     render::Resolution,
 };
 use gui::{
-    ButtonCallback, ButtonParams, ContainerLayout, ContentAlignment, CoreElementParams,
-    ElementParams, InterfaceButtonRowTable, InterfaceSystem, ItemAlignment, LayoutOptions,
-    LayoutPosition, PanelParams, Point, Rectangle, TextContents, TextNode, TextParams, Value,
-    WidgetId, Wrap, env::UiEnv, style::FlexDirection,
+    ButtonParams, ContainerLayout, ContentAlignment, CoreElementParams, ElementParams,
+    InteractableCallback, InteractionTime, InterfaceButtonRowTable, InterfaceSystem, ItemAlignment,
+    LayoutOptions, LayoutPosition, PanelParams, Point, Rectangle, SliderParams, TextContents,
+    TextNode, TextParams, Value, WidgetId, Wrap, env::UiEnv, style::FlexDirection,
 };
 use janus::{StringHash, StringMap};
+
+use env_names::*;
+
+use crate::ui::env_names::{
+    DEBUG_COUNTER_LATTICE_NODES, DEBUG_PERF_FPS_AVG, DEBUG_PERF_LAST_RENDER_FRAME_TIME_MILLIS,
+    DEBUG_PERF_LAST_SIMUL_FRAME_TIME_MILLIS, DEBUG_PERF_TPS_TOTAL,
+};
+
+pub const DEBUG_CONTROL_GRAPHICS_GAMMA_RANGE: f32 = 3.4;
+pub const DEBUG_CONTROL_GRAPHICS_GAMMA_DEFAULT: f32 = crate::render::pass::GAMMA_DEFAULT;
 
 pub const COLORTINT_HOVER_INVARIANT: glam::Vec4 = glam::vec4(0f32, 0f32, 0f32, 1f32);
 
@@ -93,17 +103,18 @@ fn debug_ctlpanel(
         .unwrap()
         .0;
 
-    let params_dbg_button = |text: &'static str, cb: ButtonCallback| ButtonParams {
-        text: TextParams {
-            contents: TextContents::from_node(TextNode::Static(text)),
-            never_invalidate: true,
-            ..Default::default()
-        },
-        bg_color: glam::Vec3::ZERO,
-        bg_hover_tint: COLORTINT_HOVER_INVARIANT,
-        bg_press_tint: COLORTINT_HOVER_INVARIANT,
-        callback: cb,
-    };
+    let params_dbg_button =
+        |text: &'static str, cb: InteractableCallback<InteractionTime>| ButtonParams {
+            text: TextParams {
+                contents: TextContents::from_node(TextNode::Static(text)),
+                never_invalidate: true,
+                ..Default::default()
+            },
+            bg_color: glam::Vec3::ZERO,
+            bg_hover_tint: COLORTINT_HOVER_INVARIANT,
+            bg_press_tint: COLORTINT_HOVER_INVARIANT,
+            callback: cb,
+        };
 
     let dbg_button_vsync = system
         .create_element(ElementParams::Button(
@@ -119,8 +130,8 @@ fn debug_ctlpanel(
             },
             params_dbg_button(
                 "V-SYNC",
-                ButtonCallback::Once(|env| {
-                    if let Some(vsync) = env.get_mut(&env_names::DEBUG_CTL_VSYNC) {
+                InteractableCallback::Once(|env, _time| {
+                    if let Some(vsync) = env.get_mut(&env_names::DEBUG_CTL_DISPLAY_VSYNC) {
                         let v = vsync.as_boolean_mut().unwrap();
                         *v = !*v;
                     }
@@ -128,8 +139,47 @@ fn debug_ctlpanel(
             ),
         ))
         .unwrap();
-
     map.insert(DEBUG_CTL_VSYNC_BUTTON, dbg_button_vsync);
+
+    const SLIDER_GAMMA_DEFAULT_VALUE: f32 =
+        DEBUG_CONTROL_GRAPHICS_GAMMA_DEFAULT / DEBUG_CONTROL_GRAPHICS_GAMMA_RANGE;
+    system
+        .create_element(ElementParams::Slider(
+            CoreElementParams {
+                parent: Some(debug_panel),
+                children: None,
+                layout_options: LayoutOptions {
+                    size: Some(Point::new(Value::Absolute(256.0), Value::Absolute(16.0))),
+                    padding: Some(Rectangle::new(
+                        Value::Absolute(0f32),
+                        Value::Absolute(8f32),
+                        Value::Absolute(0f32),
+                        Value::Absolute(8f32),
+                    )),
+                    ..Default::default()
+                },
+                layer: 5,
+            },
+            SliderParams {
+                text: Some(TextParams {
+                    contents: TextContents::from_nodes(&[
+                        TextNode::Static("graphics.gamma = "),
+                        TextNode::Variable(DEBUG_CTL_GRAPHICS_GAMMA),
+                        TextNode::Static(" * 3.4"),
+                    ]),
+                    ..Default::default()
+                }),
+
+                value_init: SLIDER_GAMMA_DEFAULT_VALUE,
+                value_sync_handle: Some(DEBUG_CTL_GRAPHICS_GAMMA),
+                callback: InteractableCallback::Repeating(|env, v| {
+                    env.insert(DEBUG_CTL_GRAPHICS_GAMMA, *v);
+                }),
+
+                ..Default::default()
+            },
+        ))
+        .unwrap();
 }
 
 pub(crate) fn button_color_state(
@@ -207,49 +257,49 @@ fn debug_infopanel(system: &mut InterfaceSystem, root: WidgetId) {
 
     debug_text(TextContents::from_nodes(&[
         TextNode::Static("FPS = "),
-        TextNode::Variable(env_names::DEBUG_PERF_FPS_AVG),
+        TextNode::Variable(DEBUG_PERF_FPS_AVG),
     ]));
     debug_text(TextContents::from_nodes(&[
         TextNode::Static("TPS = "),
-        TextNode::Variable(env_names::DEBUG_PERF_TPS_TOTAL),
+        TextNode::Variable(DEBUG_PERF_TPS_TOTAL),
     ]));
     debug_text(TextContents::from_nodes(&[
         TextNode::Static("Last SIMUL. frame duration = "),
-        TextNode::Variable(env_names::DEBUG_PERF_LAST_SIMUL_FRAME_TIME_MILLIS),
+        TextNode::Variable(DEBUG_PERF_LAST_SIMUL_FRAME_TIME_MILLIS),
         TextNode::Static("ms"),
     ]));
     debug_text(TextContents::from_nodes(&[
         TextNode::Static("Last RENDER frame duration = "),
-        TextNode::Variable(env_names::DEBUG_PERF_LAST_RENDER_FRAME_TIME_MILLIS),
+        TextNode::Variable(DEBUG_PERF_LAST_RENDER_FRAME_TIME_MILLIS),
         TextNode::Static("ms"),
     ]));
     debug_text(TextContents::from_nodes(&[
         TextNode::Static("Lattice nodes = "),
-        TextNode::Variable(env_names::DEBUG_COUNTER_LATTICE_NODES),
+        TextNode::Variable(DEBUG_COUNTER_LATTICE_NODES),
     ]));
     debug_text(TextContents::from_nodes(&[
         TextNode::Static("Lattice constraints = "),
-        TextNode::Variable(env_names::DEBUG_COUNTER_LATTICE_CONSTRAINTS),
+        TextNode::Variable(DEBUG_COUNTER_LATTICE_CONSTRAINTS),
     ]));
     debug_text(TextContents::from_nodes(&[
         TextNode::Static("Fragments = "),
-        TextNode::Variable(env_names::DEBUG_COUNTER_FRAGMENTS),
+        TextNode::Variable(DEBUG_COUNTER_FRAGMENTS),
     ]));
     debug_text(TextContents::from_nodes(&[
         TextNode::Static("Deform. Cages = "),
-        TextNode::Variable(env_names::DEBUG_COUNTER_CAGES),
+        TextNode::Variable(DEBUG_COUNTER_CAGES),
     ]));
     debug_text(TextContents::from_nodes(&[
         TextNode::Static("Debris = "),
-        TextNode::Variable(env_names::DEBUG_COUNTER_DEBRIS),
+        TextNode::Variable(DEBUG_COUNTER_DEBRIS),
     ]));
     debug_text(TextContents::from_nodes(&[
         TextNode::Static("Sim::state = "),
-        TextNode::Variable(env_names::SIM_CTL_STATE),
+        TextNode::Variable(SIM_CTL_STATE),
     ]));
     debug_text(TextContents::from_nodes(&[
         TextNode::Static("Sim::speed = "),
-        TextNode::Variable(env_names::SIM_CTL_SPEED),
+        TextNode::Variable(SIM_CTL_SPEED),
     ]));
 }
 
@@ -274,5 +324,8 @@ pub mod env_names {
     pub const DEBUG_COUNTER_CAGES: StringHash = janus::hash_string("__debug.counter.cages");
     pub const DEBUG_COUNTER_DEBRIS: StringHash = janus::hash_string("__debug.counter.debris");
 
-    pub const DEBUG_CTL_VSYNC: StringHash = janus::hash_string("__debug.control.vsync");
+    pub const DEBUG_CTL_DISPLAY_VSYNC: StringHash =
+        janus::hash_string("__debug.control.display.vsync");
+    pub const DEBUG_CTL_GRAPHICS_GAMMA: StringHash =
+        janus::hash_string("__debug.control.graphics.gamma");
 }
