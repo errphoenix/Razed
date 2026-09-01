@@ -8,6 +8,8 @@ pub mod fragments_draw;
 pub mod skybox_draw;
 pub mod tonemap_compute;
 
+pub mod geometry;
+
 #[cfg(feature = "devmode")]
 pub mod debug_lines_draw;
 

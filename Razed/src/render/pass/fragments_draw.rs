@@ -188,7 +188,7 @@ ethel::shader_glsl! {
             };
 
             lib {
-                rendrs::pack::DERIVE_COTANGENT;
+                rendrs::pack::UTIL_DERIVE_COTANGENT;
 
                 rendrs::graphics::irradiance_harmonics::LIB_EVALUATE_SH_L2;
                 rendrs::graphics::light::LIB_LIGHT_ATTENUATE_ISQ_WINDOWED_CURVE;
@@ -235,7 +235,7 @@ ethel::shader_glsl! {
                     discard;
                 }
 
-                mat3 TBN = deriveCotangent(fs_normal, fs_world, fs_uv);
+                mat3 TBN = rendrs_deriveCotangent(fs_normal, fs_world, fs_uv);
                 normalMap = normalMap * 2.0 - 1.0;
                 vec3 normal = normalize(TBN * normalMap);
 
