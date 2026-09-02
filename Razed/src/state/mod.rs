@@ -861,39 +861,39 @@ impl State {
         self.ui_system.composite_layers(texture_metadata);
     }
 
-    fn upload_gpu_commands(
-        &self,
-        command_queue: &GpuCommandQueue<ethel::DrawCommand, RenderGroup>,
-        group: RenderGroup,
-        frame_data: &FrameDataBuffers,
-        tri_section: usize,
-    ) {
-        let buffer = match group {
-            RenderGroup::Generic => &frame_data.generic_commands,
-            RenderGroup::Fragment => &frame_data.fragment_commands,
-            RenderGroup::Debris => &frame_data.debris_commands,
-            RenderGroup::LatticeDebug => unimplemented!("lattice debug has no command buffer"),
-        };
+    // fn upload_gpu_commands(
+    //     &self,
+    //     command_queue: &GpuCommandQueue<ethel::DrawCommand, RenderGroup>,
+    //     group: RenderGroup,
+    //     frame_data: &FrameDataBuffers,
+    //     tri_section: usize,
+    // ) {
+    //     let buffer = match group {
+    //         RenderGroup::Generic => &frame_data.generic_commands,
+    //         RenderGroup::Fragment => &frame_data.fragment_commands,
+    //         RenderGroup::Debris => &frame_data.debris_commands,
+    //         RenderGroup::LatticeDebug => unimplemented!("lattice debug has no command buffer"),
+    //     };
 
-        // SAFETY: safe access to the selected commands buffer is guaranteed
-        // by correct usage of the triple buffer section index
-        let mut data = unsafe { buffer.view_section_mut(tri_section) };
+    //     // SAFETY: safe access to the selected commands buffer is guaranteed
+    //     // by correct usage of the triple buffer section index
+    //     let mut data = unsafe { buffer.view_section_mut(tri_section) };
 
-        let il0 = command_queue.index() as u32;
-        let next = command_queue.upload_next_group(&mut data);
-        let length = command_queue.index() as u32 - il0;
-        // SAFETY: safe access to the selected commands buffer is guaranteed
-        // by correct usage of the triple buffer section index.
-        // The set length is correct, as it is the length of the command queue
-        // that has just been blitted to the buffer.
-        unsafe {
-            buffer.set_length(tri_section, length);
-        }
+    //     let il0 = command_queue.index() as u32;
+    //     let next = command_queue.upload_next_group(&mut data);
+    //     let length = command_queue.index() as u32 - il0;
+    //     // SAFETY: safe access to the selected commands buffer is guaranteed
+    //     // by correct usage of the triple buffer section index.
+    //     // The set length is correct, as it is the length of the command queue
+    //     // that has just been blitted to the buffer.
+    //     unsafe {
+    //         buffer.set_length(tri_section, length);
+    //     }
 
-        if let Some(next) = next {
-            self.upload_gpu_commands(command_queue, next, frame_data, tri_section);
-        }
-    }
+    //     if let Some(next) = next {
+    //         self.upload_gpu_commands(command_queue, next, frame_data, tri_section);
+    //     }
+    // }
 
     fn delete_disabled_fragments(&mut self) {
         {

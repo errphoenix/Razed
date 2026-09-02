@@ -125,7 +125,7 @@ ethel::shader_glsl! {
                     output screen_point: vec2;
                 }
                 ethel::shader_glsl_attribs! {
-                    output texture_index: uint flat: true;
+                    output texture_index: uint as flat;
                 }
             };
             uniform {
@@ -182,7 +182,7 @@ ethel::shader_glsl! {
                     output outColor: vec4;
                 }
                 ethel::shader_glsl_attribs! {
-                    input texture_index: uint flat: true;
+                    input texture_index: uint as flat;
                 }
             };
             uniform {

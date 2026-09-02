@@ -10,6 +10,32 @@ use crate::{
     render::shader_commons,
 };
 
+pub fn geom_fragments_pass_with_shader(
+    shader: ComputeShaderFragmentsGeomSubmit,
+) -> FragmentsGeomPass {
+    FragmentsGeomPass::new(shader, [], [], |section, ctx, out| {
+        let FragmentsGeomCtx {
+            shader,
+            cages_data,
+            cages_map,
+            fragments_data,
+            material_registry,
+        } = ctx;
+
+        let section = section.as_index();
+
+        ctx.cages_data
+            .bind_ssbo_pod_points(Some(G_FRAGS_SSBO_BIND_POD_CAGES_LPOINTS));
+        ctx.cages_data
+            .bind_ssbo_pod_points_bind(Some(G_FRAGS_SSBO_BIND_POD_CAGES_LPOINTS_BIND));
+        ctx.cages_data
+            .bind_ssbo_pod_bindref(Some(G_FRAGS_SSBO_BIND_POD_CAGES_BINDREF));
+        ctx.cages_map
+            .bind_shader_storage(section, G_FRAGS_SSBO_BIND_IMAP_CAGES, 0);
+        ctx.fragments_data.bind_shader_storage(section);
+    })
+}
+
 macro_rules! ssbo_binding {
     (POD_BindPose) => {
         5
@@ -76,6 +102,7 @@ rendrs::geometry_submission_job! {
             material_registry: MaterialLocationRegistry, for 'ctx;
         }
 
+        //todo: optimize ffd, share
         "
         const uint FRAG_DOMAIN = 32;
 
