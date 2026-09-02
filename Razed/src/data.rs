@@ -7,7 +7,7 @@ use crate::{
     },
 };
 use ethel::{
-    DrawCommand, layout_buffer, layout_mesh_buffer,
+    layout_buffer, layout_mesh_buffer,
     render::buffer::{PartitionedTriBuffer, TriBuffer},
     state::data::{DirectIndex, IndirectIndex},
 };
@@ -203,9 +203,8 @@ layout_buffer! {
 
 #[derive(Debug, Default)]
 pub struct FrameDataBuffers {
-    pub fragment_commands: TriBuffer<DrawCommand>,
-    pub debris_commands: TriBuffer<DrawCommand>,
-    pub generic_commands: TriBuffer<DrawCommand>,
+    // barebone fragment geom repr.
+    pub fragment_geom_count: TriCell<u32>,
 
     pub generic_objects: PartitionedTriBuffer<RENDERABLE_STORAGE_PARTS>,
     pub fragments: PartitionedTriBuffer<FRAGMENTS_STORAGE_PARTS>,
@@ -253,9 +252,7 @@ impl FrameDataBuffers {
         LayoutDebugLinesData::initialise_partitions_tri(&debris_data);
 
         Self {
-            fragment_commands: TriBuffer::zeroed(FRAGMENT_COMMANDS_ALLOC),
-            debris_commands: TriBuffer::zeroed(DEBRIS_COMMANDS_ALLOC),
-            generic_commands: TriBuffer::zeroed(GENERIC_COMMANDS_ALLOC),
+            fragment_geom_count: TriCell::new(0),
 
             generic_objects: generic_objects_buffer,
             fragments: fragment_data,

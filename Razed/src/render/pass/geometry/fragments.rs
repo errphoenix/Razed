@@ -3,36 +3,41 @@ use ethel::{
     render::buffer::{PartitionedTriBuffer, TriBuffer},
     shader::GlslStorage,
 };
-use rendrs::graphics::material::MaterialLocationRegistry;
+use rendrs::{geometry::DomainData, graphics::material::MaterialLocationRegistry};
 
 use crate::{
     data::{CagePartitionedBuffer, FRAGMENTS_STORAGE_PARTS},
     render::shader_commons,
 };
 
+pub fn geom_fragments_pass() -> FragmentsGeomPass {
+    geom_fragments_pass_with_shader(ComputeShaderFragmentsGeomSubmit::new_compiled())
+}
+
 pub fn geom_fragments_pass_with_shader(
     shader: ComputeShaderFragmentsGeomSubmit,
 ) -> FragmentsGeomPass {
-    FragmentsGeomPass::new(shader, [], [], |section, ctx, out| {
+    FragmentsGeomPass::new(shader, [], [], |section, _shader, ctx, out| {
         let FragmentsGeomCtx {
-            shader,
             cages_data,
             cages_map,
             fragments_data,
-            material_registry,
+            frag_count,
+            //material_registry,
+            ..
         } = ctx;
 
         let section = section.as_index();
 
-        ctx.cages_data
-            .bind_ssbo_pod_points(Some(G_FRAGS_SSBO_BIND_POD_CAGES_LPOINTS));
-        ctx.cages_data
-            .bind_ssbo_pod_points_bind(Some(G_FRAGS_SSBO_BIND_POD_CAGES_LPOINTS_BIND));
-        ctx.cages_data
-            .bind_ssbo_pod_bindref(Some(G_FRAGS_SSBO_BIND_POD_CAGES_BINDREF));
-        ctx.cages_map
-            .bind_shader_storage(section, G_FRAGS_SSBO_BIND_IMAP_CAGES, 0);
-        ctx.fragments_data.bind_shader_storage(section);
+        cages_data.bind_ssbo_pod_points(Some(G_FRAGS_SSBO_BIND_POD_CAGES_LPOINTS));
+        cages_data.bind_ssbo_pod_points_bind(Some(G_FRAGS_SSBO_BIND_POD_CAGES_LPOINTS_BIND));
+        cages_data.bind_ssbo_pod_bindref(Some(G_FRAGS_SSBO_BIND_POD_CAGES_BINDREF));
+        cages_map.bind_shader_storage(section, G_FRAGS_SSBO_BIND_IMAP_CAGES, 0);
+        fragments_data.bind_shader_storage(section);
+
+        for i in 1..=*frag_count {
+            out.write(DomainData::new(0, i, 64));
+        }
     })
 }
 
@@ -94,6 +99,7 @@ rendrs::geometry_submission_job! {
         }
 
         context {
+            frag_count: u32;
             cages_data: CagePartitionedBuffer, for 'ctx;
             cages_map: TriBuffer<DirectIndex>, for 'ctx;
             fragments_data: PartitionedTriBuffer<{ FRAGMENTS_STORAGE_PARTS }>, for 'ctx;
@@ -112,7 +118,7 @@ rendrs::geometry_submission_job! {
         fragment_id += rendrs_ThreadID / FRAG_DOMAIN;
 
         uint mesh_id = pod_mesh_id[fragment_id];
-        Metadata metadata = eth_meshmeta[mesh_id];
+        MeshMetadata metadata = eth_meshmeta[mesh_id];
         uint local_thread = rendrs_ThreadID % FRAG_DOMAIN;
 
         const uint THREAD_VERTEX_PRINT = 6;
@@ -123,13 +129,12 @@ rendrs::geometry_submission_job! {
         }
 
         uint vi_base = metadata.offset + local_thread * THREAD_VERTEX_PRINT;
-        Vertex vertex[THREAD_VERTEX_PRINT];
+        MeshVertex vertex[THREAD_VERTEX_PRINT];
         for (uint i = 0; i < THREAD_VERTEX_PRINT; ++i) {
             vertex[i] = eth_vertex_buffer[vi_base + i];
         }
 
         vec3 bind_pose = pod_bind_pose[fragment_id].xyz;
-        /*todo*/vec3 w_rest = bind_pose + model; // bind-time vertex
         IndirectIndex cage_id = pod_cage_id[fragment_id];
         DirectIndex cage_did = imap_cages[cage_id.index];
         uint cage_index = cage_did.index;
@@ -171,16 +176,16 @@ rendrs::geometry_submission_job! {
 
         for (uint tri = 0; tri < THREAD_TRIANGLE_PRINT; ++tri) {
             uint base = tri * 3;
-            Vertex v0_src = vertex[base];
-            Vertex v1_src = vertex[base + 1];
-            Vertex v2_src = vertex[base + 2];
+            MeshVertex v0_src = vertex[base];
+            MeshVertex v1_src = vertex[base + 1];
+            MeshVertex v2_src = vertex[base + 2];
 
             vec3 D_pos[3];
             vec3 D_nor[3];
             vec3 D_tan[3];
             for (uint i = 0; i < 3; ++i) {
                 uint j = i + base;
-                Vertex v_src = vertex[j];
+                MeshVertex v_src = vertex[j];
                 vec3 n_src = vec3(v_src.norm_x, v_src.norm_y, v_src.norm_z);
                 vec3 p_src = vec3(v_src.pos_x, v_src.pos_y, v_src.pos_z);
                 vec3 b_src = p_src + bind_pose;

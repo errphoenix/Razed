@@ -27,10 +27,7 @@ use ethel::{
     assets::{AssetMetadataRegistry, TextureMetadata, pipe::RegistryPipe},
     data::SparseSlot,
     profile::Profiler,
-    render::{
-        Resolution, ScreenSpace,
-        command::{DrawArraysIndirectCommand, GpuCommandQueue},
-    },
+    render::{Resolution, ScreenSpace, command::GpuCommandQueue},
     state::{
         InputEvent,
         camera::{self, ViewPoint},
@@ -207,7 +204,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
     fn upload_gpu(
         &mut self,
         frame_boundary: &Cross<Producer, FrameDataBuffers>,
-        command_queue: &mut GpuCommandQueue<ethel::DrawCommand, RenderGroup>,
+        _command_queue: &mut GpuCommandQueue<ethel::DrawCommand, RenderGroup>,
     ) {
         self.profiler.push_trace("upload");
         // prepare uploads
@@ -219,35 +216,32 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             let t0 = t1;
 
             // populate command buffers
-            {
-                command_queue.clear();
+            // {
+            //     command_queue.clear();
 
-                let fragment_count = self.fragments.data().len() - 1;
-                let debris_count = self.debris.total_debris_count();
-
-                {
-                    command_queue.push_group(RenderGroup::Fragment);
-                    for _ in 0..fragment_count {
-                        command_queue.push_command(DrawArraysIndirectCommand {
-                            count: 0,
-                            instance_count: 1,
-                            first_vertex: 0,
-                            base_instance: 0,
-                        });
-                    }
-                }
-                {
-                    command_queue.push_group(RenderGroup::Debris);
-                    for _ in 0..debris_count {
-                        command_queue.push_command(DrawArraysIndirectCommand {
-                            count: 0,
-                            instance_count: 1,
-                            first_vertex: 0,
-                            base_instance: 0,
-                        });
-                    }
-                }
-            }
+            //     {
+            //         command_queue.push_group(RenderGroup::Fragment);
+            //         for _ in 0..fragment_count {
+            //             command_queue.push_command(DrawArraysIndirectCommand {
+            //                 count: 0,
+            //                 instance_count: 1,
+            //                 first_vertex: 0,
+            //                 base_instance: 0,
+            //             });
+            //         }
+            //     }
+            //     {
+            //         command_queue.push_group(RenderGroup::Debris);
+            //         for _ in 0..debris_count {
+            //             command_queue.push_command(DrawArraysIndirectCommand {
+            //                 count: 0,
+            //                 instance_count: 1,
+            //                 first_vertex: 0,
+            //                 base_instance: 0,
+            //             });
+            //         }
+            //     }
+            // }
 
             let t1 = Instant::now();
             self.profiler.log_explicit("prepare_commands", t0 - t1);
@@ -298,6 +292,16 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                     let gamma = Gamma::from_normalized(gamma_n);
                     render_params.gamma.set_and_advance(gamma).unwrap();
                 }
+            }
+
+            // setup geometry data
+            {
+                let fragment_count = self.fragments.data().len() - 1;
+                let debris_count = self.debris.total_debris_count();
+
+                storage
+                    .fragment_geom_count
+                    .set_and_advance(fragment_count as u32);
             }
 
             // load cage deformation feedback data
@@ -547,14 +551,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                     );
                 }
             }
-
-            // final command queue copy
-            self.upload_gpu_commands(
-                command_queue,
-                command_queue.first_group().unwrap(),
-                storage,
-                buf_idx,
-            );
         });
 
         let t1 = Instant::now();

@@ -22,6 +22,7 @@ use janus::{
     texture::{ImageFormat, ImageType, MipLevels, Texture, TextureFiltering},
 };
 use rendrs::{
+    geometry::GeometryBank,
     graphics::{PixelResolution, ShCoeffsBuffer},
     pipeline::{
         OutputObject, Pass, RenderPool, RenderTarget, RenderTargetDescriptor, RenderTargetId,
@@ -31,9 +32,17 @@ use rendrs::{
 
 #[cfg(feature = "devmode")]
 use crate::render::pass::debug_lines_draw::DebugLinesData;
-use crate::{assets, data::FrameDataBuffers, render::graphics::Materials};
+use crate::{
+    assets,
+    data::FrameDataBuffers,
+    render::{graphics::Materials, pass::geometry::FragmentsGeomCtx},
+};
 
-pub const DEFAULT_DEPTH_FUNC: u32 = janus::gl::GREATER;
+pub const DEFAULT_DEPTH_FUNC: u32 = janus::gl::LESS;
+
+// todo: determine
+pub const GBANK_ALLOC_VERTEX: usize = 131_070;
+pub const GBANK_ALLOC_TRIANGLE: usize = 65_535;
 
 #[allow(unused)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -111,13 +120,11 @@ impl PersistentSamplers {
 #[derive(Debug)]
 pub struct RenderPipeline {
     cage_deform_compute_pass: pass::CageDeformComputePass,
-    fd_preprocess_pass: pass::FdPreprocessComputePass,
-
+    //fd_preprocess_pass: pass::FdPreprocessComputePass,
     geom_fragments: pass::geometry::FragmentsGeomPass,
 
-    fragments_draw_pass: pass::FragmentsDrawPass,
-    debris_draw_pass: pass::DebrisDrawPass,
-
+    // fragments_draw_pass: pass::FragmentsDrawPass,
+    // debris_draw_pass: pass::DebrisDrawPass,
     geom_rasterize: rendrs::geometry::GeomRasterizePass,
 
     skybox_draw_pass: pass::SkyboxDrawPass,
@@ -136,8 +143,8 @@ pub struct RenderPipeline {
 }
 impl RenderPipeline {
     fn revalidate(&mut self, render_pool: &RenderPool) {
-        self.fragments_draw_pass.revalidate(render_pool);
-        self.debris_draw_pass.revalidate(render_pool);
+        // self.fragments_draw_pass.revalidate(render_pool);
+        // self.debris_draw_pass.revalidate(render_pool);
 
         self.geom_fragments.revalidate(render_pool);
         self.geom_rasterize.revalidate(render_pool);
@@ -171,9 +178,8 @@ impl Default for PersistentShaderBuffers {
 
 #[derive(Debug, Default)]
 pub struct RenderShaders {
-    fragments: pass::ShaderFragment,
-    debris: pass::ShaderDebris,
-
+    // fragments: pass::ShaderFragment,
+    // debris: pass::ShaderDebris,
     skybox: pass::ShaderSkybox,
 
     lattice: pass::ShaderDebugLattice,
@@ -182,8 +188,7 @@ pub struct RenderShaders {
     interface: gui::render::ShaderUiBasic,
 
     cage_deform: pass::ComputeShaderCageDeform,
-    fd_preprocess: pass::ComputeShaderProcessCommand,
-
+    // fd_preprocess: pass::ComputeShaderProcessCommand,
     util_equirect_decode: pass::ComputeShaderEquirectDecode,
 
     vfx_tonemap: pass::ComputeShaderTonemap,
@@ -192,10 +197,21 @@ pub struct RenderShaders {
     lines: pass::ShaderDebugLines,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ViewData {
+    pub view_mat: glam::Mat4,
+    pub proj_mat: glam::Mat4,
+    pub view_pos: glam::Vec3,
+    pub view_dir: glam::Vec3,
+    pub ortho_proj_mat: glam::Mat4,
+}
+
 #[derive(Debug, Default)]
 pub struct Renderer {
     last_frame_render: DeltaTime,
 
+    view_data: ViewData,
+    geometry_bank: GeometryBank,
     materials: Materials,
 
     // safe to unwrap during rendering after resource initialization
@@ -245,18 +261,26 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         }
 
         let view_mat = view.into_mat4().inverse();
-        let proj = screen.projection();
-        let ortho_proj = screen.orto_projection();
-        let cam_position = view.position;
-        let cam_forward = view.forward();
+        let view_pos = view.position;
+        let view_dir = view.forward();
+        let proj_mat = *screen.projection();
+        let ortho_proj_mat = *screen.orto_projection();
+
+        self.view_data = ViewData {
+            view_mat,
+            proj_mat,
+            view_pos,
+            view_dir,
+            ortho_proj_mat,
+        };
 
         #[cfg(feature = "devmode")]
         self.setup_debug_lines(view);
 
         let RenderShaders {
             lattice,
-            fragments: frags,
-            debris,
+            // fragments: frags,
+            // debris,
             skybox,
             cage_visual,
             interface,
@@ -265,38 +289,31 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             ..
         } = &self.shaders;
 
-        //interface.bind();
-        interface.uniform_projection_mat4v([*ortho_proj]);
+        interface.uniform_projection_mat4v([ortho_proj_mat]);
 
-        //lattice.bind();
-        lattice.uniform_projection_mat4v([*proj]);
+        lattice.uniform_projection_mat4v([proj_mat]);
         lattice.uniform_view_mat4v([view_mat]);
 
-        //cage_visual.bind();
-        cage_visual.uniform_projection_mat4v([*proj]);
+        cage_visual.uniform_projection_mat4v([proj_mat]);
         cage_visual.uniform_view_mat4v([view_mat]);
 
         #[cfg(feature = "devmode")]
         {
-            //lines.bind();
-            lines.uniform_projection_mat4v([*proj]);
+            lines.uniform_projection_mat4v([proj_mat]);
             lines.uniform_view_mat4v([view_mat]);
         }
 
-        //skybox.bind();
-        skybox.uniform_projection_mat4v([*proj]);
+        skybox.uniform_projection_mat4v([proj_mat]);
         skybox.uniform_view_mat4v([view_mat]);
 
-        //debris.bind();
-        debris.uniform_camera_forward_vec3v([cam_forward]);
-        debris.uniform_projection_mat4v([*proj]);
-        debris.uniform_view_mat4v([view_mat]);
+        // debris.uniform_camera_forward_vec3v([view_dir]);
+        // debris.uniform_projection_mat4v([proj_mat]);
+        // debris.uniform_view_mat4v([view_mat]);
 
-        //frags.bind();
-        frags.uniform_camera_forward_vec3v([cam_forward]);
-        frags.uniform_camera_position_vec3v([cam_position]);
-        frags.uniform_projection_mat4v([*proj]);
-        frags.uniform_view_mat4v([view_mat]);
+        // frags.uniform_camera_forward_vec3v([view_dir]);
+        // frags.uniform_camera_position_vec3v([view_pos]);
+        // frags.uniform_projection_mat4v([proj_mat]);
+        // frags.uniform_view_mat4v([view_mat]);
 
         // copy requested glyphs to atlas
         {
@@ -344,6 +361,46 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         }
 
         janus::gl::barrier_shader_storage();
+
+        self.geometry_bank.bind_data_buffers();
+        self.geometry_bank.bind_gcounter_buffer();
+
+        // geometry composition pass - fragments
+        {
+            let frag_count = frame_data.fragment_geom_count.get();
+            let cages_data = &frame_data.cages;
+            let cages_map = &frame_data.cage_map;
+            let fragments_data = &frame_data.fragments;
+            let material_registry = self.materials.locations();
+
+            self.pipeline().geom_fragments.execute(
+                section,
+                render_pool,
+                &FragmentsGeomCtx {
+                    frag_count,
+                    cages_data,
+                    cages_map,
+                    fragments_data,
+                    material_registry,
+                },
+            );
+        }
+
+        rendrs::geometry::barrier_geom_compose();
+
+        self.pipeline().geom_rasterize.execute(
+            render_pool,
+            &self.geometry_bank,
+            self.view_data.proj_mat,
+            self.view_data.view_mat,
+        );
+
+        // todo: determine sync point
+        rendrs::geometry::barrier_geom_rasterize();
+
+        self.pipeline()
+            .blit_pass
+            .execute(StorageSection::Back, render_pool, &());
 
         // // there is no barrier here: an ssbo barrier is set after
         // // fd_preprocess, which does not depend on this pass
@@ -531,19 +588,23 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             });
         }
 
+        self.geometry_bank = GeometryBank::new(GBANK_ALLOC_VERTEX, GBANK_ALLOC_TRIANGLE);
+
         // init pipeline
         {
             let dev_materials = &self.materials.groups().dev;
             let skybox_sampler = self.persistent_samplers().dev_env_fullscale();
 
-            let (base_hdr, base_depth, mapped_ldr) = {
+            let (base_hdr, base_depth, mapped_ldr, goem_raster) = {
                 let id_hdr = self.render_target_handles().hdr_base;
                 let id_depth = self.render_target_handles().base_depth;
                 let id_ldr = self.render_target_handles().ldr_mapped;
+                let id_raster = self.render_target_handles().geom_raster;
                 (
                     self.render_pool.accessor(id_hdr).unwrap(),
                     self.render_pool.accessor(id_depth).unwrap(),
                     self.render_pool.accessor(id_ldr).unwrap(),
+                    self.render_pool.accessor(id_raster).unwrap(),
                 )
             };
 
@@ -558,23 +619,20 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 cage_deform_compute_pass: pass::cage_deform_compute::pass(
                     &self.shaders.cage_deform,
                 ),
-                fd_preprocess_pass: pass::fd_preprocess::pass(&self.shaders.fd_preprocess),
+                // fd_preprocess_pass: pass::fd_preprocess::pass(&self.shaders.fd_preprocess),
 
-                fragments_draw_pass: pass::fragments_draw::pass(
-                    &self.shaders.fragments,
-                    dev_materials,
-                    base_hdr,
-                    base_depth,
-                    debug_env_refprobe,
-                    baked_brdf_spec,
-                ),
-                debris_draw_pass: pass::debris_draw::pass(&self.shaders.debris),
-
-                geom_fragments: pass::geometry::geom_fragments_pass_with_shader(shader)
+                // fragments_draw_pass: pass::fragments_draw::pass(
+                //     &self.shaders.fragments,
+                //     dev_materials,
+                //     base_hdr,
+                //     base_depth,
+                //     debug_env_refprobe,
+                //     baked_brdf_spec,
+                // ),
+                // debris_draw_pass: pass::debris_draw::pass(&self.shaders.debris),
+                geom_fragments: pass::geometry::geom_fragments_pass(),
                 geom_rasterize: rendrs::geometry::GeomRasterizePass::new(OutputObject::Color(
-                    self.render_pool
-                        .accessor(self.render_target_handles().geom_raster)
-                        .unwrap(),
+                    goem_raster,
                 )),
 
                 skybox_draw_pass: pass::skybox_draw::pass(
@@ -599,7 +657,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     mapped_ldr,
                 ),
 
-                blit_pass: rendrs::BlitPass::new(mapped_ldr),
+                blit_pass: rendrs::BlitPass::new(goem_raster),
                 clear_pass: rendrs::ClearPass::new([
                     OutputObject::Color(base_hdr),
                     OutputObject::Color(mapped_ldr),
@@ -636,12 +694,12 @@ impl Renderer {
 
     fn initialize_shaders(&mut self) {
         self.shaders.lattice = pass::ShaderDebugLattice::new_compiled();
-        self.shaders.fragments = pass::ShaderFragment::new_compiled();
-        self.shaders.debris = pass::ShaderDebris::new_compiled();
+        // self.shaders.fragments = pass::ShaderFragment::new_compiled();
+        // self.shaders.debris = pass::ShaderDebris::new_compiled();
         self.shaders.cage_deform = pass::ComputeShaderCageDeform::new_compiled();
         self.shaders.cage_visual = pass::ShaderDebugCage::new_compiled();
         self.shaders.interface = gui::render::ShaderUiBasic::new_compiled();
-        self.shaders.fd_preprocess = pass::ComputeShaderProcessCommand::new_compiled();
+        // self.shaders.fd_preprocess = pass::ComputeShaderProcessCommand::new_compiled();
         self.shaders.skybox = pass::ShaderSkybox::new_compiled();
         self.shaders.util_equirect_decode = pass::ComputeShaderEquirectDecode::new_compiled();
         self.shaders.vfx_tonemap = pass::ComputeShaderTonemap::new_compiled();
