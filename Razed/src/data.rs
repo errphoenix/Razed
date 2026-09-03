@@ -105,17 +105,17 @@ layout_buffer! {
         enum PodBindPose: FRAGMENTS_ALLOC => {
             type glam::Vec4;
             bind 0;
-            shader render::pass::fragments_draw::SSBO_INDEX_POD_BINDPOSE;
+            shader render::pass::geometry::G_FRAGS_SSBO_BIND_POD_BINDPOSE;
         };
         enum PodMeshId: FRAGMENTS_ALLOC => {
             type ethel::mesh::Id;
             bind 1;
-            shader render::pass::fragments_draw::SSBO_INDEX_POD_MESHID;
+            shader render::pass::geometry::G_FRAGS_SSBO_BIND_POD_MESHID;
         };
         enum PodCageIds: FRAGMENTS_ALLOC => {
             type [IndirectIndex; FRAGMENT_ANCHORS_COUNT];
             bind 2;
-            shader render::pass::fragments_draw::SSBO_INDEX_POD_CAGEID;
+            shader render::pass::geometry::G_FRAGS_SSBO_BIND_POD_CAGEID;
         };
     }
 }

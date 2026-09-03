@@ -299,7 +299,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 let fragment_count = self.fragments.data().len() - 1;
                 let debris_count = self.debris.total_debris_count();
 
-                storage
+                let _ = storage
                     .fragment_geom_count
                     .set_and_advance(fragment_count as u32);
             }

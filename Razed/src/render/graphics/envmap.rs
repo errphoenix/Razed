@@ -173,13 +173,14 @@ pub fn debug_irradiance(texture: TextureView, output: &ShCoeffsBuffer) {
     let shader = ComputeShaderIrradianceHarmonics::new_compiled();
 
     let elapsed = janus::gl::synchronous(|| {
-        rendrs::graphics::irradiance_harmonics(&shader, SamplerObject::new(texture)).execute(
-            StorageSection::Back,
-            &RenderPool::dummy(),
-            &IrradianceHarmonicsCtx {
-                output_coefficients: output,
-            },
-        );
+        rendrs::graphics::irradiance_harmonics(&shader, SamplerObject::from_texture(texture))
+            .execute(
+                StorageSection::Back,
+                &RenderPool::dummy(),
+                &IrradianceHarmonicsCtx {
+                    output_coefficients: output,
+                },
+            );
     });
 
     println!("irradiance sh time: {elapsed} nanos");

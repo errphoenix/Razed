@@ -18,11 +18,11 @@ pub fn geom_fragments_pass_with_shader(
     shader: ComputeShaderFragmentsGeomSubmit,
 ) -> FragmentsGeomPass {
     FragmentsGeomPass::new(shader, [], [], |section, _shader, ctx, out| {
+        let frag_count = ctx.frag_count;
         let FragmentsGeomCtx {
             cages_data,
             cages_map,
             fragments_data,
-            frag_count,
             //material_registry,
             ..
         } = ctx;
@@ -35,8 +35,10 @@ pub fn geom_fragments_pass_with_shader(
         cages_map.bind_shader_storage(section, G_FRAGS_SSBO_BIND_IMAP_CAGES, 0);
         fragments_data.bind_shader_storage(section);
 
-        for i in 1..=*frag_count {
+        let mut i = 0;
+        while i < frag_count {
             out.write(DomainData::new(0, i, 64));
+            i += 2;
         }
     })
 }
@@ -115,16 +117,16 @@ rendrs::geometry_submission_job! {
         // todo: decouple; geom_id is stored in triangle,
         // should be global, not frag-specific. oka for now
         uint fragment_id = rendrs_GeometryID;
-        fragment_id += rendrs_ThreadID / FRAG_DOMAIN;
+        fragment_id += rendrs_DomainThreadID / FRAG_DOMAIN;
 
         uint mesh_id = pod_mesh_id[fragment_id];
         MeshMetadata metadata = eth_meshmeta[mesh_id];
-        uint local_thread = rendrs_ThreadID % FRAG_DOMAIN;
+        uint local_thread = rendrs_DomainThreadID % FRAG_DOMAIN;
 
         const uint THREAD_VERTEX_PRINT = 6;
         const uint THREAD_TRIANGLE_PRINT = 2;
 
-        if (local_thread >= metadata.length * THREAD_VERTEX_PRINT) {
+        if (local_thread * THREAD_VERTEX_PRINT >= metadata.length) {
             return; // todo: do not return
         }
 
@@ -202,7 +204,7 @@ rendrs::geometry_submission_job! {
                 vec3 rc0   = mix(rc00, rc10, W.y);
                 vec3 rc1   = mix(rc01, rc11, W.y);
                 vec3 delta = mix(rc0,  rc1,  W.z);
-                D_pos[i] = bind_pose + delta;
+                D_pos[i] = b_src + delta;
 
                 // derive normal (todo: rewrite, optimize)
                 vec3 Tx = normalize(mix(mix(e_x0, e_x1, W.y), mix(e_x2, e_x3, W.y), W.z));
