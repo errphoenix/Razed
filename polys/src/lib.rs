@@ -3,7 +3,7 @@ pub mod convex;
 pub mod post_process;
 
 #[allow(unused_imports)]
-pub use post_process::{compute_normals, compute_uv_cubic};
+pub use post_process::{compute_normals, compute_uv_cubic, compute_vertex_normals};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct QuadFace {

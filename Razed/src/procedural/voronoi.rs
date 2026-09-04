@@ -1,4 +1,4 @@
-use ethel::mesh::MeshStaging;
+use ethel::mesh::{MeshStaging, Triangle, Vertex};
 use polys::{Plane, convex::Convex};
 use rand::{Rng, RngExt};
 
@@ -104,55 +104,38 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
 
     pub fn consolidate(&self, mut stager: MeshStaging) -> CubeVoronoi {
         let mut t_vb = Vec::new();
+        let mut t_nb = Vec::new();
+        let mut t_tb = Vec::new();
 
         for mesh in &self.meshes {
-            for face in mesh.faces() {
-                let polys::TriFace { a, b, c } = face.indexed;
-                let n = face.normal;
-
-                let p0 = mesh.vertices()[a as usize];
-                let p1 = mesh.vertices()[b as usize];
-                let p2 = mesh.vertices()[c as usize];
-
+            t_nb.resize(t_vb.len(), glam::Vec3::ZERO);
+            polys::compute_vertex_normals(mesh.faces(), mesh.vertices(), &mut t_nb);
+            for tri in mesh.faces() {
+                t_tb.push(Triangle {
+                    v0: tri[0],
+                    v1: tri[1],
+                    v2: tri[2],
+                });
+            }
+            for (&v, &n) in mesh.vertices().iter().zip(&t_nb) {
                 const UV_SCALING: f32 = 0.5;
-                let uv0 = polys::compute_uv_cubic(p0, n, UV_SCALING);
-                let uv1 = polys::compute_uv_cubic(p1, n, UV_SCALING);
-                let uv2 = polys::compute_uv_cubic(p2, n, UV_SCALING);
-
-                t_vb.push(ethel::mesh::Vertex {
-                    pos_x: p0.x,
-                    pos_y: p0.y,
-                    pos_z: p0.z,
+                let uv = polys::compute_uv_cubic(v, n, UV_SCALING);
+                t_vb.push(Vertex {
+                    pos_x: v.x,
+                    pos_y: v.y,
+                    pos_z: v.z,
                     norm_x: n.x,
                     norm_y: n.y,
                     norm_z: n.z,
-                    uv_x: uv0.x,
-                    uv_y: uv0.y,
-                });
-                t_vb.push(ethel::mesh::Vertex {
-                    pos_x: p1.x,
-                    pos_y: p1.y,
-                    pos_z: p1.z,
-                    norm_x: n.x,
-                    norm_y: n.y,
-                    norm_z: n.z,
-                    uv_x: uv1.x,
-                    uv_y: uv1.y,
-                });
-                t_vb.push(ethel::mesh::Vertex {
-                    pos_x: p2.x,
-                    pos_y: p2.y,
-                    pos_z: p2.z,
-                    norm_x: n.x,
-                    norm_y: n.y,
-                    norm_z: n.z,
-                    uv_x: uv2.x,
-                    uv_y: uv2.y,
+                    uv_x: uv.x,
+                    uv_y: uv.y,
                 });
             }
 
-            stager.stage(&t_vb);
+            stager.stage(&t_vb, &t_tb);
             t_vb.clear();
+            t_nb.clear();
+            t_tb.clear();
         }
 
         CubeVoronoi { stager }

@@ -1,4 +1,40 @@
-use crate::Face;
+use crate::{Face, Facen, TriFace};
+
+pub fn compute_vertex_normals(
+    faces: &[Facen<TriFace>],
+    vertices: &[glam::Vec3],
+    out_normals: &mut [glam::Vec3],
+) {
+    let mut w_normals = {
+        let mut vec = Vec::with_capacity(vertices.len());
+        for _ in 0..vertices.len() {
+            vec.push(Vec::new());
+        }
+        vec
+    };
+
+    for face in faces {
+        let TriFace { a, b, c } = face.indexed;
+        let v0 = vertices[a as usize];
+        let v1 = vertices[b as usize];
+        let v2 = vertices[c as usize];
+
+        let t_n = face.normal;
+
+        let a0 = (v1 - v0).dot(v2 - v0);
+        let a1 = (v2 - v1).dot(v0 - v1);
+        let a2 = (v0 - v2).dot(v1 - v2);
+
+        w_normals[a as usize].push(a0 * t_n);
+        w_normals[b as usize].push(a1 * t_n);
+        w_normals[c as usize].push(a2 * t_n);
+    }
+
+    w_normals
+        .iter()
+        .enumerate()
+        .for_each(|(v_i, wn)| out_normals[v_i] = wn.iter().sum::<glam::Vec3>().normalize());
+}
 
 /// Compute face normals.
 ///
