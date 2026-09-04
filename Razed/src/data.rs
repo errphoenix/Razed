@@ -38,15 +38,16 @@ pub const FRAGMENTS_ALLOC: usize = 131072;
 pub const FRAGMENTS_STORAGE_PARTS: usize = 3;
 pub const CAGES_ALLOC: usize = FRAGMENTS_ALLOC;
 
-pub const MESH_BUFFER_LEN: usize = 2048;
-pub const MESH_BUFFER_SIZE: usize = 65536;
-
 #[cfg(feature = "devmode")]
 pub const DEBUG_LINES_ALLOC: usize = 16384;
 
 pub const INTERFACE_INSTANCES_ALLOC: usize = 8192;
 
-layout_mesh_buffer!(count: MESH_BUFFER_LEN; vertices: MESH_BUFFER_SIZE);
+layout_mesh_buffer!(
+    count    : 2048;
+    vertices : 65536;
+    tris     : 32768
+);
 
 layout_buffer! {
     const RenderableData: RENDERABLE_STORAGE_PARTS, {

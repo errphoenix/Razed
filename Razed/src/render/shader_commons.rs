@@ -2,6 +2,8 @@
 
 use ethel::shader::{Constant, GlslAttribute, GlslLib, GlslStruct};
 
+pub use crate::data::{ETH_MESH_SSBO_STATIC, ETH_MESH_SSBO_TRIS};
+
 /// Minimal pixel shader attributes.
 ///
 /// Includes the following input attributes:

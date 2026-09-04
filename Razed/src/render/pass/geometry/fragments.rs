@@ -85,8 +85,8 @@ rendrs::geometry_submission_job! {
             shader_commons::TYPE_INDEX_DIRECT
         }
         ssbo {
-            ethel::mesh::GLSL_SSBO_INTEGRATION[0] // bind 10
-            ethel::mesh::GLSL_SSBO_INTEGRATION[1] // bind 11
+            shader_commons::ETH_MESH_SSBO_STATIC // bind 10
+            shader_commons::ETH_MESH_SSBO_TRIS   // bind 11
 
             G_FRAGS_SSBO_POD_BINDPOSE
             G_FRAGS_SSBO_POD_MESHID

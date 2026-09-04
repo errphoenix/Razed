@@ -141,8 +141,8 @@ ethel::shader_glsl_compute! {
         };
 
         ssbo {
-            ethel::mesh::GLSL_SSBO_INTEGRATION[0]
-            ethel::mesh::GLSL_SSBO_INTEGRATION[1]
+            shader_commons::ETH_MESH_SSBO_STATIC // bind 10
+            shader_commons::ETH_MESH_SSBO_TRIS   // bind 11
 
             ethel::shader_glsl_ssbo! {
                 buf Command_Buffer => {

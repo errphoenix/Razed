@@ -47,7 +47,10 @@ fn main() {
         let mesh_stage = group.voronoi.stager;
 
         start_handler.with_mesh_data(mesh_stage);
-        start_handler.with_mesh_layout(data::LayoutMeshStorage::create());
+        start_handler.with_mesh_layouts(
+            data::LayoutMeshStorageStatic::create(),
+            data::LayoutMeshStorageTris::create(),
+        );
 
         group.mapping
     };
