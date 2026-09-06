@@ -27,7 +27,10 @@ use ethel::{
     assets::{AssetMetadataRegistry, TextureMetadata, pipe::RegistryPipe},
     data::SparseSlot,
     profile::Profiler,
-    render::{Resolution, ScreenSpace, command::GpuCommandQueue},
+    render::{
+        Resolution, ScreenSpace,
+        command::{DrawGroups, GpuCommandQueue},
+    },
     state::{
         InputEvent,
         camera::{self, ViewPoint},
@@ -204,7 +207,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
     fn upload_gpu(
         &mut self,
         frame_boundary: &Cross<Producer, FrameDataBuffers>,
-        _command_queue: &mut GpuCommandQueue<ethel::DrawCommand, RenderGroup>,
+        _command_queue: &mut GpuCommandQueue<<RenderGroup as DrawGroups>::Command, RenderGroup>,
     ) {
         self.profiler.push_trace("upload");
         // prepare uploads

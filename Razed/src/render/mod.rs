@@ -55,13 +55,11 @@ pub enum RenderGroup {
     Debris,
     LatticeDebug,
 }
-
 impl std::fmt::Display for RenderGroup {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_str())
     }
 }
-
 impl DrawGroups for RenderGroup {
     fn as_str(&self) -> &'static str {
         match self {
@@ -71,6 +69,8 @@ impl DrawGroups for RenderGroup {
             RenderGroup::LatticeDebug => "lattice_debug",
         }
     }
+
+    type Command = ethel::render::command::DrawArraysIndirectCommand;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -227,8 +227,8 @@ pub struct ViewData {
 pub struct Renderer {
     last_frame_render: DeltaTime,
 
-    view_data: ViewData,
-    geometry_bank: GeometryBank,
+    pub view_data: ViewData,
+    pub geometry_bank: GeometryBank,
     materials: Materials,
 
     // safe to unwrap during rendering after resource initialization
@@ -517,8 +517,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 reflection_map: dev_reflection_map,
             });
         }
-
-        self.geometry_bank = GeometryBank::new(GBANK_ALLOC_VERTEX, GBANK_ALLOC_TRIANGLE);
 
         // init pipeline
         {

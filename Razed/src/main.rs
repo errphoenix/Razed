@@ -6,6 +6,7 @@ use ethel::{
 };
 use gui::text::{GlyphAtlas, GlyphAtlasTexture};
 use janus::{context::Setup, window::DisplayParameters};
+use rendrs::geometry::GeometryBank;
 
 use crate::{
     data::FrameDataBuffers,
@@ -73,6 +74,7 @@ fn main() {
 
             let (raster_tx, raster_rx) = crossbeam::channel::unbounded();
 
+            let vao = renderer.internal_vao();
             renderer.handler_init_callback(|handle| {
                 handle.textures_master_registry = textures_master_registry;
 
@@ -90,6 +92,14 @@ fn main() {
                     .add_handle(glyph_asset_handle);
 
                 handle.glyph_pipe = Some(raster_rx);
+
+                handle.geometry_bank =
+                    GeometryBank::new(render::GBANK_ALLOC_VERTEX, render::GBANK_ALLOC_TRIANGLE);
+
+                let ebo = handle.geometry_bank.index_buffer();
+                unsafe {
+                    janus::gl::VertexArrayElementBuffer(vao, ebo);
+                }
             });
             state.handler_init_callback(|handle| {
                 handle.frag_meshmap = fragment_mesh_mapping;
