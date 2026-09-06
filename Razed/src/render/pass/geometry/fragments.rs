@@ -194,6 +194,7 @@ rendrs::geometry_submission_job! {
         const uint THREAD_VERTEX_PRINT = 3;
         const uint THREAD_TRIANGLE_PRINT = 1;
 
+        uint d_vert_base = local_thread * THREAD_VERTEX_PRINT;
         if (local_thread * THREAD_VERTEX_PRINT < m_vert_length) {
             // bind-time basis orthogonal matrix
             mat3 B = mat3(
@@ -204,7 +205,6 @@ rendrs::geometry_submission_job! {
             float B_det = determinant(B);
             mat3 B_inv = transpose(B); // B is orthogonal, transpose(B) = inverse(B)
 
-            uint d_vert_base = max(local_thread - 1, 0) * THREAD_VERTEX_PRINT;
             uint d_vert_print_checked = min(m_vert_length - d_vert_base, THREAD_VERTEX_PRINT);
             for (uint vert = 0; vert < d_vert_print_checked; ++vert) {
                 uint d_vert_i = d_vert_base + vert;
@@ -262,19 +262,17 @@ rendrs::geometry_submission_job! {
             }
         }
 
-        if (local_thread * THREAD_TRIANGLE_PRINT < m_tris_length) {
+        uint d_tris_base = local_thread * THREAD_TRIANGLE_PRINT;
+        if (d_tris_base < m_tris_length) {
             // check unnecessary, print is 1
-            //uint d_tris_base = max(local_thread - 1, 0) * THREAD_TRIANGLE_PRINT;
             //uint d_tris_print_checked = min(m_tris_length - d_tris_base, THREAD_TRIANGLE_PRINT);
 
-            uint d_tri_i = local_thread * THREAD_TRIANGLE_PRINT;
-            uint m_tri_i = m_tris_offset + d_tri_i;
-
+            uint m_tri_i = m_tris_offset + d_tris_base;
             MeshTriangle m_tri = eth_tris_buffer[m_tri_i];
-            uint t_v0 = m_tri.v0 - m_vert_offset;
-            uint t_v1 = m_tri.v1 - m_vert_offset;
-            uint t_v2 = m_tri.v2 - m_vert_offset;
-            TriangleData(sm_tris_base[sub_domain] + d_tri_i, uint[]( t_v0, t_v1, t_v2 ), fragment_id);
+            uint t_v0 = m_tri.v0 - m_vert_offset + sm_vert_base[sub_domain];
+            uint t_v1 = m_tri.v1 - m_vert_offset + sm_vert_base[sub_domain];
+            uint t_v2 = m_tri.v2 - m_vert_offset + sm_vert_base[sub_domain];
+            TriangleData(sm_tris_base[sub_domain] + d_tris_base, uint[]( t_v0, t_v1, t_v2 ), fragment_id);
         }
         "
     }
