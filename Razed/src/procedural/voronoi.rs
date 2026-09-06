@@ -108,7 +108,7 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
         let mut t_tb = Vec::new();
 
         for mesh in &self.meshes {
-            t_nb.resize(t_vb.len(), glam::Vec3::ZERO);
+            t_nb.resize(mesh.vertices().len(), glam::Vec3::ZERO);
             polys::compute_vertex_normals(mesh.faces(), mesh.vertices(), &mut t_nb);
             for tri in mesh.faces() {
                 t_tb.push(Triangle {

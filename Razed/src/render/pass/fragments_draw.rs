@@ -135,8 +135,9 @@ ethel::shader_glsl! {
     struct Fragment > [460] {
         common {
             type {
-                shader_commons::TYPE_MESH_METADATA
-                shader_commons::TYPE_MESH_VERTEX
+                shader_commons::ETH_TYPE_MESH_METADATA
+                shader_commons::ETH_TYPE_MESH_VERTEX
+                shader_commons::ETH_TYPE_MESH_TRIANGLE
             };
 
             ssbo {
@@ -349,8 +350,8 @@ ethel::shader_glsl! {
             };
 
             type {
-                shader_commons::TYPE_INDEX_INDIRECT
-                shader_commons::TYPE_INDEX_DIRECT
+                shader_commons::ETH_TYPE_INDEX_DIRECT
+                shader_commons::ETH_TYPE_INDEX_INDIRECT
             };
 
             ssbo {

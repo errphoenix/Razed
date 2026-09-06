@@ -80,8 +80,8 @@ ethel::shader_glsl! {
             };
 
             type {
-                shader_commons::TYPE_INDEX_INDIRECT
-                shader_commons::TYPE_INDEX_DIRECT
+                shader_commons::ETH_TYPE_INDEX_INDIRECT
+                shader_commons::ETH_TYPE_INDEX_DIRECT
 
                 TYPE_CONSTRAINT
             };

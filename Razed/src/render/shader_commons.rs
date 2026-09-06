@@ -44,11 +44,12 @@ ethel::shader_glsl_struct! {
     }
 }
 
-pub const TYPE_MESH_METADATA: GlslStruct = ethel::mesh::MeshMetadataGlslStruct::as_definition();
-pub const TYPE_MESH_VERTEX: GlslStruct = ethel::mesh::MeshVertexGlslStruct::as_definition();
+pub const ETH_TYPE_MESH_METADATA: GlslStruct = ethel::mesh::MeshMetadataGlslStruct::as_definition();
+pub const ETH_TYPE_MESH_VERTEX: GlslStruct = ethel::mesh::MeshVertexGlslStruct::as_definition();
+pub const ETH_TYPE_MESH_TRIANGLE: GlslStruct = ethel::mesh::MeshTriangleGlslStruct::as_definition();
 
-pub const TYPE_INDEX_INDIRECT: GlslStruct = IndirectIndexGlslStruct::as_definition();
-pub const TYPE_INDEX_DIRECT: GlslStruct = DirectIndexGlslStruct::as_definition();
+pub const ETH_TYPE_INDEX_INDIRECT: GlslStruct = IndirectIndexGlslStruct::as_definition();
+pub const ETH_TYPE_INDEX_DIRECT: GlslStruct = DirectIndexGlslStruct::as_definition();
 
 pub const LIB_QUAT_CONVERT_MAT: GlslLib = ethel::shader_glsl_lib! {
     mat3 quatToMat [ q: vec4 ] => "

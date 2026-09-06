@@ -136,8 +136,9 @@ ethel::shader_glsl_compute! {
         type {
             TYPE_COMMAND_ARRAYS
             TYPE_COMMAND_ELEMENTS
-            shader_commons::TYPE_MESH_METADATA
-            shader_commons::TYPE_MESH_VERTEX
+            shader_commons::ETH_TYPE_MESH_METADATA
+            shader_commons::ETH_TYPE_MESH_VERTEX
+            shader_commons::ETH_TYPE_MESH_TRIANGLE
         };
 
         ssbo {

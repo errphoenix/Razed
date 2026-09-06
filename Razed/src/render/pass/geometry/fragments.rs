@@ -79,10 +79,11 @@ pub const G_FRAGS_SSBO_BIND_IMAP_CAGES: u32 = ssbo_binding!(IMap_Cages);
 rendrs::geometry_submission_job! {
     Fragments => {
         type {
-            shader_commons::TYPE_MESH_METADATA
-            shader_commons::TYPE_MESH_VERTEX
-            shader_commons::TYPE_INDEX_INDIRECT
-            shader_commons::TYPE_INDEX_DIRECT
+            shader_commons::ETH_TYPE_MESH_METADATA
+            shader_commons::ETH_TYPE_MESH_VERTEX
+            shader_commons::ETH_TYPE_MESH_TRIANGLE
+            shader_commons::ETH_TYPE_INDEX_INDIRECT
+            shader_commons::ETH_TYPE_INDEX_DIRECT
         }
         ssbo {
             shader_commons::ETH_MESH_SSBO_STATIC // bind 10

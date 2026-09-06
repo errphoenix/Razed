@@ -151,8 +151,8 @@ ethel::shader_glsl_compute! {
         };
 
         type {
-            super::TYPE_INDEX_INDIRECT
-            super::TYPE_INDEX_DIRECT
+            super::ETH_TYPE_INDEX_INDIRECT
+            super::ETH_TYPE_INDEX_DIRECT
             TYPE_CAGE_POINT_ATTACHMENT_NODE
             TYPE_CAGE_POINT_ATTACHMENTS_LIST
             TYPE_CAGE_POINTS_LIST
