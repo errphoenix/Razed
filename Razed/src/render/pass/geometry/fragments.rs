@@ -100,6 +100,16 @@ rendrs::geometry_submission_job! {
         lib {
             shader_commons::LIB_MAT3_COFACTOR
         }
+        share {
+            uint sm_vert_base[2];
+            uint sm_tris_base[2];
+
+            vec3 sm_cage_pose[2];
+            vec3 sm_cage_anchor[2];
+            vec3 sm_cage_lpoint0[2][8];
+            vec3 sm_cage_lpoint1[2][8];
+            vec3 sm_cage_edges[2][12];
+        }
 
         context {
             frag_count: u32;
@@ -118,24 +128,12 @@ rendrs::geometry_submission_job! {
         // todo: decouple; geom_id is stored in triangle,
         // should be global, not frag-specific. oka for now
         uint fragment_id = rendrs_GeometryID;
-        fragment_id += rendrs_DomainThreadID / FRAG_DOMAIN;
+        uint sub_domain = rendrs_DomainThreadID / FRAG_DOMAIN;
+        fragment_id += sub_domain;
 
         uint mesh_id = pod_mesh_id[fragment_id];
         MeshMetadata metadata = eth_meshmeta[mesh_id];
         uint local_thread = rendrs_DomainThreadID % FRAG_DOMAIN;
-
-        const uint THREAD_VERTEX_PRINT = 6;
-        const uint THREAD_TRIANGLE_PRINT = 2;
-
-        if (local_thread * THREAD_VERTEX_PRINT >= metadata.length) {
-            return; // todo: do not return
-        }
-
-        uint vi_base = metadata.offset + local_thread * THREAD_VERTEX_PRINT;
-        MeshVertex vertex[THREAD_VERTEX_PRINT];
-        for (uint i = 0; i < THREAD_VERTEX_PRINT; ++i) {
-            vertex[i] = eth_vertex_buffer[vi_base + i];
-        }
 
         vec3 bind_pose = pod_bind_pose[fragment_id].xyz;
         IndirectIndex cage_id = pod_cage_id[fragment_id];
@@ -144,6 +142,45 @@ rendrs::geometry_submission_job! {
         vec4[8] localpoints = pod_cages_localpoints[cage_index];
         vec4[8] localpoints_bind = pod_cages_localpoints_bind[cage_index];
         vec3 cage_bindref = pod_cages_bindref[cage_index].xyz;
+
+        uint m_tris_offset = metadata.tris_offset;
+        uint m_tris_length = metadata.tris_length;
+        uint m_vert_offset = metadata.vert_offset;
+        uint m_vert_length = metadata.vert_length;
+
+        if (local_thread == 0) {
+            sm_vert_base[sub_domain] = AllocVertex(m_vert_length);
+            sm_tris_base[sub_domain] = AllocTriangle(m_tris_length);
+
+            IndirectIndex cage_id = pod_cage_id[fragment_id];
+            DirectIndex cage_did = imap_cages[cage_id.index];
+            uint cage_index = cage_did.index;
+
+            sm_cage_pose[sub_domain]    = pod_bind_pose[fragment_id].xyz;
+            sm_cage_anchor[sub_domain]  = pod_cages_bindref[cage_index].xyz;
+
+            for (uint i = 0; i < 8; ++i) {
+                sm_cage_lpoint0[sub_domain][i] = pod_cages_localpoints_bind[cage_index][i].xyz;
+                sm_cage_lpoint1[sub_domain][i] = pod_cages_localpoints[cage_index][i].xyz;
+            }
+
+            sm_cage_edges[sub_domain]   = vec3[](
+                sm_cage_lpoint1[sub_domain][1] - sm_cage_lpoint1[sub_domain][0],
+                sm_cage_lpoint1[sub_domain][2] - sm_cage_lpoint1[sub_domain][0],
+                sm_cage_lpoint1[sub_domain][4] - sm_cage_lpoint1[sub_domain][0],
+                sm_cage_lpoint1[sub_domain][3] - sm_cage_lpoint1[sub_domain][2],
+                sm_cage_lpoint1[sub_domain][3] - sm_cage_lpoint1[sub_domain][1],
+                sm_cage_lpoint1[sub_domain][5] - sm_cage_lpoint1[sub_domain][1],
+                sm_cage_lpoint1[sub_domain][5] - sm_cage_lpoint1[sub_domain][4],
+                sm_cage_lpoint1[sub_domain][6] - sm_cage_lpoint1[sub_domain][4],
+                sm_cage_lpoint1[sub_domain][6] - sm_cage_lpoint1[sub_domain][2],
+                sm_cage_lpoint1[sub_domain][7] - sm_cage_lpoint1[sub_domain][6],
+                sm_cage_lpoint1[sub_domain][7] - sm_cage_lpoint1[sub_domain][5],
+                sm_cage_lpoint1[sub_domain][7] - sm_cage_lpoint1[sub_domain][3]
+            );
+        }
+
+        groupMemoryBarrier();
 
         // anchor order is guaranteed to be:
         // 0: -x, -y, -z,
@@ -154,81 +191,90 @@ rendrs::geometry_submission_job! {
         // 5:  x, -y,  z,
         // 6: -x,  y,  z,
         // 7:  x,  y,  z,
+        const uint THREAD_VERTEX_PRINT = 3;
+        const uint THREAD_TRIANGLE_PRINT = 1;
 
-        // bind-time localpoints
-        vec3 b000 = localpoints_bind[0].xyz; vec3 b100 = localpoints_bind[1].xyz;
-        vec3 b010 = localpoints_bind[2].xyz; vec3 b110 = localpoints_bind[3].xyz;
-        vec3 b001 = localpoints_bind[4].xyz; vec3 b101 = localpoints_bind[5].xyz;
-        vec3 b011 = localpoints_bind[6].xyz; vec3 b111 = localpoints_bind[7].xyz;
-        // real-time positions
-        vec3 p000 = localpoints[0].xyz; vec3 p100 = localpoints[1].xyz;
-        vec3 p010 = localpoints[2].xyz; vec3 p110 = localpoints[3].xyz;
-        vec3 p001 = localpoints[4].xyz; vec3 p101 = localpoints[5].xyz;
-        vec3 p011 = localpoints[6].xyz; vec3 p111 = localpoints[7].xyz;
+        if (local_thread * THREAD_VERTEX_PRINT < m_vert_length) {
+            // bind-time basis orthogonal matrix
+            mat3 B = mat3(
+                sm_cage_lpoint0[sub_domain][1] - sm_cage_lpoint0[sub_domain][0],
+                sm_cage_lpoint0[sub_domain][2] - sm_cage_lpoint0[sub_domain][0],
+                sm_cage_lpoint0[sub_domain][4] - sm_cage_lpoint0[sub_domain][0]
+            );
+            float B_det = determinant(B);
+            mat3 B_inv = transpose(B); // B is orthogonal, transpose(B) = inverse(B)
 
-        // bind-time basis orthogonal matrix
-        vec3 bx = b100 - b000; vec3 by = b010 - b000; vec3 bz = b001 - b000;
-        mat3 B = mat3(bx, by, bz);
-        float B_det = determinant(B);
-        mat3 B_inv = inverse(B);
+            uint d_vert_base = max(local_thread - 1, 0) * THREAD_VERTEX_PRINT;
+            uint d_vert_print_checked = min(m_vert_length - d_vert_base, THREAD_VERTEX_PRINT);
+            for (uint vert = 0; vert < d_vert_print_checked; ++vert) {
+                uint d_vert_i = d_vert_base + vert;
+                uint m_vert_i = d_vert_i + m_vert_offset;
+                MeshVertex m_vert = eth_vertex_buffer[m_vert_i];
+                vec3 m_nor = vec3(m_vert.norm_x, m_vert.norm_y, m_vert.norm_z);
+                vec3 m_pos = vec3(m_vert.pos_x, m_vert.pos_y, m_vert.pos_z);
+                vec2 m_uv  = vec2(m_vert.uv_x, m_vert.uv_y);
 
-        // normal derivation parameters (cage-local)
-        vec3 e_x0 = bx; vec3 e_x1 = p110 - p010; vec3 e_x2 = p101 - p001; vec3 e_x3 = p111 - p011;
-        vec3 e_y0 = by; vec3 e_y1 = p110 - p100; vec3 e_y2 = p011 - p001; vec3 e_y3 = p111 - p101;
-        vec3 e_z0 = bz; vec3 e_z1 = p101 - p100; vec3 e_z2 = p011 - p010; vec3 e_z3 = p111 - p110;
-
-        for (uint tri = 0; tri < THREAD_TRIANGLE_PRINT; ++tri) {
-            uint base = tri * 3;
-            MeshVertex v0_src = vertex[base];
-            MeshVertex v1_src = vertex[base + 1];
-            MeshVertex v2_src = vertex[base + 2];
-
-            vec3 D_pos[3];
-            vec3 D_nor[3];
-            vec3 D_tan[3];
-            for (uint i = 0; i < 3; ++i) {
-                uint j = i + base;
-                MeshVertex v_src = vertex[j];
-                vec3 n_src = vec3(v_src.norm_x, v_src.norm_y, v_src.norm_z);
-                vec3 p_src = vec3(v_src.pos_x, v_src.pos_y, v_src.pos_z);
-                vec3 b_src = p_src + bind_pose;
+                vec3 u_pos = m_pos + bind_pose; // fragment-local pos
 
                 vec3 W = vec3(0.0);
                 if (abs(B_det) > 1e-6)
-                    W = B_inv * (b_src - b000);
+                    W = B_inv * (u_pos - sm_cage_lpoint0[sub_domain][0]);
 
-                // real-time cage interpolation
-                vec3 rc00  = mix(p000, p100, W.x);
-                vec3 rc01  = mix(p001, p101, W.x);
-                vec3 rc10  = mix(p010, p110, W.x);
-                vec3 rc11  = mix(p011, p111, W.x);
+                vec3 rc00  = mix(sm_cage_lpoint1[sub_domain][0], sm_cage_lpoint1[sub_domain][1], W.x);
+                vec3 rc01  = mix(sm_cage_lpoint1[sub_domain][4], sm_cage_lpoint1[sub_domain][5], W.x);
+                vec3 rc10  = mix(sm_cage_lpoint1[sub_domain][2], sm_cage_lpoint1[sub_domain][3], W.x);
+                vec3 rc11  = mix(sm_cage_lpoint1[sub_domain][6], sm_cage_lpoint1[sub_domain][7], W.x);
                 vec3 rc0   = mix(rc00, rc10, W.y);
                 vec3 rc1   = mix(rc01, rc11, W.y);
                 vec3 delta = mix(rc0,  rc1,  W.z);
-                D_pos[i] = b_src + delta;
+
+                vec3 w_pos = u_pos + delta;
 
                 // derive normal (todo: rewrite, optimize)
-                vec3 Tx = normalize(mix(mix(e_x0, e_x1, W.y), mix(e_x2, e_x3, W.y), W.z));
-                vec3 Ty = normalize(mix(mix(e_y0, e_y1, W.x), mix(e_y2, e_y3, W.x), W.z));
-                vec3 Tz = normalize(mix(mix(e_z0, e_z1, W.x), mix(e_z2, e_z3, W.x), W.y));
-                vec3 T  = Tx;
-                vec3 B  = normalize(Ty - dot(Ty, T) * T);
-                vec3 N  = cross(T, B);
-                mat3 TBN_local = mat3(T, B, N);
-                mat3 TBN_bind  = mat3(normalize(bx), normalize(by), normalize(bz));
-                mat3 TBN       = TBN_local * inverse(TBN_bind);
-                mat3 TBN_cof   = cofactor3(TBN);
+                vec3 d_cage_edges[12] = sm_cage_edges[sub_domain];
+                vec3 Tx = normalize(mix(
+                    mix(d_cage_edges[0], d_cage_edges[3], W.y),
+                    mix(d_cage_edges[6], d_cage_edges[9], W.y),
+                    W.z
+                ));
+                vec3 Ty = normalize(mix(
+                    mix(d_cage_edges[1], d_cage_edges[4],  W.x),
+                    mix(d_cage_edges[7], d_cage_edges[10], W.x),
+                    W.z
+                ));
+                vec3 Tz = normalize(mix(
+                    mix(d_cage_edges[2], d_cage_edges[5],  W.x),
+                    mix(d_cage_edges[8], d_cage_edges[11], W.x),
+                    W.y
+                ));
+                vec3 T = Tx;
+                vec3 B = normalize(Ty - dot(Ty, T) * T);
+                vec3 N = cross(T, B);
+                mat3 TBN_1 = mat3(T, B, N);
+                mat3 TBN_0 = mat3(normalize(d_cage_edges[0]), normalize(d_cage_edges[1]), normalize(d_cage_edges[2]));
+                mat3 TBN   = TBN_1 * transpose(TBN_0);
+                mat3 TBN_a = cofactor3(TBN);
 
-                D_nor[i] = normalize(TBN_cof * n_src);
-                D_tan[i] = vec3(0.0); //todo
+                vec3 w_nor = normalize(TBN_a * m_nor);
+                vec3 w_tan = vec3(1.0, 0.0, 0.0); // todo
+
+                VertexData(sm_vert_base[sub_domain] + d_vert_i, w_pos, w_nor, w_tan, m_uv);
             }
+        }
 
-            Triangle(
-                Vertex(D_pos[0], D_nor[0], D_tan[0], vec2(v0_src.uv_x, v0_src.uv_y)),
-                Vertex(D_pos[1], D_nor[1], D_tan[1], vec2(v1_src.uv_x, v1_src.uv_y)),
-                Vertex(D_pos[2], D_nor[2], D_tan[2], vec2(v2_src.uv_x, v2_src.uv_y)),
-                fragment_id
-            );
+        if (local_thread * THREAD_TRIANGLE_PRINT < m_tris_length) {
+            // check unnecessary, print is 1
+            //uint d_tris_base = max(local_thread - 1, 0) * THREAD_TRIANGLE_PRINT;
+            //uint d_tris_print_checked = min(m_tris_length - d_tris_base, THREAD_TRIANGLE_PRINT);
+
+            uint d_tri_i = local_thread * THREAD_TRIANGLE_PRINT;
+            uint m_tri_i = m_tris_offset + d_tri_i;
+
+            MeshTriangle m_tri = eth_tris_buffer[m_tri_i];
+            uint t_v0 = m_tri.v0 - m_vert_offset;
+            uint t_v1 = m_tri.v1 - m_vert_offset;
+            uint t_v2 = m_tri.v2 - m_vert_offset;
+            TriangleData(sm_tris_base[sub_domain] + d_tri_i, uint[]( t_v0, t_v1, t_v2 ), fragment_id);
         }
         "
     }
