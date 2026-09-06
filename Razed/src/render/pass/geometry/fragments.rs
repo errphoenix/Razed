@@ -31,7 +31,6 @@ pub fn geom_fragments_pass_with_shader(
 
         cages_data.bind_ssbo_pod_points(Some(G_FRAGS_SSBO_BIND_POD_CAGES_LPOINTS));
         cages_data.bind_ssbo_pod_points_bind(Some(G_FRAGS_SSBO_BIND_POD_CAGES_LPOINTS_BIND));
-        cages_data.bind_ssbo_pod_bindref(Some(G_FRAGS_SSBO_BIND_POD_CAGES_BINDREF));
         cages_map.bind_shader_storage(section, G_FRAGS_SSBO_BIND_IMAP_CAGES, 0);
         fragments_data.bind_shader_storage(section);
 
@@ -60,11 +59,8 @@ macro_rules! ssbo_binding {
     (POD_Cages_LPoints_Bind) => {
         9
     };
-    (POD_Cages_BindRef) => {
-        12
-    };
     (IMap_Cages) => {
-        13
+        12
     };
 }
 
@@ -73,7 +69,6 @@ pub const G_FRAGS_SSBO_BIND_POD_MESHID: u32 = ssbo_binding!(POD_MeshID);
 pub const G_FRAGS_SSBO_BIND_POD_CAGEID: u32 = ssbo_binding!(POD_CageID);
 pub const G_FRAGS_SSBO_BIND_POD_CAGES_LPOINTS: u32 = ssbo_binding!(POD_Cages_LPoints);
 pub const G_FRAGS_SSBO_BIND_POD_CAGES_LPOINTS_BIND: u32 = ssbo_binding!(POD_Cages_LPoints_Bind);
-pub const G_FRAGS_SSBO_BIND_POD_CAGES_BINDREF: u32 = ssbo_binding!(POD_Cages_BindRef);
 pub const G_FRAGS_SSBO_BIND_IMAP_CAGES: u32 = ssbo_binding!(IMap_Cages);
 
 rendrs::geometry_submission_job! {
@@ -94,7 +89,6 @@ rendrs::geometry_submission_job! {
             G_FRAGS_SSBO_POD_CAGEID
             G_FRAGS_SSBO_POD_CAGES_LPOINTS
             G_FRAGS_SSBO_POD_CAGES_LPOINTS_BIND
-            G_FRAGS_SSBO_POD_CAGES_BINDREF
             G_FRAGS_SSBO_IMAP_CAGES
         }
         lib {
@@ -105,7 +99,6 @@ rendrs::geometry_submission_job! {
             uint sm_tris_base[2];
 
             vec3 sm_cage_pose[2];
-            vec3 sm_cage_anchor[2];
             vec3 sm_cage_lpoint0[2][8];
             vec3 sm_cage_lpoint1[2][8];
             vec3 sm_cage_edges[2][12];
@@ -121,7 +114,6 @@ rendrs::geometry_submission_job! {
             material_registry: MaterialLocationRegistry, for 'ctx;
         }
 
-        //todo: optimize ffd, share
         "
         const uint FRAG_DOMAIN = 32;
 
@@ -135,14 +127,6 @@ rendrs::geometry_submission_job! {
         MeshMetadata metadata = eth_meshmeta[mesh_id];
         uint local_thread = rendrs_DomainThreadID % FRAG_DOMAIN;
 
-        vec3 bind_pose = pod_bind_pose[fragment_id].xyz;
-        IndirectIndex cage_id = pod_cage_id[fragment_id];
-        DirectIndex cage_did = imap_cages[cage_id.index];
-        uint cage_index = cage_did.index;
-        vec4[8] localpoints = pod_cages_localpoints[cage_index];
-        vec4[8] localpoints_bind = pod_cages_localpoints_bind[cage_index];
-        vec3 cage_bindref = pod_cages_bindref[cage_index].xyz;
-
         uint m_tris_offset = metadata.tris_offset;
         uint m_tris_length = metadata.tris_length;
         uint m_vert_offset = metadata.vert_offset;
@@ -153,12 +137,10 @@ rendrs::geometry_submission_job! {
             sm_tris_base[sub_domain] = AllocTriangle(m_tris_length);
 
             IndirectIndex cage_id = pod_cage_id[fragment_id];
-            DirectIndex cage_did = imap_cages[cage_id.index];
-            uint cage_index = cage_did.index;
+            DirectIndex cage_did  = imap_cages[cage_id.index];
+            uint cage_index       = cage_did.index;
 
-            sm_cage_pose[sub_domain]    = pod_bind_pose[fragment_id].xyz;
-            sm_cage_anchor[sub_domain]  = pod_cages_bindref[cage_index].xyz;
-
+            sm_cage_pose[sub_domain] = pod_bind_pose[fragment_id].xyz;
             for (uint i = 0; i < 8; ++i) {
                 sm_cage_lpoint0[sub_domain][i] = pod_cages_localpoints_bind[cage_index][i].xyz;
                 sm_cage_lpoint1[sub_domain][i] = pod_cages_localpoints[cage_index][i].xyz;
@@ -201,7 +183,7 @@ rendrs::geometry_submission_job! {
             sm_cage_lpoint0[sub_domain][4] - sm_cage_lpoint0[sub_domain][0]
         );
         float B_det = determinant(B);
-        mat3 B_inv = inverse(B); // B is orthogonal, transpose(B) = inverse(B)
+        mat3 B_inv = transpose(B); // B is orthogonal, transpose(B) = inverse(B)
 
         for (uint i = local_thread; i < m_vert_length; i += FRAG_DOMAIN) {
             uint m_vert_i = i + m_vert_offset;
@@ -210,11 +192,11 @@ rendrs::geometry_submission_job! {
             vec3 m_pos = vec3(m_vert.pos_x, m_vert.pos_y, m_vert.pos_z);
             vec2 m_uv  = vec2(m_vert.uv_x, m_vert.uv_y);
 
-            vec3 u_pos = m_pos + bind_pose; // fragment-local pos
+            // ---- positional deformation ----
 
-            vec3 W = vec3(0.0);
-            if (abs(B_det) > 1e-6)
-                W = B_inv * (u_pos - sm_cage_lpoint0[sub_domain][0]);
+            vec3 u_pos = m_pos + sm_cage_pose[sub_domain]; // fragment-local pos
+            vec3 W = abs(B_det) > 0.0001 ?
+                B_inv * (u_pos - sm_cage_lpoint0[sub_domain][0]) : vec3(0.0);
 
             vec3 rc00  = mix(sm_cage_lpoint1[sub_domain][0], sm_cage_lpoint1[sub_domain][1], W.x);
             vec3 rc01  = mix(sm_cage_lpoint1[sub_domain][4], sm_cage_lpoint1[sub_domain][5], W.x);
@@ -226,33 +208,31 @@ rendrs::geometry_submission_job! {
 
             vec3 w_pos = u_pos;
 
-            // derive normal (todo: rewrite, optimize)
+            // ---- normal derivation ----
+
             vec3 d_cage_edges[12] = sm_cage_edges[sub_domain];
-            vec3 Tx = normalize(mix(
+            vec3 Jx = mix(
                 mix(d_cage_edges[0], d_cage_edges[3], W.y),
                 mix(d_cage_edges[6], d_cage_edges[9], W.y),
                 W.z
-            ));
-            vec3 Ty = normalize(mix(
+            );
+            vec3 Jy = mix(
                 mix(d_cage_edges[1], d_cage_edges[4],  W.x),
                 mix(d_cage_edges[7], d_cage_edges[10], W.x),
                 W.z
-            ));
-            vec3 Tz = normalize(mix(
+            );
+            vec3 Jz = mix(
                 mix(d_cage_edges[2], d_cage_edges[5],  W.x),
                 mix(d_cage_edges[8], d_cage_edges[11], W.x),
                 W.y
-            ));
-            vec3 T = Tx;
-            vec3 B = normalize(Ty - dot(Ty, T) * T);
-            vec3 N = cross(T, B);
-            mat3 TBN_1 = mat3(T, B, N);
-            mat3 TBN_0 = mat3(normalize(d_cage_edges[0]), normalize(d_cage_edges[1]), normalize(d_cage_edges[2]));
-            mat3 TBN   = TBN_1 * transpose(TBN_0);
-            mat3 TBN_a = cofactor3(TBN);
+            );
+            vec3 n_W = m_nor * B;
+            vec3 Cx  = cross(Jy, Jz);
+            vec3 Cy  = cross(Jz, Jx);
+            vec3 Cz  = cross(Jx, Jy);
 
-            vec3 w_nor = normalize(TBN_a * m_nor);
-            vec3 w_tan = vec3(1.0, 0.0, 0.0); // todo
+            vec3 w_nor = normalize(n_W.x * Cx + n_W.y * Cy + n_W.z + Cz);
+            vec3 w_tan = vec3(1.0, 0.0, 0.0);
 
             VertexData(sm_vert_base[sub_domain] + i, w_pos, w_nor, w_tan, m_uv);
         }
@@ -291,11 +271,6 @@ pub const G_FRAGS_SSBO_POD_CAGES_LPOINTS: GlslStorage = ethel::shader_glsl_ssbo!
 pub const G_FRAGS_SSBO_POD_CAGES_LPOINTS_BIND: GlslStorage = ethel::shader_glsl_ssbo! {
     buf POD_Cages_LPoints_Bind => {
         [dyn_array vec4: pod_cages_localpoints_bind => each 8]
-    }
-};
-pub const G_FRAGS_SSBO_POD_CAGES_BINDREF: GlslStorage = ethel::shader_glsl_ssbo! {
-    buf POD_Cages_BindRef => {
-        [dyn_array vec4: pod_cages_bindref]
     }
 };
 pub const G_FRAGS_SSBO_IMAP_CAGES: GlslStorage = ethel::shader_glsl_ssbo! {
