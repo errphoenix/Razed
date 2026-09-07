@@ -37,7 +37,7 @@ pub fn geom_fragments_pass_with_shader(
         let mut i = 0;
         while i < frag_count {
             out.write(DomainData::new(0, i, 64));
-            i += 2;
+            i += 4;
         }
     })
 }
@@ -95,13 +95,13 @@ rendrs::geometry_submission_job! {
             shader_commons::LIB_MAT3_COFACTOR
         }
         share {
-            uint sm_vert_base[2];
-            uint sm_tris_base[2];
+            uint sm_vert_base[4];
+            uint sm_tris_base[4];
 
-            vec3 sm_cage_pose[2];
-            vec3 sm_cage_lpoint0[2][8];
-            vec3 sm_cage_lpoint1[2][8];
-            vec3 sm_cage_edges[2][12];
+            vec3 sm_cage_pose[4];
+            vec3 sm_cage_lpoint0[4][8];
+            vec3 sm_cage_lpoint1[4][8];
+            vec3 sm_cage_edges[4][12];
         }
 
         context {
@@ -115,12 +115,12 @@ rendrs::geometry_submission_job! {
         }
 
         "
-        const uint FRAG_DOMAIN = 32;
+        const uint FRAG_DOMAIN = 16;
 
         // todo: decouple; geom_id is stored in triangle,
         // should be global, not frag-specific. oka for now
         uint fragment_id = rendrs_GeometryID + 1;
-        uint sub_domain = rendrs_DomainThreadID >= FRAG_DOMAIN ? 1 : 0;
+        uint sub_domain = rendrs_DomainThreadID / FRAG_DOMAIN;
         fragment_id += sub_domain;
 
         uint mesh_id = pod_mesh_id[fragment_id];
