@@ -37,7 +37,7 @@ pub fn geom_fragments_pass_with_shader(
         let mut i = 0;
         while i < frag_count {
             out.write(DomainData::new(0, i, 64));
-            i += 4;
+            i += 1;
         }
     })
 }
@@ -95,13 +95,13 @@ rendrs::geometry_submission_job! {
             shader_commons::LIB_MAT3_COFACTOR
         }
         share {
-            uint sm_vert_base[4];
-            uint sm_tris_base[4];
+            uint sm_vert_base;
+            uint sm_tris_base;
 
-            vec3 sm_cage_pose[4];
-            vec3 sm_cage_lpoint0[4][8];
-            vec3 sm_cage_lpoint1[4][8];
-            vec3 sm_cage_edges[4][12];
+            vec3 sm_cage_pose;
+            vec3 sm_cage_lpoint0[8];
+            vec3 sm_cage_lpoint1[8];
+            vec3 sm_cage_edges[12];
         }
 
         context {
@@ -115,17 +115,13 @@ rendrs::geometry_submission_job! {
         }
 
         "
-        const uint FRAG_DOMAIN = 16;
-
         // todo: decouple; geom_id is stored in triangle,
         // should be global, not frag-specific. oka for now
         uint fragment_id = rendrs_GeometryID + 1;
-        uint sub_domain = rendrs_DomainThreadID / FRAG_DOMAIN;
-        fragment_id += sub_domain;
 
         uint mesh_id = pod_mesh_id[fragment_id];
         MeshMetadata metadata = eth_meshmeta[mesh_id];
-        uint local_thread = rendrs_DomainThreadID % FRAG_DOMAIN;
+        uint local_thread = rendrs_DomainThreadID;
 
         uint m_tris_offset = metadata.tris_offset;
         uint m_tris_length = metadata.tris_length;
@@ -133,32 +129,32 @@ rendrs::geometry_submission_job! {
         uint m_vert_length = metadata.vert_length;
 
         if (local_thread == 0) {
-            sm_vert_base[sub_domain] = AllocVertex(m_vert_length);
-            sm_tris_base[sub_domain] = AllocTriangle(m_tris_length);
+            sm_vert_base = AllocVertex(m_vert_length);
+            sm_tris_base = AllocTriangle(m_tris_length);
 
             IndirectIndex cage_id = pod_cage_id[fragment_id];
             DirectIndex cage_did  = imap_cages[cage_id.index];
             uint cage_index       = cage_did.index;
 
-            sm_cage_pose[sub_domain] = pod_bind_pose[fragment_id].xyz;
+            sm_cage_pose = pod_bind_pose[fragment_id].xyz;
             for (uint i = 0; i < 8; ++i) {
-                sm_cage_lpoint0[sub_domain][i] = pod_cages_localpoints_bind[cage_index][i].xyz;
-                sm_cage_lpoint1[sub_domain][i] = pod_cages_localpoints[cage_index][i].xyz;
+                sm_cage_lpoint0[i] = pod_cages_localpoints_bind[cage_index][i].xyz;
+                sm_cage_lpoint1[i] = pod_cages_localpoints[cage_index][i].xyz;
             }
 
-            sm_cage_edges[sub_domain] = vec3[](
-                sm_cage_lpoint1[sub_domain][1] - sm_cage_lpoint1[sub_domain][0],
-                sm_cage_lpoint1[sub_domain][2] - sm_cage_lpoint1[sub_domain][0],
-                sm_cage_lpoint1[sub_domain][4] - sm_cage_lpoint1[sub_domain][0],
-                sm_cage_lpoint1[sub_domain][3] - sm_cage_lpoint1[sub_domain][2],
-                sm_cage_lpoint1[sub_domain][3] - sm_cage_lpoint1[sub_domain][1],
-                sm_cage_lpoint1[sub_domain][5] - sm_cage_lpoint1[sub_domain][1],
-                sm_cage_lpoint1[sub_domain][5] - sm_cage_lpoint1[sub_domain][4],
-                sm_cage_lpoint1[sub_domain][6] - sm_cage_lpoint1[sub_domain][4],
-                sm_cage_lpoint1[sub_domain][6] - sm_cage_lpoint1[sub_domain][2],
-                sm_cage_lpoint1[sub_domain][7] - sm_cage_lpoint1[sub_domain][6],
-                sm_cage_lpoint1[sub_domain][7] - sm_cage_lpoint1[sub_domain][5],
-                sm_cage_lpoint1[sub_domain][7] - sm_cage_lpoint1[sub_domain][3]
+            sm_cage_edges = vec3[](
+                sm_cage_lpoint1[1] - sm_cage_lpoint1[0],
+                sm_cage_lpoint1[2] - sm_cage_lpoint1[0],
+                sm_cage_lpoint1[4] - sm_cage_lpoint1[0],
+                sm_cage_lpoint1[3] - sm_cage_lpoint1[2],
+                sm_cage_lpoint1[3] - sm_cage_lpoint1[1],
+                sm_cage_lpoint1[5] - sm_cage_lpoint1[1],
+                sm_cage_lpoint1[5] - sm_cage_lpoint1[4],
+                sm_cage_lpoint1[6] - sm_cage_lpoint1[4],
+                sm_cage_lpoint1[6] - sm_cage_lpoint1[2],
+                sm_cage_lpoint1[7] - sm_cage_lpoint1[6],
+                sm_cage_lpoint1[7] - sm_cage_lpoint1[5],
+                sm_cage_lpoint1[7] - sm_cage_lpoint1[3]
             );
         }
 
@@ -173,19 +169,17 @@ rendrs::geometry_submission_job! {
         // 5:  x, -y,  z,
         // 6: -x,  y,  z,
         // 7:  x,  y,  z,
-        const uint THREAD_VERTEX_PRINT = 3;
-        const uint THREAD_TRIANGLE_PRINT = 1;
 
         // bind-time basis orthogonal matrix
         mat3 B = mat3(
-            sm_cage_lpoint0[sub_domain][1] - sm_cage_lpoint0[sub_domain][0],
-            sm_cage_lpoint0[sub_domain][2] - sm_cage_lpoint0[sub_domain][0],
-            sm_cage_lpoint0[sub_domain][4] - sm_cage_lpoint0[sub_domain][0]
+            sm_cage_lpoint0[1] - sm_cage_lpoint0[0],
+            sm_cage_lpoint0[2] - sm_cage_lpoint0[0],
+            sm_cage_lpoint0[4] - sm_cage_lpoint0[0]
         );
         float B_det = determinant(B);
         mat3 B_inv = transpose(B); // B is orthogonal, transpose(B) = inverse(B)
 
-        for (uint i = local_thread; i < m_vert_length; i += FRAG_DOMAIN) {
+        for (uint i = local_thread; i < m_vert_length; i += 64) {
             uint m_vert_i = i + m_vert_offset;
             MeshVertex m_vert = eth_vertex_buffer[m_vert_i];
             vec3 m_nor = vec3(m_vert.norm_x, m_vert.norm_y, m_vert.norm_z);
@@ -194,14 +188,13 @@ rendrs::geometry_submission_job! {
 
             // ---- positional deformation ----
 
-            vec3 u_pos = m_pos + sm_cage_pose[sub_domain]; // fragment-local pos
-            vec3 W = abs(B_det) > 0.0001 ?
-                B_inv * (u_pos - sm_cage_lpoint0[sub_domain][0]) : vec3(0.0);
+            vec3 u_pos = m_pos + sm_cage_pose; // fragment-local pos
+            vec3 W = B_inv * (u_pos - sm_cage_lpoint0[0]);
 
-            vec3 rc00  = mix(sm_cage_lpoint1[sub_domain][0], sm_cage_lpoint1[sub_domain][1], W.x);
-            vec3 rc01  = mix(sm_cage_lpoint1[sub_domain][4], sm_cage_lpoint1[sub_domain][5], W.x);
-            vec3 rc10  = mix(sm_cage_lpoint1[sub_domain][2], sm_cage_lpoint1[sub_domain][3], W.x);
-            vec3 rc11  = mix(sm_cage_lpoint1[sub_domain][6], sm_cage_lpoint1[sub_domain][7], W.x);
+            vec3 rc00  = mix(sm_cage_lpoint1[0], sm_cage_lpoint1[1], W.x);
+            vec3 rc01  = mix(sm_cage_lpoint1[4], sm_cage_lpoint1[5], W.x);
+            vec3 rc10  = mix(sm_cage_lpoint1[2], sm_cage_lpoint1[3], W.x);
+            vec3 rc11  = mix(sm_cage_lpoint1[6], sm_cage_lpoint1[7], W.x);
             vec3 rc0   = mix(rc00, rc10, W.y);
             vec3 rc1   = mix(rc01, rc11, W.y);
             vec3 delta = mix(rc0,  rc1,  W.z);
@@ -210,7 +203,7 @@ rendrs::geometry_submission_job! {
 
             // ---- normal derivation ----
 
-            vec3 d_cage_edges[12] = sm_cage_edges[sub_domain];
+            vec3 d_cage_edges[12] = sm_cage_edges;
             vec3 Jx = mix(
                 mix(d_cage_edges[0], d_cage_edges[3], W.y),
                 mix(d_cage_edges[6], d_cage_edges[9], W.y),
@@ -234,15 +227,15 @@ rendrs::geometry_submission_job! {
             vec3 w_nor = normalize(n_W.x * Cx + n_W.y * Cy + n_W.z + Cz);
             vec3 w_tan = vec3(1.0, 0.0, 0.0);
 
-            VertexData(sm_vert_base[sub_domain] + i, w_pos, w_nor, w_tan, m_uv);
+            VertexData(sm_vert_base + i, w_pos, w_nor, w_tan, m_uv);
         }
-        for (uint i = local_thread; i < m_tris_length; i += FRAG_DOMAIN) {
+        for (uint i = local_thread; i < m_tris_length; i += 64) {
             uint m_tri_i = i + m_tris_offset;
             MeshTriangle m_tri = eth_tris_buffer[m_tri_i];
-            uint t_v0 = m_tri.v0 - m_vert_offset + sm_vert_base[sub_domain];
-            uint t_v1 = m_tri.v1 - m_vert_offset + sm_vert_base[sub_domain];
-            uint t_v2 = m_tri.v2 - m_vert_offset + sm_vert_base[sub_domain];
-            TriangleData(sm_tris_base[sub_domain] + i, uint[]( t_v0, t_v1, t_v2 ), fragment_id);
+            uint t_v0 = m_tri.v0 - m_vert_offset + sm_vert_base;
+            uint t_v1 = m_tri.v1 - m_vert_offset + sm_vert_base;
+            uint t_v2 = m_tri.v2 - m_vert_offset + sm_vert_base;
+            TriangleData(sm_tris_base + i, uint[]( t_v0, t_v1, t_v2 ), fragment_id);
         }
         "
     }

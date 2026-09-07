@@ -376,7 +376,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 .cage_deform_compute_pass
                 .execute(section, render_pool, &ctx);
         }
-
         janus::gl::barrier_shader_storage();
 
         self.geometry_bank.bind_data_buffers();
