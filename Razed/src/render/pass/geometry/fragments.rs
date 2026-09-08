@@ -259,7 +259,11 @@ rendrs::geometry_submission_job! {
             vec3 v2_p = vec3(v2.pos_x, v2.pos_y, v2.pos_z);
             vec3 t_n  = cross(v1_p - v0_p, v2_p - v0_p);
 
-            float NdotV = dot(t_n, camera_forward);
+            const float INV3 = 1.0 / 3.0;
+            vec3 t_c = (v0_p + v1_p + v2_p) * INV3;
+            vec3 view_dir = t_c - camera_position;
+
+            float NdotV = dot(t_n, view_dir);
             if (NdotV < 0.0) { // points towards viewpoint
                 tris_prod[t_count] = uvec3( t_v0, t_v1, t_v2 );
                 t_count++;
