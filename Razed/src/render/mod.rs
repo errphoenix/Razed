@@ -387,6 +387,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             let cages_data = &frame_data.cages;
             let cages_map = &frame_data.cage_map;
             let fragments_data = &frame_data.fragments;
+            let view_data = self.view_data;
             let material_registry = self.materials.locations();
 
             self.pipeline().geom_fragments.execute(
@@ -397,6 +398,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     cages_data,
                     cages_map,
                     fragments_data,
+                    view_data,
                     material_registry,
                 },
             );

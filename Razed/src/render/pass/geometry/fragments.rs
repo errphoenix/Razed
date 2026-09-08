@@ -7,7 +7,7 @@ use rendrs::{geometry::DomainData, graphics::material::MaterialLocationRegistry}
 
 use crate::{
     data::{CagePartitionedBuffer, FRAGMENTS_STORAGE_PARTS},
-    render::shader_commons,
+    render::{ViewData, shader_commons},
 };
 
 pub fn geom_fragments_pass() -> FragmentsGeomPass {
@@ -17,12 +17,13 @@ pub fn geom_fragments_pass() -> FragmentsGeomPass {
 pub fn geom_fragments_pass_with_shader(
     shader: ComputeShaderFragmentsGeomSubmit,
 ) -> FragmentsGeomPass {
-    FragmentsGeomPass::new(shader, [], [], |section, _shader, ctx, out| {
+    FragmentsGeomPass::new(shader, [], [], |section, shader, ctx, out| {
         let frag_count = ctx.frag_count;
         let FragmentsGeomCtx {
             cages_data,
             cages_map,
             fragments_data,
+            view_data,
             //material_registry,
             ..
         } = ctx;
@@ -33,6 +34,9 @@ pub fn geom_fragments_pass_with_shader(
         cages_data.bind_ssbo_pod_points_bind(Some(G_FRAGS_SSBO_BIND_POD_CAGES_LPOINTS_BIND));
         cages_map.bind_shader_storage(section, G_FRAGS_SSBO_BIND_IMAP_CAGES, 0);
         fragments_data.bind_shader_storage(section);
+
+        shader.uniform_camera_forward_vec3v([view_data.view_dir]);
+        shader.uniform_camera_position_vec3v([view_data.view_pos]);
 
         let mut i = 0;
         while i < frag_count {
@@ -73,6 +77,10 @@ pub const G_FRAGS_SSBO_BIND_IMAP_CAGES: u32 = ssbo_binding!(IMap_Cages);
 
 rendrs::geometry_submission_job! {
     Fragments => {
+        uniform {
+            length 1, camera_forward: vec3 => glam::Vec3;
+            length 1, camera_position: vec3 => glam::Vec3;
+        }
         type {
             shader_commons::ETH_TYPE_MESH_METADATA
             shader_commons::ETH_TYPE_MESH_VERTEX
@@ -110,6 +118,8 @@ rendrs::geometry_submission_job! {
             cages_map: TriBuffer<DirectIndex>, for 'ctx;
             fragments_data: PartitionedTriBuffer<{ FRAGMENTS_STORAGE_PARTS }>, for 'ctx;
 
+            view_data: ViewData;
+
             // currently unused
             material_registry: MaterialLocationRegistry, for 'ctx;
         }
@@ -130,7 +140,7 @@ rendrs::geometry_submission_job! {
 
         if (local_thread == 0) {
             sm_vert_base = AllocVertex(m_vert_length);
-            sm_tris_base = AllocTriangle(m_tris_length);
+            //sm_tris_base = AllocTriangle(m_tris_length);
 
             IndirectIndex cage_id = pod_cage_id[fragment_id];
             DirectIndex cage_did  = imap_cages[cage_id.index];
@@ -229,13 +239,41 @@ rendrs::geometry_submission_job! {
 
             VertexData(sm_vert_base + i, w_pos, w_nor, w_tan, m_uv);
         }
+
+        uint t_count = 0;
+        uvec3 tris_prod[4];
+
         for (uint i = local_thread; i < m_tris_length; i += 64) {
+            if (t_count == 4) break;
+
             uint m_tri_i = i + m_tris_offset;
             MeshTriangle m_tri = eth_tris_buffer[m_tri_i];
             uint t_v0 = m_tri.v0 - m_vert_offset + sm_vert_base;
             uint t_v1 = m_tri.v1 - m_vert_offset + sm_vert_base;
             uint t_v2 = m_tri.v2 - m_vert_offset + sm_vert_base;
-            TriangleData(sm_tris_base + i, uint[]( t_v0, t_v1, t_v2 ), fragment_id);
+
+            RenderVertex v0 = GetVertex(t_v0);
+            RenderVertex v1 = GetVertex(t_v1);
+            RenderVertex v2 = GetVertex(t_v2);
+            vec3 v0_p = vec3(v0.pos_x, v0.pos_y, v0.pos_z);
+            vec3 v1_p = vec3(v1.pos_x, v1.pos_y, v1.pos_z);
+            vec3 v2_p = vec3(v2.pos_x, v2.pos_y, v2.pos_z);
+            vec3 t_n  = cross(v1_p - v0_p, v2_p - v0_p);
+
+            float NdotV = dot(t_n, camera_forward);
+            if (NdotV < 0.0) { // points towards viewpoint
+                tris_prod[t_count] = uvec3( t_v0, t_v1, t_v2 );
+                t_count++;
+            }
+
+            //TriangleData(sm_tris_base + i, uint[]( t_v0, t_v1, t_v2 ), fragment_id);
+        }
+        if (t_count > 0) {
+            uint tris_base = AllocTriangle(t_count);
+            for (uint i = 0; i < t_count; ++i) {
+                uvec3 tri_i = tris_prod[i];
+                TriangleData(tris_base + i, uint[] ( tri_i.x, tri_i.y, tri_i.z ), fragment_id);
+            }
         }
         "
     }
