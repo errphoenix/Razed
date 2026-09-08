@@ -44,8 +44,8 @@ use crate::{
 pub const DEFAULT_DEPTH_FUNC: u32 = janus::gl::GREATER;
 
 // todo: determine
-pub const GBANK_ALLOC_VERTEX: usize = 2_097_120; //~134mb
-pub const GBANK_ALLOC_TRIANGLE: usize = 786_420;
+pub const GBANK_ALLOC_VERTEX: usize = 1_048_560; //~67mb
+pub const GBANK_ALLOC_TRIANGLE: usize = 1_048_560; //~17mb
 
 #[allow(unused)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
