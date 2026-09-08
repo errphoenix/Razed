@@ -408,21 +408,18 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         rendrs::geometry::barrier_geom_compose();
 
-        unsafe {
-            janus::gl::Finish();
-        }
-
         {
-            let gbank = &self.geometry_bank;
-            let gcounters = unsafe { gbank.gcounter_buffer().view_all() }[0];
+            let gcounters = self.geometry_bank.get_gcounters();
 
-            render_stats.tris_count = gcounters[1];
-            render_stats.gbank_tuse_perc = gcounters[1] as f32 / GBANK_ALLOC_TRIANGLE as f32;
-            render_stats.gbank_vuse_perc = gcounters[0] as f32 / GBANK_ALLOC_VERTEX as f32;
+            render_stats.tris_count = gcounters.triangles();
+            render_stats.gbank_tuse_perc =
+                gcounters.triangles() as f32 / GBANK_ALLOC_TRIANGLE as f32;
+            render_stats.gbank_vuse_perc = gcounters.vertices() as f32 / GBANK_ALLOC_VERTEX as f32;
 
             const V_MPRINT: usize = size_of::<RenderVertex>();
             const T_MPRINT: usize = size_of::<u32>() * 3 + size_of::<TriangleAttribs>();
-            let mprint_bytes = V_MPRINT * gcounters[0] as usize + T_MPRINT * gcounters[1] as usize;
+            let mprint_bytes = V_MPRINT * gcounters.vertices() as usize
+                + T_MPRINT * gcounters.triangles() as usize;
             render_stats.gbank_mprint = mprint_bytes;
 
             frame_data
