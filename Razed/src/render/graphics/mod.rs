@@ -46,3 +46,11 @@ pub struct RenderParams {
     pub gamma: TriCell<Gamma>,
     pub exposure: TriCell<f32>, //todo
 }
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct RenderStats {
+    pub gbank_vuse_perc: f32,
+    pub gbank_tuse_perc: f32,
+    pub gbank_mprint: usize,
+    pub tris_count: u32,
+}

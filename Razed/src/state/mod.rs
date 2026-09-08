@@ -12,8 +12,10 @@ use crate::{
         LayoutXpbdDebugData,
     },
     procedural::{VoxelGrid, VoxelGridOptions},
-    render::RenderGroup,
-    render::graphics::Gamma,
+    render::{
+        RenderGroup,
+        graphics::{Gamma, RenderStats},
+    },
     structure::{
         CageSystem, DebrisSystem, FragmentSystem, FragmentsRowTableView,
         cage::OffsetRotation,
@@ -154,6 +156,9 @@ pub struct State {
     selected_material: u32,
 
     pub frag_meshmap: FxSpatialHash<ethel::mesh::Id>,
+
+    // render stats copy from render thread
+    render_stats_cpy: RenderStats,
 }
 
 const CAMERA_YAW_CLAMP: std::ops::Range<f32> = f32::NEG_INFINITY..f32::INFINITY;
@@ -195,6 +200,7 @@ impl Default for State {
             perf_avg: Default::default(),
             selected_material: 1,
             glyph_pipe: None,
+            render_stats_cpy: RenderStats::default(),
         }
     }
 }
@@ -280,6 +286,9 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             let _ = storage
                 .debug_material_index
                 .set_and_advance(self.selected_material);
+
+            // pull render stats
+            self.render_stats_cpy = storage.render_stats.get();
 
             // upload render params
             {
@@ -799,6 +808,19 @@ impl State {
                 env.insert(DEBUG_COUNTER_FRAGMENTS, fragment_count);
                 env.insert(DEBUG_COUNTER_CAGES, cages_count);
                 env.insert(DEBUG_COUNTER_DEBRIS, debris_count);
+
+                {
+                    let RenderStats {
+                        gbank_vuse_perc,
+                        gbank_tuse_perc,
+                        tris_count,
+                        gbank_mprint,
+                    } = self.render_stats_cpy;
+                    env.insert(DEBUG_RENDER_GBANK_VUSE_PERC, gbank_vuse_perc);
+                    env.insert(DEBUG_RENDER_GBANK_TUSE_PERC, gbank_tuse_perc);
+                    env.insert(DEBUG_RENDER_GBANK_TRIS_COUNT, tris_count);
+                    env.insert(DEBUG_RENDER_GBANK_MEMPRINT, gbank_mprint);
+                }
             }
 
             env.insert(

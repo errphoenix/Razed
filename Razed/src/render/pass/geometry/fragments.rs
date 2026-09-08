@@ -140,7 +140,6 @@ rendrs::geometry_submission_job! {
 
         if (local_thread == 0) {
             sm_vert_base = AllocVertex(m_vert_length);
-            //sm_tris_base = AllocTriangle(m_tris_length);
 
             IndirectIndex cage_id = pod_cage_id[fragment_id];
             DirectIndex cage_did  = imap_cages[cage_id.index];
@@ -265,8 +264,6 @@ rendrs::geometry_submission_job! {
                 tris_prod[t_count] = uvec3( t_v0, t_v1, t_v2 );
                 t_count++;
             }
-
-            //TriangleData(sm_tris_base + i, uint[]( t_v0, t_v1, t_v2 ), fragment_id);
         }
         if (t_count > 0) {
             uint tris_base = AllocTriangle(t_count);

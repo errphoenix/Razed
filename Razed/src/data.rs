@@ -1,7 +1,11 @@
 use std::sync::{Arc, atomic::AtomicU32};
 
 use crate::{
-    render::{self, graphics::RenderParams, pass::CagePoints},
+    render::{
+        self,
+        graphics::{RenderParams, RenderStats},
+        pass::CagePoints,
+    },
     structure::cage::{
         CageSyncFrameBuffers, OffsetRotation, PER_CAGE_MAX_LATTICE_ATTACHMENTS, PER_CAGE_POINTS,
     },
@@ -231,6 +235,7 @@ pub struct FrameDataBuffers {
     pub debug_material_index: TriCell<u32>,
 
     pub render_params: RenderParams,
+    pub render_stats: TriCell<RenderStats>,
 }
 
 impl FrameDataBuffers {
@@ -279,6 +284,7 @@ impl FrameDataBuffers {
             debug_material_index: TriCell::new(0),
 
             render_params: RenderParams::default(),
+            render_stats: TriCell::new(RenderStats::default()),
         }
     }
 }

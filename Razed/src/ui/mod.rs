@@ -268,42 +268,66 @@ fn debug_infopanel(system: &mut InterfaceSystem, root: WidgetId) {
         TextNode::Variable(DEBUG_PERF_TPS_TOTAL),
     ]));
     debug_text(TextContents::from_nodes(&[
-        TextNode::Static("Last SIMUL. frame duration = "),
+        TextNode::Static("Frame::Duration.Simulation = "),
         TextNode::Variable(DEBUG_PERF_LAST_SIMUL_FRAME_TIME_MILLIS),
         TextNode::Static("ms"),
     ]));
     debug_text(TextContents::from_nodes(&[
-        TextNode::Static("Last RENDER frame duration = "),
+        TextNode::Static("Frame::Duration.Render = "),
         TextNode::Variable(DEBUG_PERF_LAST_RENDER_FRAME_TIME_MILLIS),
         TextNode::Static("ms"),
     ]));
     debug_text(TextContents::from_nodes(&[
-        TextNode::Static("Lattice nodes = "),
+        TextNode::Static("World::Lattice.Nodes = "),
         TextNode::Variable(DEBUG_COUNTER_LATTICE_NODES),
     ]));
     debug_text(TextContents::from_nodes(&[
-        TextNode::Static("Lattice constraints = "),
+        TextNode::Static("World::Lattice.Constraints = "),
         TextNode::Variable(DEBUG_COUNTER_LATTICE_CONSTRAINTS),
     ]));
     debug_text(TextContents::from_nodes(&[
-        TextNode::Static("Fragments = "),
+        TextNode::Static("World::Fragments = "),
         TextNode::Variable(DEBUG_COUNTER_FRAGMENTS),
     ]));
     debug_text(TextContents::from_nodes(&[
-        TextNode::Static("Deform. Cages = "),
+        TextNode::Static("World::Cages = "),
         TextNode::Variable(DEBUG_COUNTER_CAGES),
     ]));
     debug_text(TextContents::from_nodes(&[
-        TextNode::Static("Debris = "),
+        TextNode::Static("World::Debris "),
         TextNode::Variable(DEBUG_COUNTER_DEBRIS),
     ]));
     debug_text(TextContents::from_nodes(&[
-        TextNode::Static("Sim::state = "),
+        TextNode::Static("Sim::State = "),
         TextNode::Variable(SIM_CTL_STATE),
     ]));
     debug_text(TextContents::from_nodes(&[
-        TextNode::Static("Sim::speed = "),
+        TextNode::Static("Sim::Speed = "),
         TextNode::Variable(SIM_CTL_SPEED),
+    ]));
+
+    debug_text(TextContents::from_nodes(&[
+        TextNode::Static("GeomBank::VertexUse = "),
+        TextNode::Variable(DEBUG_RENDER_GBANK_VUSE_PERC),
+    ]));
+    debug_text(TextContents::from_nodes(&[
+        TextNode::Static("GeomBank::TrisUse = "),
+        TextNode::Variable(DEBUG_RENDER_GBANK_TUSE_PERC),
+    ]));
+    debug_text(TextContents::from_nodes(&[
+        TextNode::Static("GeomBank::TrisCount/w-cull = "),
+        TextNode::Variable(DEBUG_RENDER_GBANK_TRIS_COUNT),
+    ]));
+    debug_text(TextContents::from_nodes(&[
+        TextNode::Static("GeomBank::MemoryUse = "),
+        TextNode::VariableAnd {
+            env_id: DEBUG_RENDER_GBANK_MEMPRINT,
+            operation: |ev| {
+                let b = ev.as_integer().unwrap_or_default();
+                EnvValue::Float(b as f32 / 1024f32) // convert to kb
+            },
+        },
+        TextNode::Static(" KB"),
     ]));
 }
 
@@ -334,6 +358,15 @@ pub mod env_names {
     pub const DEBUG_COUNTER_FRAGMENTS: StringHash = janus::hash_string("__debug.counter.fragments");
     pub const DEBUG_COUNTER_CAGES: StringHash = janus::hash_string("__debug.counter.cages");
     pub const DEBUG_COUNTER_DEBRIS: StringHash = janus::hash_string("__debug.counter.debris");
+
+    pub const DEBUG_RENDER_GBANK_VUSE_PERC: StringHash =
+        janus::hash_string("__debug.render.gbank.vuse_perc");
+    pub const DEBUG_RENDER_GBANK_TUSE_PERC: StringHash =
+        janus::hash_string("__debug.render.gbank.tuse_perc");
+    pub const DEBUG_RENDER_GBANK_TRIS_COUNT: StringHash =
+        janus::hash_string("__debug.render.gbank.tris_count");
+    pub const DEBUG_RENDER_GBANK_MEMPRINT: StringHash =
+        janus::hash_string("__debug.render.gbank.mem_footprint");
 
     pub const DEBUG_CTL_DISPLAY_VSYNC: StringHash =
         janus::hash_string("__debug.control.display.vsync");

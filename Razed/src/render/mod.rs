@@ -22,7 +22,7 @@ use janus::{
     texture::{ImageFormat, ImageType, MipLevels, Texture, TextureFiltering},
 };
 use rendrs::{
-    geometry::GeometryBank,
+    geometry::{GeometryBank, RenderVertex, TriangleAttribs},
     graphics::{PixelResolution, ShCoeffsBuffer},
     pipeline::{
         ImageObject, OutputObject, Pass, RenderPool, RenderTarget, RenderTargetDescriptor,
@@ -36,7 +36,7 @@ use crate::{
     assets,
     data::FrameDataBuffers,
     render::{
-        graphics::Materials,
+        graphics::{Materials, RenderStats},
         pass::{ShadePbrCtx, geometry::FragmentsGeomCtx},
     },
 };
@@ -354,6 +354,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         let render_pool = &self.render_pool;
         let cage_count = frame_data.cage_points_count.load(Ordering::Acquire);
 
+        let mut render_stats = RenderStats::default();
+
         self.sync_cage_changes(frame_data, section);
 
         // cage deformation (derive cov. + svd) compute pass
@@ -405,6 +407,29 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         }
 
         rendrs::geometry::barrier_geom_compose();
+
+        unsafe {
+            janus::gl::Finish();
+        }
+
+        {
+            let gbank = &self.geometry_bank;
+            let gcounters = unsafe { gbank.gcounter_buffer().view_all() }[0];
+
+            render_stats.tris_count = gcounters[1];
+            render_stats.gbank_tuse_perc = gcounters[1] as f32 / GBANK_ALLOC_TRIANGLE as f32;
+            render_stats.gbank_vuse_perc = gcounters[0] as f32 / GBANK_ALLOC_VERTEX as f32;
+
+            const V_MPRINT: usize = size_of::<RenderVertex>();
+            const T_MPRINT: usize = size_of::<u32>() * 3 + size_of::<TriangleAttribs>();
+            let mprint_bytes = V_MPRINT * gcounters[0] as usize + T_MPRINT * gcounters[1] as usize;
+            render_stats.gbank_mprint = mprint_bytes;
+
+            frame_data
+                .render_stats
+                .set_and_advance(render_stats)
+                .unwrap();
+        }
 
         self.geometry_bank.bind_data_buffers();
         self.geometry_bank.bind_gcounter_buffer();
