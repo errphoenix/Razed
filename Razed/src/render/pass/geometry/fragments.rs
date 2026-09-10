@@ -106,6 +106,8 @@ rendrs::geometry_submission_job! {
             uint sm_vert_base;
             uint sm_tris_base;
 
+            mat3 sm_cage_B;
+            mat3 sm_cage_B_inv;
             vec3 sm_cage_pose;
             vec3 sm_cage_lpoint0[8];
             vec3 sm_cage_lpoint1[8];
@@ -145,11 +147,20 @@ rendrs::geometry_submission_job! {
             DirectIndex cage_did  = imap_cages[cage_id.index];
             uint cage_index       = cage_did.index;
 
-            sm_cage_pose = pod_bind_pose[fragment_id].xyz;
             for (uint i = 0; i < 8; ++i) {
                 sm_cage_lpoint0[i] = pod_cages_localpoints_bind[cage_index][i].xyz;
                 sm_cage_lpoint1[i] = pod_cages_localpoints[cage_index][i].xyz;
             }
+            sm_cage_pose = pod_bind_pose[fragment_id].xyz;
+
+            // bind-time basis orthogonal matrix
+            mat3 B = mat3(
+                sm_cage_lpoint0[1] - sm_cage_lpoint0[0],
+                sm_cage_lpoint0[2] - sm_cage_lpoint0[0],
+                sm_cage_lpoint0[4] - sm_cage_lpoint0[0]
+            );
+            sm_cage_B = B;
+            sm_cage_B_inv = inverse(B); // B is NOT orthogonal
 
             sm_cage_edges = vec3[](
                 sm_cage_lpoint1[1] - sm_cage_lpoint1[0],
@@ -179,15 +190,6 @@ rendrs::geometry_submission_job! {
         // 6: -x,  y,  z,
         // 7:  x,  y,  z,
 
-        // bind-time basis orthogonal matrix
-        mat3 B = mat3(
-            sm_cage_lpoint0[1] - sm_cage_lpoint0[0],
-            sm_cage_lpoint0[2] - sm_cage_lpoint0[0],
-            sm_cage_lpoint0[4] - sm_cage_lpoint0[0]
-        );
-        float B_det = determinant(B);
-        mat3 B_inv = transpose(B); // B is orthogonal, transpose(B) = inverse(B)
-
         for (uint i = local_thread; i < m_vert_length; i += 64) {
             uint m_vert_i = i + m_vert_offset;
             MeshVertex m_vert = eth_vertex_buffer[m_vert_i];
@@ -198,7 +200,7 @@ rendrs::geometry_submission_job! {
             // ---- positional deformation ----
 
             vec3 u_pos = m_pos + sm_cage_pose; // fragment-local pos
-            vec3 W = B_inv * (u_pos - sm_cage_lpoint0[0]);
+            vec3 W = sm_cage_B_inv * (u_pos - sm_cage_lpoint0[0]);
 
             vec3 rc00  = mix(sm_cage_lpoint1[0], sm_cage_lpoint1[1], W.x);
             vec3 rc01  = mix(sm_cage_lpoint1[4], sm_cage_lpoint1[5], W.x);
@@ -228,7 +230,7 @@ rendrs::geometry_submission_job! {
                 mix(d_cage_edges[8], d_cage_edges[11], W.x),
                 W.y
             );
-            vec3 n_W = m_nor * B;
+            vec3 n_W = m_nor * sm_cage_B;
             vec3 Cx  = cross(Jy, Jz);
             vec3 Cy  = cross(Jz, Jx);
             vec3 Cz  = cross(Jx, Jy);
@@ -238,6 +240,8 @@ rendrs::geometry_submission_job! {
 
             VertexData(sm_vert_base + i, w_pos, w_nor, w_tan, m_uv);
         }
+
+        barrier();
 
         uint t_count = 0;
         uvec3 tris_prod[4];
