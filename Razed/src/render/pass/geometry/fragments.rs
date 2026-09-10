@@ -208,7 +208,7 @@ rendrs::geometry_submission_job! {
             vec3 rc1   = mix(rc01, rc11, W.y);
             vec3 delta = mix(rc0,  rc1,  W.z);
 
-            vec3 w_pos = u_pos;
+            vec3 w_pos = u_pos + delta;
 
             // ---- normal derivation ----
 
@@ -233,7 +233,7 @@ rendrs::geometry_submission_job! {
             vec3 Cy  = cross(Jz, Jx);
             vec3 Cz  = cross(Jx, Jy);
 
-            vec3 w_nor = normalize(n_W.x * Cx + n_W.y * Cy + n_W.z + Cz);
+            vec3 w_nor = normalize(n_W.x * Cx + n_W.y * Cy + n_W.z * Cz);
             vec3 w_tan = vec3(1.0, 0.0, 0.0);
 
             VertexData(sm_vert_base + i, w_pos, w_nor, w_tan, m_uv);
