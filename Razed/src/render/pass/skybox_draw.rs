@@ -27,7 +27,7 @@ pub const fn pass(
     )
 }
 
-pub const SAMPLER_UNIT_ENVMAP: u32 = 0;
+pub const SAMPLER_UNIT_ENVMAP: u32 = 8;
 
 ethel::shader_glsl! {
     struct Skybox > [460] {

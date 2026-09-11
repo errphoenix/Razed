@@ -6,12 +6,14 @@ use rendrs::{
 
 use crate::render::ViewData;
 
-pub type ShadePbrPass = ComputePass<ShadePbrCtxWrapper, 0, 2>;
+pub type ShadePbrPass = ComputePass<ShadePbrCtxWrapper, 0, 4>;
 
 pub const fn shade_pbr_pass(
     shader: &ComputeShaderShadePbr,
     raster_in: ImageObject,
     shade_out: ImageObject,
+    attr_frame_in: ImageObject,
+    attr_grads_in: ImageObject,
 ) -> ShadePbrPass {
     let handle_view = shader.compute_handle().view();
     let raster_in = ImageObjectTarget::new(
@@ -26,24 +28,41 @@ pub const fn shade_pbr_pass(
         IMAGE_BIND_SHADE_OUT,
         None,
     );
-    ShadePbrPass::new(handle_view, [], [raster_in, shade_out], |_, ctx| {
-        let ShadePbrCtx {
-            shader,
-            resolution,
-            view_data,
-            //dev_mat_page,
-            ..
-        } = ctx;
+    let attr_frame_in = ImageObjectTarget::new(
+        attr_frame_in,
+        ImageAccessKind::ReadOnly,
+        IMAGE_BIND_ATTR_FRAME_IN,
+        None,
+    );
+    let attr_grads_in = ImageObjectTarget::new(
+        attr_grads_in,
+        ImageAccessKind::ReadOnly,
+        IMAGE_BIND_ATTR_GRADS_IN,
+        None,
+    );
+    ShadePbrPass::new(
+        handle_view,
+        [],
+        [raster_in, shade_out, attr_frame_in, attr_grads_in],
+        |_, ctx| {
+            let ShadePbrCtx {
+                shader,
+                resolution,
+                view_data,
+                //dev_mat_page,
+                ..
+            } = ctx;
 
-        shader.uniform_resolution_uvec2v([[resolution.width(), resolution.height()]]);
-        shader.uniform_camera_position_vec3v([view_data.view_pos]);
-        shader.uniform_camera_forward_vec3v([view_data.view_dir]);
-        //shader.uniform_dev_material_pages_uintv(*dev_mat_page);
+            shader.uniform_resolution_uvec2v([[resolution.width(), resolution.height()]]);
+            shader.uniform_camera_position_vec3v([view_data.view_pos]);
+            shader.uniform_camera_forward_vec3v([view_data.view_dir]);
+            //shader.uniform_dev_material_pages_uintv(*dev_mat_page);
 
-        let wg_x = resolution.width().div_ceil(WORKGROUP_SIZE_XY);
-        let wg_y = resolution.height().div_ceil(WORKGROUP_SIZE_XY);
-        [wg_x, wg_y, 1]
-    })
+            let wg_x = resolution.width().div_ceil(WORKGROUP_SIZE_XY);
+            let wg_y = resolution.height().div_ceil(WORKGROUP_SIZE_XY);
+            [wg_x, wg_y, 1]
+        },
+    )
 }
 
 #[derive(Debug)]
@@ -60,8 +79,10 @@ pub struct ShadePbrCtx<'ctx> {
 }
 rendrs::context_wrapper!(for<'ctx> ShadePbrCtx);
 
-pub const IMAGE_BIND_RASTER_IN: u32 = 0;
-pub const IMAGE_BIND_SHADE_OUT: u32 = 1;
+pub const IMAGE_BIND_RASTER_IN: u32 = 10;
+pub const IMAGE_BIND_SHADE_OUT: u32 = 11;
+pub const IMAGE_BIND_ATTR_FRAME_IN: u32 = 12;
+pub const IMAGE_BIND_ATTR_GRADS_IN: u32 = 13;
 
 pub const WORKGROUP_SIZE_XY: u32 = 8;
 
@@ -83,6 +104,14 @@ ethel::shader_glsl_compute! {
         image {
             on IMAGE_BIND_RASTER_IN => raster_in : uimage2D as rg32ui  readonly;
             on IMAGE_BIND_SHADE_OUT => shade_out : image2D as rgba16f writeonly;
+
+            on IMAGE_BIND_ATTR_FRAME_IN => attr_frame_in : image2D as rgba16  readonly;
+            on IMAGE_BIND_ATTR_GRADS_IN => attr_grads_in : image2D as rgba16f readonly;
+        };
+        lib {
+            rendrs::pack::PACK_OCTAHEDRON_DECODE;
+            rendrs::geometry::rasterize::LIB_UTIL_FRAMESPACE_GET_NORMAL;
+            rendrs::geometry::rasterize::LIB_UTIL_FRAMESPACE_GET_BWEIGHTS;
         };
 
         src() {

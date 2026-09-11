@@ -76,14 +76,21 @@ impl DrawGroups for RenderGroup {
 #[derive(Debug, Clone, Copy)]
 pub struct RenderTargetHandles {
     geom_raster: RenderTargetId,
+    attr_spaceframe: RenderTargetId,
+    attr_gradients: RenderTargetId,
+
     hdr_base: RenderTargetId,
     base_depth: RenderTargetId,
     ldr_mapped: RenderTargetId,
 }
 #[allow(unused)]
 impl RenderTargetHandles {
-    pub const fn geom_raster(&self) -> RenderTargetId {
-        self.geom_raster
+    pub const fn attr_spaceframe(&self) -> RenderTargetId {
+        self.attr_spaceframe
+    }
+
+    pub const fn attr_gradients(&self) -> RenderTargetId {
+        self.attr_gradients
     }
 
     pub const fn hdr_base(&self) -> RenderTargetId {
@@ -128,8 +135,9 @@ pub struct RenderPipeline {
     // geometry composition
     geom_fragments: pass::geometry::FragmentsGeomPass,
 
-    // geometry rasterization
+    // geometry rasterization & attrib. interpolation
     geom_rasterize: rendrs::geometry::GeomRasterizePass,
+    attr_interp: rendrs::geometry::AttribInterpolationPass,
 
     // shading
     shade_pbr: pass::ShadePbrPass,
@@ -156,8 +164,9 @@ impl RenderPipeline {
         // geometry composition
         self.geom_fragments.revalidate(render_pool);
 
-        // geometry rasterization
+        // geometry rasterization & attrib. interpolation
         self.geom_rasterize.revalidate(render_pool);
+        self.attr_interp.revalidate(render_pool);
 
         // shading
         self.shade_pbr.revalidate(render_pool);
@@ -445,6 +454,19 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         //todo: determine sync point in pipeline
         rendrs::geometry::barrier_geom_rasterize();
+        janus::gl::barrier_texture_fetch();
+
+        rendrs::framebuffer::bind_default();
+
+        self.pipeline().attr_interp.execute(
+            render_pool,
+            self.resolution,
+            &self.geometry_bank,
+            self.view_data.proj_mat,
+            self.view_data.view_mat,
+        );
+
+        rendrs::geometry::barrier_geom_attrib_interp();
 
         {
             let shader = &self.shaders.shade_pbr;
@@ -546,16 +568,20 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             let dev_materials = &self.materials.groups().dev;
             let skybox_sampler = self.persistent_samplers().dev_env_fullscale();
 
-            let (base_hdr, base_depth, mapped_ldr, goem_raster) = {
+            let (base_hdr, base_depth, mapped_ldr, geom_raster, attr_spaceframe, attr_gradients) = {
                 let id_hdr = self.render_target_handles().hdr_base;
                 let id_depth = self.render_target_handles().base_depth;
                 let id_ldr = self.render_target_handles().ldr_mapped;
                 let id_raster = self.render_target_handles().geom_raster;
+                let id_attr_spaceframe = self.render_target_handles().attr_spaceframe;
+                let id_attr_gradients = self.render_target_handles().attr_gradients;
                 (
                     self.render_pool.accessor(id_hdr).unwrap(),
                     self.render_pool.accessor(id_depth).unwrap(),
                     self.render_pool.accessor(id_ldr).unwrap(),
                     self.render_pool.accessor(id_raster).unwrap(),
+                    self.render_pool.accessor(id_attr_spaceframe).unwrap(),
+                    self.render_pool.accessor(id_attr_gradients).unwrap(),
                 )
             };
 
@@ -576,14 +602,21 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 geom_fragments: pass::geometry::geom_fragments_pass(),
 
                 geom_rasterize: rendrs::geometry::GeomRasterizePass::new(
-                    OutputObject::Color(goem_raster),
+                    OutputObject::Color(geom_raster),
                     OutputObject::Depth(base_depth),
+                ),
+                attr_interp: rendrs::geometry::AttribInterpolationPass::new(
+                    ImageObject::PoolTarget(geom_raster),
+                    ImageObject::PoolTarget(attr_spaceframe),
+                    ImageObject::PoolTarget(attr_gradients),
                 ),
 
                 shade_pbr: pass::shade_pbr_pass(
                     &self.shaders.shade_pbr,
-                    ImageObject::PoolTarget(goem_raster),
+                    ImageObject::PoolTarget(geom_raster),
                     ImageObject::PoolTarget(base_hdr),
+                    ImageObject::PoolTarget(attr_spaceframe),
+                    ImageObject::PoolTarget(attr_gradients),
                 ),
                 skybox_draw_pass: pass::skybox_draw::pass(
                     &self.shaders.skybox,
@@ -697,15 +730,23 @@ impl Renderer {
             resolution,
         ));
 
-        let geom_raster = rendrs::geometry::geom_rasterize_target(resolution, 1.0);
-        let geom_raster = self.render_pool.add(geom_raster);
+        self.target_handles =
+            Some(RenderTargetHandles {
+                hdr_base,
+                base_depth,
+                ldr_mapped,
 
-        self.target_handles = Some(RenderTargetHandles {
-            geom_raster,
-            hdr_base,
-            base_depth,
-            ldr_mapped,
-        });
+                geom_raster: self
+                    .render_pool
+                    .add(rendrs::geometry::geom_rasterize_target(resolution, 1.0)),
+
+                attr_spaceframe: self.render_pool.add(
+                    rendrs::geometry::geom_attribs_framespace_target(resolution, 1.0),
+                ),
+                attr_gradients: self.render_pool.add(
+                    rendrs::geometry::geom_attribs_gradients_target(resolution, 1.0),
+                ),
+            });
     }
 
     fn setup_debug_lines(&mut self, view: &TriCell<ViewPoint>) {

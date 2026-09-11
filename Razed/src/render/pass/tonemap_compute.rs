@@ -58,8 +58,8 @@ pub const fn pass(
     )
 }
 
-pub const IMAGE_BINDING_SRC: u32 = 0;
-pub const IMAGE_BINDING_DST: u32 = 1;
+pub const IMAGE_BINDING_SRC: u32 = 6;
+pub const IMAGE_BINDING_DST: u32 = 7;
 pub const WORKGROUP_SIZE_XY: u32 = 8;
 
 ethel::shader_glsl_compute! {
