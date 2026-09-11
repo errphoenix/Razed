@@ -4,7 +4,7 @@ use crate::{
     render::{
         self,
         graphics::{RenderParams, RenderStats},
-        pass::CagePoints,
+        pass::{CagePoints, ShadeDebugAttribsMode},
     },
     structure::cage::{
         CageSyncFrameBuffers, OffsetRotation, PER_CAGE_MAX_LATTICE_ATTACHMENTS, PER_CAGE_POINTS,
@@ -234,6 +234,7 @@ pub struct FrameDataBuffers {
 
     pub debug_material_index: TriCell<u32>,
 
+    pub debug_render_mode: Option<ShadeDebugAttribsMode>,
     pub render_params: RenderParams,
     pub render_stats: TriCell<RenderStats>,
 }
@@ -282,7 +283,7 @@ impl FrameDataBuffers {
             render_frame_last_duration: TriCell::new(DeltaTime::default()),
 
             debug_material_index: TriCell::new(0),
-
+            debug_render_mode: None,
             render_params: RenderParams::default(),
             render_stats: TriCell::new(RenderStats::default()),
         }

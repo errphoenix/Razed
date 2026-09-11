@@ -37,7 +37,9 @@ use crate::{
     data::FrameDataBuffers,
     render::{
         graphics::{Materials, RenderStats},
-        pass::{ShadePbrCtx, geometry::FragmentsGeomCtx},
+        pass::{
+            ShadeDebugAttribsCtx, ShadeDebugAttribsMode, ShadePbrCtx, geometry::FragmentsGeomCtx,
+        },
     },
 };
 
@@ -141,6 +143,7 @@ pub struct RenderPipeline {
 
     // shading
     shade_pbr: pass::ShadePbrPass,
+    shade_debug_attrib: pass::ShadeDebugAttribsPass,
     skybox_draw_pass: pass::SkyboxDrawPass,
 
     // post vfx
@@ -170,6 +173,7 @@ impl RenderPipeline {
 
         // shading
         self.shade_pbr.revalidate(render_pool);
+        self.shade_debug_attrib.revalidate(render_pool);
         self.skybox_draw_pass.revalidate(render_pool);
 
         // post vfx
@@ -205,6 +209,7 @@ impl Default for PersistentShaderBuffers {
 #[derive(Debug, Default)]
 pub struct RenderShaders {
     shade_pbr: pass::ComputeShaderShadePbr,
+    shade_debug_attrib: pass::ComputeShaderShadeDebugAttribs,
 
     skybox: pass::ShaderSkybox,
 
@@ -469,23 +474,42 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         rendrs::geometry::barrier_geom_attrib_interp();
 
         {
-            let shader = &self.shaders.shade_pbr;
             let resolution = self.resolution;
             let view_data = self.view_data;
-            let dev_mat_page = {
-                let mat_id = frame_data.debug_material_index.get();
-                [mat_id * 3, mat_id * 3 + 1, mat_id * 3 + 2]
-            };
-            self.pipeline().shade_pbr.execute(
-                section,
-                render_pool,
-                &ShadePbrCtx {
-                    shader,
-                    resolution,
-                    view_data,
-                    dev_mat_page,
-                },
-            );
+
+            let render_mode = frame_data.debug_render_mode;
+            match render_mode {
+                None => {
+                    let shader = &self.shaders.shade_pbr;
+                    let dev_mat_page = {
+                        let mat_id = frame_data.debug_material_index.get();
+                        [mat_id * 3, mat_id * 3 + 1, mat_id * 3 + 2]
+                    };
+                    self.pipeline().shade_pbr.execute(
+                        section,
+                        render_pool,
+                        &ShadePbrCtx {
+                            shader,
+                            resolution,
+                            view_data,
+                            dev_mat_page,
+                        },
+                    );
+                }
+                Some(mode) => {
+                    let shader = &self.shaders.shade_debug_attrib;
+                    self.pipeline().shade_debug_attrib.execute(
+                        section,
+                        render_pool,
+                        &ShadeDebugAttribsCtx {
+                            shader,
+                            resolution,
+                            view_data,
+                            mode,
+                        },
+                    );
+                }
+            }
         }
 
         // skybox draw pass
@@ -618,6 +642,13 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     ImageObject::PoolTarget(attr_spaceframe),
                     ImageObject::PoolTarget(attr_gradients),
                 ),
+                shade_debug_attrib: pass::shade_debug_attribs_pass(
+                    &self.shaders.shade_debug_attrib,
+                    ImageObject::PoolTarget(geom_raster),
+                    ImageObject::PoolTarget(base_hdr),
+                    ImageObject::PoolTarget(attr_spaceframe),
+                    ImageObject::PoolTarget(attr_gradients),
+                ),
                 skybox_draw_pass: pass::skybox_draw::pass(
                     &self.shaders.skybox,
                     skybox_sampler,
@@ -678,6 +709,7 @@ impl Renderer {
 
     fn initialize_shaders(&mut self) {
         self.shaders.shade_pbr = pass::ComputeShaderShadePbr::new_compiled();
+        self.shaders.shade_debug_attrib = pass::ComputeShaderShadeDebugAttribs::new_compiled();
         self.shaders.skybox = pass::ShaderSkybox::new_compiled();
 
         self.shaders.vfx_tonemap = pass::ComputeShaderTonemap::new_compiled();
