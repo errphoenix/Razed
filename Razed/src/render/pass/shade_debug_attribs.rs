@@ -72,6 +72,17 @@ pub enum ShadeDebugAttribsMode {
     UvScreenDerivatives = 2,
     VisibilityBuffer = 3,
 }
+impl ShadeDebugAttribsMode {
+    pub const fn try_from_id(id: u32) -> Option<Self> {
+        match id {
+            0 => Some(Self::BarycentricWeights),
+            1 => Some(Self::PerspectiveNormals),
+            2 => Some(Self::UvScreenDerivatives),
+            3 => Some(Self::VisibilityBuffer),
+            _ => None,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct ShadeDebugAttribsCtx<'ctx> {
@@ -136,7 +147,7 @@ ethel::shader_glsl_compute! {
                     v_output.rgb = rendrs_FrameSpace_GetBWeights(S_framespace);
                     break;
                 case 1:
-                    v_output.rgb = rendrs_FrameSpace_GetNormals(S_framespace);
+                    v_output.rgb = rendrs_FrameSpace_GetNormal(S_framespace);
                     break;
                 case 2:
                     v_output = S_gradients;

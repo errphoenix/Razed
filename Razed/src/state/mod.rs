@@ -15,6 +15,7 @@ use crate::{
     render::{
         RenderGroup,
         graphics::{Gamma, RenderStats},
+        pass::ShadeDebugAttribsMode,
     },
     structure::{
         CageSystem, DebrisSystem, FragmentSystem, FragmentsRowTableView,
@@ -153,10 +154,10 @@ pub struct State {
     selection: Option<IndirectIndex>,
     dead_fragments: Vec<IndirectIndex>,
 
-    selected_material: u32,
-
     pub frag_meshmap: FxSpatialHash<ethel::mesh::Id>,
 
+    selected_material: u32,
+    debug_shading_mode: Option<ShadeDebugAttribsMode>,
     // render stats copy from render thread
     render_stats_cpy: RenderStats,
 }
@@ -198,8 +199,9 @@ impl Default for State {
             glyph_atlas: Default::default(),
             render_frame_time: Default::default(),
             perf_avg: Default::default(),
-            selected_material: 1,
             glyph_pipe: None,
+            selected_material: 1,
+            debug_shading_mode: None,
             render_stats_cpy: RenderStats::default(),
         }
     }
@@ -290,8 +292,12 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             // pull render stats
             self.render_stats_cpy = storage.render_stats.get();
 
-            // upload render params
+            // upload render params, other opts
             {
+                storage
+                    .debug_shading_mode
+                    .set_and_advance(self.debug_shading_mode);
+
                 let render_params = &storage.render_params;
 
                 use crate::ui::env_names::*;
@@ -786,6 +792,19 @@ impl State {
             if self.first_frame {
                 env.insert(DEBUG_CTL_DISPLAY_VSYNC, true);
                 env.insert(DEBUG_CTL_GRAPHICS_GAMMA, Gamma::DEFAULT_NORMALIZED);
+                env.insert(DEBUG_CTL_SHADE_MODE, 0);
+            } else {
+                let shade_mode = env
+                    .get(&DEBUG_CTL_SHADE_MODE)
+                    .map(|var| var.as_integer().unwrap_or_default())
+                    .unwrap_or_default();
+
+                match shade_mode {
+                    0 => self.debug_shading_mode = None,
+                    set => {
+                        self.debug_shading_mode = ShadeDebugAttribsMode::try_from_id(set as u32 - 1)
+                    }
+                }
             }
 
             if self.perf_avg.update() {

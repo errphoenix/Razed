@@ -477,7 +477,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             let resolution = self.resolution;
             let view_data = self.view_data;
 
-            let render_mode = frame_data.debug_render_mode;
+            let render_mode = frame_data.debug_shading_mode.get();
             match render_mode {
                 None => {
                     let shader = &self.shaders.shade_pbr;

@@ -22,6 +22,9 @@ use crate::{
     ui::{env_names::*, widget_names::*},
 };
 
+pub mod ctlpanel;
+pub mod infopanel;
+
 pub const COLORTINT_HOVER_INVARIANT: glam::Vec4 = glam::vec4(0f32, 0f32, 0f32, 1f32);
 
 pub fn initialize_default(
@@ -62,128 +65,10 @@ pub fn initialize_default(
         .unwrap()
         .0;
 
-    debug_infopanel(&mut system, root);
-    debug_ctlpanel(&mut system, root, &mut map);
+    infopanel::root(&mut system, root);
+    ctlpanel::root(&mut system, root, &mut map);
 
     (system, map)
-}
-
-fn debug_ctlpanel(
-    system: &mut InterfaceSystem,
-    root: WidgetId,
-    map: &mut StringMap<(WidgetId, IndirectIndex)>,
-) {
-    let debug_panel = system
-        .create_element(ElementParams::Panel(
-            CoreElementParams {
-                parent: Some(root),
-                children: None,
-                layout_options: LayoutOptions {
-                    container: ContainerLayout::Flexbox {
-                        direction: FlexDirection::Column,
-                        wrap: Wrap::Wrap,
-                        justify_content: ContentAlignment::Stretch,
-                        align_content: ContentAlignment::Stretch,
-                        align_items: ItemAlignment::Stretch,
-                    },
-                    justify_self: ItemAlignment::Center,
-                    align_self: ItemAlignment::End,
-                    layout_position: LayoutPosition::Relative,
-                    size: Some(Point {
-                        x: Value::Absolute(400f32),
-                        y: Value::Absolute(340f32),
-                    }),
-                    margin: Some(Rectangle::splat(Value::Absolute(8f32))),
-                    ..Default::default()
-                },
-                layer: 5,
-            },
-            Default::default(),
-        ))
-        .unwrap()
-        .0;
-
-    let params_dbg_button =
-        |text: &'static str, cb: InteractableCallback<InteractionTime>| ButtonParams {
-            text: TextParams {
-                contents: TextContents::from_node(TextNode::Static(text)),
-                never_invalidate: true,
-                ..Default::default()
-            },
-            bg_color: glam::Vec3::ZERO,
-            bg_hover_tint: COLORTINT_HOVER_INVARIANT,
-            bg_press_tint: COLORTINT_HOVER_INVARIANT,
-            callback: cb,
-        };
-
-    let dbg_button_vsync = system
-        .create_element(ElementParams::Button(
-            CoreElementParams {
-                parent: Some(debug_panel),
-                children: None,
-                layout_options: LayoutOptions {
-                    align_self: ItemAlignment::Start,
-                    justify_self: ItemAlignment::Start,
-                    ..Default::default()
-                },
-                layer: 5,
-            },
-            params_dbg_button(
-                "V-SYNC",
-                InteractableCallback::Once(|env, _time| {
-                    if let Some(vsync) = env.get_mut(&env_names::DEBUG_CTL_DISPLAY_VSYNC) {
-                        let v = vsync.as_boolean_mut().unwrap();
-                        *v = !*v;
-                    }
-                }),
-            ),
-        ))
-        .unwrap();
-    map.insert(DEBUG_CTL_VSYNC_BUTTON, dbg_button_vsync);
-
-    system
-        .create_element(ElementParams::Slider(
-            CoreElementParams {
-                parent: Some(debug_panel),
-                children: None,
-                layout_options: LayoutOptions {
-                    size: Some(Point::new(Value::Absolute(256.0), Value::Absolute(16.0))),
-                    padding: Some(Rectangle::new(
-                        Value::Absolute(0f32),
-                        Value::Absolute(8f32),
-                        Value::Absolute(0f32),
-                        Value::Absolute(8f32),
-                    )),
-                    ..Default::default()
-                },
-                layer: 5,
-            },
-            SliderParams {
-                text: Some(TextParams {
-                    contents: TextContents::from_nodes(&[
-                        TextNode::Static("graphics.gamma = "),
-                        TextNode::VariableAnd {
-                            env_id: DEBUG_CTL_GRAPHICS_GAMMA,
-                            operation: |value| {
-                                let gamma_norm = value.as_float().unwrap_or_default();
-                                let gamma_param = Gamma::from_normalized(gamma_norm);
-                                EnvValue::Float(gamma_param.as_f32())
-                            },
-                        },
-                    ]),
-                    ..Default::default()
-                }),
-
-                value_init: graphics::Gamma::DEFAULT_NORMALIZED,
-                value_sync_handle: Some(DEBUG_CTL_GRAPHICS_GAMMA),
-                callback: InteractableCallback::Repeating(|env, v| {
-                    env.insert(DEBUG_CTL_GRAPHICS_GAMMA, *v);
-                }),
-
-                ..Default::default()
-            },
-        ))
-        .unwrap();
 }
 
 pub(crate) fn button_color_state(
@@ -201,134 +86,6 @@ pub(crate) fn button_color_state(
             }
         }
     });
-}
-
-fn debug_infopanel(system: &mut InterfaceSystem, root: WidgetId) {
-    let debug_panel = system
-        .create_element(ElementParams::Panel(
-            CoreElementParams {
-                parent: Some(root),
-                children: None,
-                layout_options: LayoutOptions {
-                    container: ContainerLayout::Flexbox {
-                        direction: FlexDirection::Column,
-                        wrap: Wrap::Wrap,
-                        justify_content: ContentAlignment::Stretch,
-                        align_content: ContentAlignment::Stretch,
-                        align_items: ItemAlignment::Stretch,
-                    },
-                    justify_self: ItemAlignment::Start,
-                    align_self: ItemAlignment::Start,
-                    layout_position: LayoutPosition::Absolute {
-                        x: Some(Value::Absolute(8f32)),
-                        y: Some(Value::Absolute(8f32)),
-                    },
-                    size: Some(Point {
-                        x: Value::Absolute(840f32),
-                        y: Value::Absolute(420f32),
-                    }),
-                    padding: Some(Rectangle::splat(Value::Absolute(10f32))),
-                    ..Default::default()
-                },
-                layer: 5,
-            },
-            Default::default(),
-        ))
-        .unwrap()
-        .0;
-
-    let mut debug_text = |contents: TextContents| {
-        system
-            .create_element(ElementParams::Text(
-                CoreElementParams {
-                    parent: Some(debug_panel),
-                    children: None,
-                    layout_options: LayoutOptions {
-                        align_self: ItemAlignment::Stretch,
-                        ..Default::default()
-                    },
-                    layer: 5,
-                },
-                TextParams {
-                    contents,
-                    font_size: 16f32,
-                    line_height: 18f32,
-                    ..Default::default()
-                },
-            ))
-            .unwrap();
-    };
-
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("FPS = "),
-        TextNode::Variable(DEBUG_PERF_FPS_AVG),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("TPS = "),
-        TextNode::Variable(DEBUG_PERF_TPS_TOTAL),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("Frame::Duration.Simulation = "),
-        TextNode::Variable(DEBUG_PERF_LAST_SIMUL_FRAME_TIME_MILLIS),
-        TextNode::Static("ms"),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("Frame::Duration.Render = "),
-        TextNode::Variable(DEBUG_PERF_LAST_RENDER_FRAME_TIME_MILLIS),
-        TextNode::Static("ms"),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("World::Lattice.Nodes = "),
-        TextNode::Variable(DEBUG_COUNTER_LATTICE_NODES),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("World::Lattice.Constraints = "),
-        TextNode::Variable(DEBUG_COUNTER_LATTICE_CONSTRAINTS),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("World::Fragments = "),
-        TextNode::Variable(DEBUG_COUNTER_FRAGMENTS),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("World::Cages = "),
-        TextNode::Variable(DEBUG_COUNTER_CAGES),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("World::Debris "),
-        TextNode::Variable(DEBUG_COUNTER_DEBRIS),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("Sim::State = "),
-        TextNode::Variable(SIM_CTL_STATE),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("Sim::Speed = "),
-        TextNode::Variable(SIM_CTL_SPEED),
-    ]));
-
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("GeomBank::VertexUse = "),
-        TextNode::Variable(DEBUG_RENDER_GBANK_VUSE_PERC),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("GeomBank::TrisUse = "),
-        TextNode::Variable(DEBUG_RENDER_GBANK_TUSE_PERC),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("GeomBank::TrisCount/w-cull = "),
-        TextNode::Variable(DEBUG_RENDER_GBANK_TRIS_COUNT),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("GeomBank::MemoryUse = "),
-        TextNode::VariableAnd {
-            env_id: DEBUG_RENDER_GBANK_MEMPRINT,
-            operation: |ev| {
-                let b = ev.as_integer().unwrap_or_default();
-                EnvValue::Float(b as f32 / 1024f32) // convert to kb
-            },
-        },
-        TextNode::Static(" KB"),
-    ]));
 }
 
 pub mod widget_names {
@@ -372,4 +129,6 @@ pub mod env_names {
         janus::hash_string("__debug.control.display.vsync");
     pub const DEBUG_CTL_GRAPHICS_GAMMA: StringHash =
         janus::hash_string("__debug.control.graphics.gamma");
+
+    pub const DEBUG_CTL_SHADE_MODE: StringHash = janus::hash_string("__debug.control.shading.mode");
 }
