@@ -11,6 +11,10 @@ use crate::{
 };
 
 pub fn geom_fragments_pass() -> FragmentsGeomPass {
+    std::fs::write(
+        "shaders.dev/geoc_fragments.comp",
+        ComputeShaderFragmentsGeomSubmit::build_sources(),
+    );
     geom_fragments_pass_with_shader(ComputeShaderFragmentsGeomSubmit::new_compiled())
 }
 
@@ -77,6 +81,11 @@ pub const G_FRAGS_SSBO_BIND_IMAP_CAGES: u32 = ssbo_binding!(IMap_Cages);
 
 rendrs::geometry_submission_job! {
     Fragments => {
+        source {
+            vertex => super::VertexBuffers;
+            triangle => super::TriangleBuffers;
+        };
+
         uniform {
             length 1, camera_forward: vec3 => glam::Vec3;
             length 1, camera_position: vec3 => glam::Vec3;

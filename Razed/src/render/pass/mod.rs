@@ -11,8 +11,6 @@ pub mod tonemap_compute;
 pub mod shade_debug_attribs;
 pub mod shade_pbr;
 
-pub mod geometry;
-
 #[cfg(feature = "devmode")]
 pub mod debug_lines_draw;
 
