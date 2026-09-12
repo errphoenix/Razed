@@ -74,7 +74,6 @@ fn main() {
 
             let (raster_tx, raster_rx) = crossbeam::channel::unbounded();
 
-            let vao = renderer.internal_vao();
             renderer.handler_init_callback(|handle| {
                 handle.textures_master_registry = textures_master_registry;
 
@@ -93,13 +92,7 @@ fn main() {
 
                 handle.glyph_pipe = Some(raster_rx);
 
-                handle.geometry_bank =
-                    GeometryBank::new(render::GBANK_ALLOC_VERTEX, render::GBANK_ALLOC_TRIANGLE);
-
-                let ebo = handle.geometry_bank.index_buffer();
-                unsafe {
-                    janus::gl::VertexArrayElementBuffer(vao, ebo);
-                }
+                handle.geometry_bank = GeometryBank::new();
             });
             state.handler_init_callback(|handle| {
                 handle.frag_meshmap = fragment_mesh_mapping;

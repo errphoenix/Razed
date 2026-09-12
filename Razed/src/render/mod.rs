@@ -1,3 +1,4 @@
+pub mod geometry;
 pub mod graphics;
 pub mod pass;
 pub mod shader_commons;
@@ -22,7 +23,7 @@ use janus::{
     texture::{ImageFormat, ImageType, MipLevels, Texture, TextureFiltering},
 };
 use rendrs::{
-    geometry::{GeometryBank, RenderVertex, TriangleAttribs},
+    geometry::TriangleAttribs,
     graphics::{PixelResolution, ShCoeffsBuffer},
     pipeline::{
         ImageObject, OutputObject, Pass, RenderPool, RenderTarget, RenderTargetDescriptor,
@@ -36,18 +37,13 @@ use crate::{
     assets,
     data::FrameDataBuffers,
     render::{
+        geometry::FragmentsGeomCtx,
         graphics::{Materials, RenderStats},
-        pass::{
-            ShadeDebugAttribsCtx, ShadeDebugAttribsMode, ShadePbrCtx, geometry::FragmentsGeomCtx,
-        },
+        pass::{ShadeDebugAttribsCtx, ShadePbrCtx},
     },
 };
 
 pub const DEFAULT_DEPTH_FUNC: u32 = janus::gl::GREATER;
-
-// todo: determine
-pub const GBANK_ALLOC_VERTEX: usize = 1_048_560; //~67mb
-pub const GBANK_ALLOC_TRIANGLE: usize = 1_048_560; //~17mb
 
 #[allow(unused)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -135,11 +131,11 @@ pub struct RenderPipeline {
     cage_deform_compute_pass: pass::CageDeformComputePass,
 
     // geometry composition
-    geom_fragments: pass::geometry::FragmentsGeomPass,
+    geom_fragments: geometry::FragmentsGeomPass,
 
     // geometry rasterization & attrib. interpolation
-    geom_rasterize: rendrs::geometry::GeomRasterizePass,
-    attr_interp: rendrs::geometry::AttribInterpolationPass,
+    geom_rasterize: geometry::GeomRasterizePass,
+    attr_interp: geometry::AttribInterpolationPass,
 
     // shading
     shade_pbr: pass::ShadePbrPass,
@@ -242,7 +238,7 @@ pub struct Renderer {
     last_frame_render: DeltaTime,
 
     pub view_data: ViewData,
-    pub geometry_bank: GeometryBank,
+    pub geometry_bank: geometry::GeometryBank,
     materials: Materials,
 
     // safe to unwrap during rendering after resource initialization
@@ -394,7 +390,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         }
         janus::gl::barrier_shader_storage();
 
-        self.geometry_bank.bind_data_buffers();
+        self.geometry_bank.bind_vertex_buffers();
+        self.geometry_bank.bind_triangle_buffers();
         self.geometry_bank.bind_gcounter_buffer();
 
         // geometry composition pass - fragments
@@ -427,10 +424,11 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
             render_stats.tris_count = gcounters.triangles();
             render_stats.gbank_tuse_perc =
-                gcounters.triangles() as f32 / GBANK_ALLOC_TRIANGLE as f32;
-            render_stats.gbank_vuse_perc = gcounters.vertices() as f32 / GBANK_ALLOC_VERTEX as f32;
+                gcounters.triangles() as f32 / geometry::GEOM_ALLOC_TRIANGLE as f32;
+            render_stats.gbank_vuse_perc =
+                gcounters.vertices() as f32 / geometry::GEOM_ALLOC_VERTEX as f32;
 
-            const V_MPRINT: usize = size_of::<RenderVertex>();
+            const V_MPRINT: usize = (3 + 2 + 2) * size_of::<f32>(); //pos3,norm2,uv2
             const T_MPRINT: usize = size_of::<u32>() * 3 + size_of::<TriangleAttribs>();
             let mprint_bytes = V_MPRINT * gcounters.vertices() as usize
                 + T_MPRINT * gcounters.triangles() as usize;
@@ -441,9 +439,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 .set_and_advance(render_stats)
                 .unwrap();
         }
-
-        self.geometry_bank.bind_data_buffers();
-        self.geometry_bank.bind_gcounter_buffer();
 
         // clear all render-targets once
         self.pipeline()
@@ -623,7 +618,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     &self.shaders.cage_deform,
                 ),
 
-                geom_fragments: pass::geometry::geom_fragments_pass(),
+                geom_fragments: geometry::geom_fragments_pass(),
 
                 geom_rasterize: rendrs::geometry::GeomRasterizePass::new(
                     OutputObject::Color(geom_raster),

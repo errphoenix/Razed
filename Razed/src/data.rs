@@ -20,13 +20,7 @@ use janus::{context::DeltaTime, sync::TriCell};
 
 use crate::structure::fragment::ANCHORS_COUNT as FRAGMENT_ANCHORS_COUNT;
 
-pub const FRAGMENT_COMMANDS_ALLOC: usize = 131072;
-pub const DEBRIS_COMMANDS_ALLOC: usize = 131072;
 pub const INTERFACE_COMMANDS_ALLOC: usize = 2048;
-
-/// Temporarily forced to 1 to save memory as generic objects are currently
-/// unused
-pub const GENERIC_COMMANDS_ALLOC: usize = 1;
 
 pub const RENDERABLE_STORAGE_PARTS: usize = 8;
 pub const ENTITY_ALLOCATION: usize = 8192;
@@ -110,17 +104,17 @@ layout_buffer! {
         enum PodBindPose: FRAGMENTS_ALLOC => {
             type glam::Vec4;
             bind 0;
-            shader render::pass::geometry::G_FRAGS_SSBO_BIND_POD_BINDPOSE;
+            shader render::geometry::G_FRAGS_SSBO_BIND_POD_BINDPOSE;
         };
         enum PodMeshId: FRAGMENTS_ALLOC => {
             type ethel::mesh::Id;
             bind 1;
-            shader render::pass::geometry::G_FRAGS_SSBO_BIND_POD_MESHID;
+            shader render::geometry::G_FRAGS_SSBO_BIND_POD_MESHID;
         };
         enum PodCageIds: FRAGMENTS_ALLOC => {
             type [IndirectIndex; FRAGMENT_ANCHORS_COUNT];
             bind 2;
-            shader render::pass::geometry::G_FRAGS_SSBO_BIND_POD_CAGEID;
+            shader render::geometry::G_FRAGS_SSBO_BIND_POD_CAGEID;
         };
     }
 }

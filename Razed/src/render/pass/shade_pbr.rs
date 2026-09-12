@@ -122,11 +122,25 @@ ethel::shader_glsl_compute! {
             }
 
             ivec2 px = ivec2(id);
-            uvec2 px_data = imageLoad(raster_in, px).rg;
+            imageStore(shade_out, px, vec4(1.0));
 
-            vec4 outColor = vec4(float(px_data.x), float(px_data.y), 0.0, 1.0);
-            imageStore(shade_out, px, outColor);
+            // // uvec2 px_data = imageLoad(raster_in, px).rg;
 
+            // // const uint _debug_approxGeoCap = 1600;
+            // // const uint _debug_approxTriOffset = 35000;
+
+            // // float R = float(px_data.x+1) / float(_debug_approxTriOffset);
+            // // float G = float(px_data.y+1) / float(_debug_approxGeoCap);
+
+            // // vec4 outColor = vec4(R, 0.0, 0.0, 1.0);
+            // // imageStore(shade_out, px, outColor);
+
+            // vec4 S_gradients = imageLoad(attr_grads_in, px);
+            // uvec2 S_raster_in = imageLoad(raster_in, px).rg;
+            // vec4 S_framespace = imageLoad(attr_frame_in, px);
+            //     //+ vec4(min(vec2(0.0), vec2(S_raster_in)), 0.0, 0.0) + min(vec4(0.0), S_gradients);
+            // vec3 N = rendrs_FrameSpace_GetBWeights(S_framespace);
+            // imageStore(shade_out, px, vec4(N, 1.0));
             ";
         }
     }

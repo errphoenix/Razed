@@ -245,9 +245,8 @@ rendrs::geometry_submission_job! {
             vec3 Cz  = cross(Jx, Jy);
 
             vec3 w_nor = normalize(n_W.x * Cx + n_W.y * Cy + n_W.z * Cz);
-            vec3 w_tan = vec3(1.0, 0.0, 0.0);
 
-            VertexData(sm_vert_base + i, w_pos, w_nor, w_tan, m_uv);
+            VertexData(sm_vert_base + i, w_pos, w_nor, m_uv);
         }
 
         barrier();
@@ -264,19 +263,16 @@ rendrs::geometry_submission_job! {
             uint t_v1 = m_tri.v1 - m_vert_offset + sm_vert_base;
             uint t_v2 = m_tri.v2 - m_vert_offset + sm_vert_base;
 
-            RenderVertex v0 = GetVertex(t_v0);
-            RenderVertex v1 = GetVertex(t_v1);
-            RenderVertex v2 = GetVertex(t_v2);
-            vec3 v0_p = vec3(v0.pos_x, v0.pos_y, v0.pos_z);
-            vec3 v1_p = vec3(v1.pos_x, v1.pos_y, v1.pos_z);
-            vec3 v2_p = vec3(v2.pos_x, v2.pos_y, v2.pos_z);
-            vec3 t_n  = cross(v1_p - v0_p, v2_p - v0_p);
+            vec3 v0 = GetVertexPosition(t_v0);
+            vec3 v1 = GetVertexPosition(t_v1);
+            vec3 v2 = GetVertexPosition(t_v2);
+            vec3 N  = cross(v1 - v0, v2 - v0);
 
             const float INV3 = 1.0 / 3.0;
-            vec3 t_c = (v0_p + v1_p + v2_p) * INV3;
-            vec3 view_dir = t_c - camera_position;
+            vec3 C = (v0 + v1 + v2) * INV3;
+            vec3 view_dir = C - camera_position;
 
-            float NdotV = dot(t_n, view_dir);
+            float NdotV = dot(N, view_dir);
             if (NdotV < 0.0) { // points towards viewpoint
                 tris_prod[t_count] = uvec3( t_v0, t_v1, t_v2 );
                 t_count++;
