@@ -1,123 +1,16 @@
-//! Mesh Clipping algorithms
+//! Mesh Clipping algorithms for [`MappedMesh`].
 //!
 //! Derived from [`Clipping a Mesh Against a Plane by David Eberly, Geometric Tools`](https://www.geometrictools.com/Documentation/ClipMesh.pdf)
 //!
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
-use crate::{Face, Facen, Plane, convex::Convex};
+use crate::{
+    Plane,
+    mapped::{MappedEdge, MappedFace, MappedMesh, MappedVertex},
+};
 
-#[derive(Clone, Debug, Default)]
-pub struct ClipMesh {
-    pub vertices: Vec<ClipVertex>,
-    pub edges: Vec<ClipEdge>,
-    pub faces: Vec<ClipFace>,
-}
-
-impl ClipMesh {
-    pub fn new<F: Face>(convex: Convex<F>) -> Self {
-        let vertices = convex
-            .vertices()
-            .iter()
-            .map(|&p| ClipVertex::new(p))
-            .collect::<Vec<_>>();
-
-        let mut edges = Vec::with_capacity(vertices.len() / 2);
-        let mut faces = Vec::with_capacity(convex.faces().len());
-
-        let mut existing_edges = HashMap::with_capacity(edges.capacity());
-
-        // face index to edge index mapping
-        let mut ef_map = HashMap::with_capacity(faces.capacity());
-
-        for (i, face) in convex.faces().iter().enumerate() {
-            for j in 0..face.len() {
-                let v0 = face[j];
-                let v1 = face[(j + 1) % face.len()];
-
-                let entry = ef_map.entry(i).or_insert_with(|| Vec::new());
-
-                if !existing_edges.contains_key(&(v0, v1))
-                    && !existing_edges.contains_key(&(v1, v0))
-                {
-                    let ei = edges.len();
-                    existing_edges.insert((v0, v1), ei as u32);
-                    edges.push(ClipEdge {
-                        vertices: [v0, v1],
-                        ..Default::default()
-                    });
-                    entry.push(ei as u32);
-                } else {
-                    if let Some(ei) = existing_edges
-                        .get(&(v0, v1))
-                        .or_else(|| existing_edges.get(&(v1, v0)))
-                    {
-                        entry.push(*ei);
-                    }
-                }
-            }
-
-            faces.push(ClipFace {
-                normal: face.normal,
-                ..Default::default()
-            });
-        }
-
-        ef_map.drain().for_each(|(f_i, f_edges)| {
-            let face = &mut faces[f_i];
-            for ei in f_edges {
-                face.edges.insert(ei);
-                edges[ei as usize].faces.insert(f_i as u32);
-            }
-        });
-
-        Self {
-            vertices,
-            edges,
-            faces,
-        }
-    }
-
-    /// Finish all clipping operations and produce a general mesh.
-    ///
-    /// This operation requires that the stored cached normals (generated with
-    /// [`ClipMesh::cache_current_normals`] must correspond to the mesh's
-    /// normals before any clipping operation began; See
-    /// [`ClipMesh::ordered_faces`].
-    ///
-    /// If the current clip mesh contains no faces, an empty mesh isreturned.
-    pub fn finish(self) -> Convex<Vec<u32>> {
-        let mut faces = self.ordered_faces();
-        if faces.is_empty() {
-            return Convex::new(Vec::new(), Vec::new());
-        }
-
-        // prune invisible vertices and remap indices
-        let mut points = Vec::with_capacity(self.vertices.len());
-        let mut vmap = vec![-1i32; self.vertices.len()];
-        for (i, cv) in self.vertices.iter().enumerate() {
-            if cv.visible {
-                vmap[i] = points.len() as i32;
-                points.push(cv.point);
-            }
-        }
-        for f in &mut faces {
-            for i in &mut f.1 {
-                *i = vmap[*i as usize] as u32;
-            }
-        }
-
-        let mesh_faces = faces
-            .drain(..)
-            .map(|(id, indices)| {
-                let normal = self.faces[id as usize].normal;
-                Facen::<Vec<_>>::new(indices, normal)
-            })
-            .collect::<Vec<_>>();
-
-        Convex::new(points, mesh_faces)
-    }
-
+impl MappedMesh {
     /// Get the mesh's faces ordered by their normals.
     ///
     /// Each element contains the original face index of the face and a
@@ -136,7 +29,7 @@ impl ClipMesh {
                 let mut face = Vec::with_capacity(olen);
 
                 let nf = f.normal;
-                let no = compute_normal(&sort_vertices_buffer, &self.vertices);
+                let no = super::mapped::compute_normal(&sort_vertices_buffer, &self.vertices);
 
                 if nf.dot(no) > 0.0 {
                     // clockwise
@@ -160,8 +53,8 @@ impl ClipMesh {
     /// Get the ordered, contiguous vertices indices of the given `face` in
     /// newly allocated memory.
     ///
-    /// See also [`ClipMesh::ordered_face_vertices`].
-    pub fn ordered_face_vertices_alloc(&self, face: &ClipFace) -> Vec<u32> {
+    /// See also [`MappedMesh::ordered_face_vertices`].
+    pub fn ordered_face_vertices_alloc(&self, face: &MappedFace) -> Vec<u32> {
         let mut out_vertices = vec![0u32; face.edges.len() + 1];
         self.ordered_face_vertices(face, &mut out_vertices);
         out_vertices
@@ -172,8 +65,8 @@ impl ClipMesh {
     /// Note: the passed `out_vertices` mutable slice must be of minimum
     /// length of `num of face edges + 1`.
     ///
-    /// See also [`ClipMesh::ordered_face_vertices_alloc`].
-    pub fn ordered_face_vertices(&self, face: &ClipFace, out_vertices: &mut [u32]) {
+    /// See also [`MappedMesh::ordered_face_vertices_alloc`].
+    pub fn ordered_face_vertices(&self, face: &MappedFace, out_vertices: &mut [u32]) {
         debug_assert!(out_vertices.len() >= face.edges.len() + 1);
 
         if face.edges.is_empty() {
@@ -223,7 +116,7 @@ impl ClipMesh {
         }
     }
 
-    pub fn process_vertices(&mut self, clip_plane: &Plane) -> ClipResult {
+    pub fn clip_process_vertices(&mut self, clip_plane: &Plane) -> ClipResult {
         let mut n = 0;
         let mut p = 0;
 
@@ -252,7 +145,7 @@ impl ClipMesh {
         return ClipResult::Partial;
     }
 
-    pub fn process_edges(&mut self) {
+    pub fn clip_process_edges(&mut self) {
         for (i, e) in self.edges.iter_mut().enumerate() {
             if e.visible {
                 let p0 = self.vertices[e.vertices[0] as usize];
@@ -283,7 +176,7 @@ impl ClipMesh {
                 let intersect = (1.0 - t) * p0.point + t * p1.point;
 
                 let idx = self.vertices.len();
-                self.vertices.push(ClipVertex {
+                self.vertices.push(MappedVertex {
                     point: intersect,
                     distance: 0.0,
                     occurs: 0,
@@ -299,8 +192,8 @@ impl ClipMesh {
         }
     }
 
-    pub fn process_faces(&mut self, clip_plane: &Plane) {
-        let closed_face = ClipFace {
+    pub fn clip_process_faces(&mut self, clip_plane: &Plane) {
+        let closed_face = MappedFace {
             normal: -clip_plane.normal,
             ..Default::default()
         };
@@ -321,7 +214,7 @@ impl ClipMesh {
                     // close the open polyline
 
                     let idx = self.edges.len();
-                    self.edges.push(ClipEdge {
+                    self.edges.push(MappedEdge {
                         vertices: [polyline.start, polyline.end],
                         faces: HashSet::from([i as u32, cfi as u32]),
                         visible: true,
@@ -330,136 +223,6 @@ impl ClipMesh {
                     self.faces[cfi].edges.insert(idx as u32);
                 }
             }
-        }
-    }
-
-    /// Compute the normals of a `face` (from ordered vertices).
-    ///
-    /// This function does not expect pre-ordered vertices, only a buffer to do
-    /// so it self through [`ClipMesh::ordered_face_vertices`] to avoid
-    /// allocating new memory.
-    pub fn compute_face_normal(
-        &self,
-        face: &ClipFace,
-        ordered_vertices_buffer: &mut [u32],
-    ) -> glam::Vec3 {
-        self.ordered_face_vertices(face, ordered_vertices_buffer);
-        compute_normal(ordered_vertices_buffer, &self.vertices)
-    }
-
-    /// Compute the normals of a `face` (from ordered vertices) in newly
-    /// allocated memory.
-    pub fn compute_face_normal_alloc(&self, face: &ClipFace) -> glam::Vec3 {
-        let ordered_vertices = self.ordered_face_vertices_alloc(face);
-        compute_normal(&ordered_vertices, &self.vertices)
-    }
-}
-
-fn compute_normal(ordered_vertices: &[u32], g_vertices: &[ClipVertex]) -> glam::Vec3 {
-    let mut normal = glam::Vec3::ZERO;
-    let len = ordered_vertices.len();
-
-    let face_center = {
-        let mut center = ordered_vertices
-            .iter()
-            .take(len)
-            .map(|&i| g_vertices[i as usize].point)
-            .sum::<glam::Vec3>();
-        center /= len as f32;
-        center
-    };
-
-    for i in 0..len {
-        let vi0 = ordered_vertices[i];
-        let vi1 = ordered_vertices[(i + 1) % len];
-
-        let v0 = g_vertices[vi0 as usize].point - face_center;
-        let v1 = g_vertices[vi1 as usize].point - face_center;
-
-        normal += v0.cross(v1);
-    }
-
-    normal.normalize()
-}
-
-#[derive(Clone, Debug)]
-pub struct ClipFace {
-    pub edges: HashSet<u32>,
-    pub normal: glam::Vec3,
-    pub visible: bool,
-}
-
-#[derive(Clone, Debug)]
-pub struct ClipEdge {
-    pub vertices: [u32; 2],
-    pub faces: HashSet<u32>,
-    pub visible: bool,
-}
-
-impl Eq for ClipEdge {}
-
-impl Ord for ClipEdge {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).unwrap_or(std::cmp::Ordering::Less)
-    }
-}
-
-impl PartialEq for ClipEdge {
-    fn eq(&self, other: &Self) -> bool {
-        self.vertices == other.vertices
-    }
-}
-
-impl PartialOrd for ClipEdge {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.vertices.partial_cmp(&other.vertices)
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct ClipVertex {
-    pub point: glam::Vec3,
-    pub distance: f32,
-    pub occurs: u32,
-    pub visible: bool,
-}
-
-impl Default for ClipFace {
-    fn default() -> Self {
-        Self {
-            edges: Default::default(),
-            normal: Default::default(),
-            visible: true,
-        }
-    }
-}
-
-impl Default for ClipEdge {
-    fn default() -> Self {
-        Self {
-            vertices: Default::default(),
-            faces: Default::default(),
-            visible: true,
-        }
-    }
-}
-
-impl Default for ClipVertex {
-    fn default() -> Self {
-        Self {
-            point: Default::default(),
-            distance: Default::default(),
-            occurs: Default::default(),
-            visible: true,
-        }
-    }
-}
-
-impl ClipVertex {
-    pub fn new(point: glam::Vec3) -> Self {
-        Self {
-            point,
-            ..Default::default()
         }
     }
 }
@@ -480,9 +243,9 @@ pub struct Polyline {
 }
 
 pub fn get_open_polyline(
-    vertices: &mut [ClipVertex],
-    edges: &[ClipEdge],
-    face: &mut ClipFace,
+    vertices: &mut [MappedVertex],
+    edges: &[MappedEdge],
+    face: &mut MappedFace,
 ) -> Option<Polyline> {
     // count number of occurrences for each vertex in the polyline
     // resulting `occurs` values must be 1 or 2

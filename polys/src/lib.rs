@@ -1,6 +1,10 @@
 pub mod clip;
 pub mod convex;
+pub mod mapped;
 pub mod post_process;
+
+#[allow(unused_imports)]
+pub use mapped::*;
 
 #[allow(unused_imports)]
 pub use post_process::{compute_normals, compute_uv_cubic, compute_vertex_normals};
