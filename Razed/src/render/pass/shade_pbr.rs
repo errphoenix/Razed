@@ -248,7 +248,11 @@ ethel::shader_glsl_compute! {
             vec4  d = imageLoad(attr_grads_in, id);  // derivatives
             vec4  F = imageLoad(attr_frame_in, id);  // frame data
 
-            uint[3] I = geometry_triangle_indices[G.x];
+            if (G.x == 0) {
+                return;
+            }
+
+            uint[3] I = geometry_triangle_indices[G.x - 1];
 
             float[2] UV0 = geometry_vertex_uvs[I[0]];
             float[2] UV1 = geometry_vertex_uvs[I[1]];
@@ -302,6 +306,7 @@ ethel::shader_glsl_compute! {
             float m_metal   = qOrmd.b;
             //float displacement = qOrmd.a;
 
+            //todo: handedness
             vec3 B = cross(T, N);
             mat3 TBN = mat3(T, B, N);
             m_normal = m_normal * 2.0 - 1.0;
