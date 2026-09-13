@@ -471,6 +471,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         {
             let resolution = self.resolution;
             let view_data = self.view_data;
+            let gbank = &self.geometry_bank;
+            let irradiance_sh = &self.shader_buffers().irradiance_sh_coeffs;
 
             let render_mode = frame_data.debug_shading_mode.get();
             match render_mode {
@@ -485,6 +487,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                         render_pool,
                         &ShadePbrCtx {
                             shader,
+                            gbank,
+                            irradiance_sh,
                             resolution,
                             view_data,
                             dev_mat_page,
@@ -632,7 +636,11 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
                 shade_pbr: pass::shade_pbr_pass(
                     &self.shaders.shade_pbr,
-                    ImageObject::PoolTarget(geom_raster),
+                    dev_materials.sampler(),
+                    baked_brdf_spec,
+                    debug_env_refprobe,
+                    SamplerObject::from_pool_target(base_depth),
+                    ImageObject::PoolTarget(base_depth),
                     ImageObject::PoolTarget(base_hdr),
                     ImageObject::PoolTarget(attr_spaceframe),
                     ImageObject::PoolTarget(attr_gradients),
