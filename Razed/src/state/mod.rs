@@ -294,7 +294,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 
             // upload render params, other opts
             {
-                storage
+                let _ = storage
                     .debug_shading_mode
                     .set_and_advance(self.debug_shading_mode);
 

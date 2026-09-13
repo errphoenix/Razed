@@ -68,7 +68,7 @@ pub const fn shade_debug_attribs_pass(
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ShadeDebugAttribsMode {
     BarycentricWeights = 0,
-    PerspectiveNormals = 1,
+    TangentFrame = 1,
     UvScreenDerivatives = 2,
     VisibilityBuffer = 3,
 }
@@ -76,7 +76,7 @@ impl ShadeDebugAttribsMode {
     pub const fn try_from_id(id: u32) -> Option<Self> {
         match id {
             0 => Some(Self::BarycentricWeights),
-            1 => Some(Self::PerspectiveNormals),
+            1 => Some(Self::TangentFrame),
             2 => Some(Self::UvScreenDerivatives),
             3 => Some(Self::VisibilityBuffer),
             _ => None,
@@ -123,7 +123,7 @@ ethel::shader_glsl_compute! {
         };
         lib {
             rendrs::pack::PACK_OCTAHEDRON_DECODE;
-            rendrs::geometry::rasterize::LIB_UTIL_FRAMESPACE_GET_NORMAL;
+            rendrs::geometry::rasterize::LIB_UTIL_FRAMESPACE_GET_TANFRAME;
             rendrs::geometry::rasterize::LIB_UTIL_FRAMESPACE_GET_BWEIGHTS;
         };
 
@@ -147,7 +147,7 @@ ethel::shader_glsl_compute! {
                     v_output.rgb = rendrs_FrameSpace_GetBWeights(S_framespace);
                     break;
                 case 1:
-                    v_output.rgb = rendrs_FrameSpace_GetNormal(S_framespace);
+                    v_output.rgb = rendrs_FrameSpace_GetTanFrame(S_framespace);
                     break;
                 case 2:
                     v_output = S_gradients;

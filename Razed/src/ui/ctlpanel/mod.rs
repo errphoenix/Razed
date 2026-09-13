@@ -67,7 +67,7 @@ pub fn shade_mode_selector(system: &mut InterfaceSystem, root: WidgetId) -> Widg
                             EnvValue::from_str(match id {
                                 0 => "Standard/PBR|dbg",
                                 1 => "Attr./Barycentric Weights",
-                                2 => "Attr./Perspective Normals",
+                                2 => "Attr./Tangent Frame",
                                 3 => "Attr./Screen Derivatives",
                                 4 => "Geom./Visibility Buffer",
                                 _ => "??? ??? ???",

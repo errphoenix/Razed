@@ -119,7 +119,6 @@ pub const SSBO_INDEX_POD_CAGES_BINDREF: u32 = ssbo_binding!(POD_Cages_BindRef);
 pub const SSBO_INDEX_IMAP_CAGES: u32 = ssbo_binding!(IMap_Cages);
 pub const SSBO_INDEX_IRRADIANCE_SH: u32 = ssbo_binding!(_devIrradianceSh);
 
-use shader_commons::FresnelParamsGlslStruct;
 use shader_commons::LIB_FRESNEL_PARAMS;
 use shader_commons::LIB_FRESNEL_SCHLICK;
 use shader_commons::LIB_NDF_GGX;
@@ -170,7 +169,7 @@ ethel::shader_glsl! {
                 rendrs::graphics::material::shader::TYPE_MATERIAL_ENTRY_LOCATION
                 rendrs::graphics::material::shader::TYPE_MATERIAL_LOCATION
                 rendrs::graphics::irradiance_harmonics::TYPE_SH_COEFFS
-                FresnelParamsGlslStruct::as_definition()
+                rendrs::graphics::TYPE_FRESNEL_PARAMS
             };
 
             ssbo {
@@ -189,7 +188,7 @@ ethel::shader_glsl! {
             };
 
             lib {
-                rendrs::pack::UTIL_DERIVE_COTANGENT;
+                rendrs::graphics::UTIL_DERIVE_COTANGENT;
 
                 rendrs::graphics::irradiance_harmonics::LIB_EVALUATE_SH_L2;
                 rendrs::graphics::light::LIB_LIGHT_ATTENUATE_ISQ_WINDOWED_CURVE;
@@ -265,7 +264,7 @@ ethel::shader_glsl! {
                 float absNdotV = abs(NdotV);
 
                 // ------ local light-specific ------
-                // only one light is evaluated: the camera as a point light
+                // only one light is evaluated for testing
 
                 // equal to V because this is a camera point light
                 vec3 to_light = to_camera;
@@ -280,11 +279,11 @@ ethel::shader_glsl! {
                 float posNdotL = max(0.0, NdotL);
 
                 // --- light's incoming radiance ---
-                const float LIGHT_MAX_DIST = 128.0;
+                const float LIGHT_MAX_DIST = 96.0;
                 float light_dist_sq = dot(to_light, to_light);
                 float light_dist = sqrt(light_dist_sq);
                 float attenuation = lightAttenuate(light_dist_sq, light_dist, LIGHT_MAX_DIST, 0.01);
-                vec3 Li = vec3(attenuation);
+                vec3 Li = vec3(attenuation) * 1.2;
                 // light color is white
 
                 // evaluate half-vector H, the microsurface normal
