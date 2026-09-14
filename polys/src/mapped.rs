@@ -95,6 +95,7 @@ impl MappedMesh {
 
         let mesh_faces = faces
             .drain(..)
+            .filter(|(_, v)| !v.is_empty())
             .map(|(id, indices)| {
                 let normal = self.faces[id as usize].normal;
                 Facen::<Vec<_>>::new(indices, normal)
@@ -105,79 +106,91 @@ impl MappedMesh {
     }
 
     pub fn preserve_hard_edges(&mut self, cosine_threshold: f32) {
-        // original edge, face with new edge
-        let mut dupe = Vec::<(u32, u32)>::new();
-        for (i, edge) in self.edges.iter().enumerate() {
-            if !edge.visible {
+        let mut ord_faces = self.ordered_faces();
+        if ord_faces.is_empty() {
+            return;
+        }
+
+        let prev_vert_count = self.vertices.len();
+
+        let mut v2f = vec![Vec::new(); prev_vert_count];
+        for (f_i, verts) in &ord_faces {
+            for &v_i in verts {
+                v2f[v_i as usize].push(*f_i);
+            }
+        }
+
+        let mut f2v = HashMap::new();
+        for v_i in 0..prev_vert_count {
+            let touch_faces = &v2f[v_i];
+            if touch_faces.is_empty() {
                 continue;
             }
-            // any edges more complex are ignored
-            if edge.faces.len() == 2 {
-                let (f0i, f1i) = {
-                    let mut fi = edge.faces.iter();
-                    let f0 = *fi.next().unwrap();
-                    let f1 = *fi.next().unwrap();
-                    (f0, f1)
-                };
-                let f0 = &self.faces[f0i as usize];
-                let f1 = &self.faces[f1i as usize];
-                if f0.visible && f1.visible {
-                    let n0 = f0.normal;
-                    let n1 = f1.normal;
-                    if n0.dot(n1) < cosine_threshold {
-                        // face 1 gets moved to new edge
-                        dupe.push((i as u32, f1i));
+
+            let mut groups = Vec::<Vec<_>>::new();
+            for &f_i in touch_faces {
+                let f = &self.faces[f_i as usize];
+                if !f.visible || f.edges.is_empty() {
+                    continue;
+                }
+                let n1 = f.normal;
+                let mut place = false;
+                for group in &mut groups {
+                    let n2 = self.faces[group[0] as usize].normal;
+                    if n1.dot(n2) >= cosine_threshold {
+                        group.push(f_i);
+                        place = true;
+                        break;
                     }
+                }
+                if !place {
+                    groups.push(vec![f_i]);
+                }
+            }
+
+            for (g_i, grp) in groups.iter().enumerate() {
+                let assigned = if g_i == 0 {
+                    v_i as u32
+                } else {
+                    let new_i = self.vertices.len() as u32;
+                    self.vertices.push(self.vertices[v_i]);
+                    new_i
+                };
+                for &f_i in grp {
+                    f2v.insert((v_i as u32, f_i), assigned);
                 }
             }
         }
 
-        // edge id, valid v0,v1
-        let mut u_edges = Vec::<(u32, [u32; 2])>::new();
-
-        for (edge, face) in dupe {
-            let src_e = &mut self.edges[edge as usize];
-            src_e.faces.remove(&face);
-
-            let o_v0 = src_e.vertices[0];
-            let o_v1 = src_e.vertices[1];
-            let p0 = self.vertices[o_v0 as usize].point;
-            let p1 = self.vertices[o_v1 as usize].point;
-            let v0 = self.vertices.len() as u32;
-            self.vertices.push(MappedVertex::new(p0));
-            self.vertices.push(MappedVertex::new(p1));
-
-            let mut e_faces = HashSet::new();
-            e_faces.insert(face);
-
-            let new_edge = self.edges.len() as u32;
-            self.edges.push(MappedEdge {
-                vertices: [v0, v0 + 1],
-                faces: e_faces,
-                visible: true,
-            });
-
-            let face = &mut self.faces[face as usize];
-            face.edges.remove(&edge);
-            face.edges.insert(new_edge);
-
-            for &u_ei in &face.edges {
-                let u_e = &self.edges[u_ei as usize];
-                let mut u_v = u_e.vertices;
-                for u_v in &mut u_v {
-                    if *u_v == o_v0 {
-                        *u_v = v0;
-                    } else if *u_v == o_v1 {
-                        *u_v = v0 + 1;
-                    }
+        for (f_i, verts) in &mut ord_faces {
+            for v in verts {
+                if let Some(&new_v) = f2v.get(&(*v, *f_i)) {
+                    *v = new_v;
                 }
-                u_edges.push((u_ei, u_v));
             }
-            for &(e, v) in &u_edges {
-                self.edges[e as usize].vertices = v;
-            }
+        }
 
-            u_edges.clear();
+        self.edges.clear();
+        self.faces.iter_mut().for_each(|f| f.edges.clear());
+
+        let mut existing = HashMap::new();
+        for (f_i, verts) in ord_faces {
+            for j in 0..verts.len() {
+                let v0 = verts[j];
+                let v1 = verts[(j + 1) % verts.len()];
+                let key = if v1 < v0 { (v0, v1) } else { (v1, v0) };
+                let ei = *existing.entry(key).or_insert_with(|| {
+                    let new_ei = self.edges.len() as u32;
+                    self.edges.push(MappedEdge {
+                        vertices: [v0, v1],
+                        faces: HashSet::new(),
+                        visible: true,
+                    });
+                    new_ei
+                });
+                self.edges[ei as usize].faces.insert(f_i);
+                self.faces[f_i as usize].edges.insert(ei);
+            }
         }
     }
 
@@ -229,29 +242,19 @@ impl MappedMesh {
 }
 
 pub(crate) fn compute_normal(ordered_vertices: &[u32], g_vertices: &[MappedVertex]) -> glam::Vec3 {
+    assert!(
+        ordered_vertices.len() >= 4,
+        "ordered vertices length is less than 4: the function requires a valid, sorted closed loop of vertices"
+    );
+    let len = ordered_vertices.len() - 1;
     let mut normal = glam::Vec3::ZERO;
-    let len = ordered_vertices.len();
-
-    let face_center = {
-        let mut center = ordered_vertices
-            .iter()
-            .take(len)
-            .map(|&i| g_vertices[i as usize].point)
-            .sum::<glam::Vec3>();
-        center /= len as f32;
-        center
-    };
-
     for i in 0..len {
-        let vi0 = ordered_vertices[i];
-        let vi1 = ordered_vertices[(i + 1) % len];
-
-        let v0 = g_vertices[vi0 as usize].point - face_center;
-        let v1 = g_vertices[vi1 as usize].point - face_center;
-
-        normal += v0.cross(v1);
+        let a = g_vertices[ordered_vertices[i] as usize].point;
+        let b = g_vertices[ordered_vertices[(i + 1) % len] as usize].point;
+        normal.x += (a.y - b.y) * (a.z + b.z);
+        normal.y += (a.z - b.z) * (a.x + b.x);
+        normal.z += (a.x - b.x) * (a.y + b.y);
     }
-
     normal.normalize()
 }
 

@@ -20,7 +20,7 @@ impl MappedMesh {
 
         let mut faces = Vec::new();
         for (i, f) in self.faces.iter().enumerate() {
-            if f.visible {
+            if f.visible && !f.edges.is_empty() {
                 sort_vertices_buffer.clear();
                 sort_vertices_buffer.resize(f.edges.len() + 1, 0u32);
 
