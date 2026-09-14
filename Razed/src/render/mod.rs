@@ -640,7 +640,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     baked_brdf_spec,
                     debug_env_refprobe,
                     SamplerObject::from_pool_target(base_depth),
-                    ImageObject::PoolTarget(base_depth),
+                    ImageObject::PoolTarget(geom_raster),
                     ImageObject::PoolTarget(base_hdr),
                     ImageObject::PoolTarget(attr_spaceframe),
                     ImageObject::PoolTarget(attr_gradients),
