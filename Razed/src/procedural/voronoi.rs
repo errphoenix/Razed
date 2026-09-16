@@ -12,17 +12,20 @@ pub struct CubeVoronoiGenerator<R: Rng> {
     rng: R,
     max_offset: f32,
 
+    curr_volume: glam::Vec3,
+
     seeds: Vec<glam::Vec3>,
     meshes: Vec<Convex<polys::TriFace>>,
 }
 
 impl<R: Rng> CubeVoronoiGenerator<R> {
-    pub fn new(rng: R, max_offset: f32) -> Self {
+    pub const fn new(rng: R, max_offset: f32) -> Self {
         Self {
             rng: rng,
             max_offset,
             seeds: Vec::new(),
             meshes: Vec::new(),
+            curr_volume: glam::Vec3::ZERO,
         }
     }
 
@@ -36,6 +39,7 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
         self.seeds.clear();
         self.seeds.extend_from_slice(seed_input);
 
+        self.curr_volume = volume;
         let offset_seeds = {
             let mut seeds = self.seeds.clone();
             let h_offset = self.max_offset * 0.5;
@@ -107,6 +111,8 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
         let mut t_nb = Vec::new();
         let mut t_tb = Vec::new();
 
+        let uv_scaling = 1.0 / self.curr_volume;
+
         for mesh in &self.meshes {
             t_nb.resize(mesh.vertices().len(), glam::Vec3::ZERO);
             polys::compute_vertex_normals(mesh.faces(), mesh.vertices(), &mut t_nb);
@@ -118,8 +124,7 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
                 });
             }
             for (&v, &n) in mesh.vertices().iter().zip(&t_nb) {
-                const UV_SCALING: f32 = 1.0 / 3.0;
-                let uv = polys::compute_uv_cubic(v, n, UV_SCALING);
+                let uv = polys::compute_uv_cubic(v, n, uv_scaling);
                 t_vb.push(Vertex {
                     pos_x: v.x,
                     pos_y: v.y,

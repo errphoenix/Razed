@@ -315,7 +315,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             // setup geometry data
             {
                 let fragment_count = self.fragments.data().len() - 1;
-                let debris_count = self.debris.total_debris_count();
+                let _debris_count = self.debris.total_debris_count();
 
                 let _ = storage
                     .fragment_geom_count

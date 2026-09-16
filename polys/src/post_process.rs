@@ -1,3 +1,5 @@
+use glam::Vec3Swizzles;
+
 use crate::{Face, Facen, TriFace};
 
 pub fn compute_vertex_normals(
@@ -71,13 +73,17 @@ pub fn compute_normals<F: Face>(faces: &[F], normals: &mut [glam::Vec3], vertice
     }
 }
 
-pub fn compute_uv_cubic(vertex: glam::Vec3, normal: glam::Vec3, uv_scaling: f32) -> glam::Vec2 {
+pub fn compute_uv_cubic(
+    vertex: glam::Vec3,
+    normal: glam::Vec3,
+    uv_scaling: glam::Vec3,
+) -> glam::Vec2 {
     let n = normal.abs();
     if n.x >= n.y && n.x >= n.z {
-        glam::Vec2::new(vertex.y, vertex.z) * uv_scaling
+        glam::Vec2::new(vertex.y, vertex.z) * uv_scaling.yz()
     } else if n.y >= n.x && n.y >= n.z {
-        glam::Vec2::new(vertex.x, vertex.z) * uv_scaling
+        glam::Vec2::new(vertex.x, vertex.z) * uv_scaling.xz()
     } else {
-        glam::Vec2::new(vertex.x, vertex.y) * uv_scaling
+        glam::Vec2::new(vertex.x, vertex.y) * uv_scaling.xy()
     }
 }

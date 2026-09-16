@@ -316,7 +316,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             ..
         } = &self.shaders;
 
-        interface.uniform_projection_mat4v([ortho_proj_mat]);
+        interface.uniform_projection_mat4v([self.view_data.ortho_proj_mat]);
 
         lattice.uniform_projection_mat4v([proj_mat]);
         lattice.uniform_view_mat4v([view_mat]);

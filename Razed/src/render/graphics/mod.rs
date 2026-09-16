@@ -36,6 +36,7 @@ impl Gamma {
         self.0
     }
 
+    #[allow(unused)]
     pub const fn normalize(&self) -> f32 {
         self.0 * Self::INV_MAX
     }
@@ -44,6 +45,7 @@ impl Gamma {
 #[derive(Debug, Default)]
 pub struct RenderParams {
     pub gamma: TriCell<Gamma>,
+    #[allow(unused, reason = "todo")]
     pub exposure: TriCell<f32>, //todo
 }
 
