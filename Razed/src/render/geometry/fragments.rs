@@ -11,10 +11,6 @@ use crate::{
 };
 
 pub fn geom_fragments_pass() -> FragmentsGeomPass {
-    std::fs::write(
-        "shaders.dev/geoc_fragments.comp",
-        ComputeShaderFragmentsGeomSubmit::build_sources(),
-    );
     geom_fragments_pass_with_shader(ComputeShaderFragmentsGeomSubmit::new_compiled())
 }
 

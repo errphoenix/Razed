@@ -268,7 +268,7 @@ ethel::shader_glsl_compute! {
                     + vec2(UV2[0], UV2[1]) * W.z;
             //UV *= UV_SCALE;
 
-            vec2 sUv = vec2(id) + 0.5 / vec2(resolution);
+            vec2 sUv = (vec2(id) + 0.5) / vec2(resolution);
             vec3 P = rendrs_DepthWorldPosition(depth, sUv, inv_viewproj);
 
             uint DIFFUSE_ALPHA_PAGE = dev_material_pages[0];
@@ -306,7 +306,6 @@ ethel::shader_glsl_compute! {
             float m_metal   = qOrmd.b;
             //float displacement = qOrmd.a;
 
-            //todo: handedness
             vec3 B = cross(T, N);
             mat3 TBN = mat3(T, B, N);
             m_normal = m_normal * 2.0 - 1.0;
