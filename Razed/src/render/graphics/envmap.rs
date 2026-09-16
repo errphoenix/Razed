@@ -209,6 +209,7 @@ pub fn debug_probe_reflection(texture: TextureView) -> Texture {
                     mip_level: MipLevels::try_new(i).unwrap(),
                 },
             );
+            janus::gl::barrier_texture_fetch();
             janus::gl::barrier_shader_image();
         }
     });

@@ -84,7 +84,7 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
                 mapped.clip_process_edges();
                 mapped.clip_process_faces(&plane);
             }
-            mapped.preserve_hard_edges(45f32.to_radians().cos());
+            mapped.preserve_hard_edges(30f32.to_radians().cos());
 
             let mut mesh = mapped.unmap();
 

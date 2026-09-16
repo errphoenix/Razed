@@ -242,17 +242,17 @@ ethel::shader_glsl_compute! {
                 return;
             }
 
-            float depth = texelFetch(depth_buffer, id, 0).r;
-
             uvec2 G = imageLoad(raster_in, id).rg;   // geom data
-            vec4  d = imageLoad(attr_grads_in, id);  // derivatives
             vec4  F = imageLoad(attr_frame_in, id);  // frame data
+            vec4  d = imageLoad(attr_grads_in, id);  // derivatives
+            float depth = texelFetch(depth_buffer, id, 0).r;
 
             if (G.x == 0) {
                 return;
             }
 
             uint[3] I = geometry_triangle_indices[G.x - 1];
+            vec3 W = rendrs_FrameSpace_GetBWeights(F);
 
             float[2] UV0 = geometry_vertex_uvs[I[0]];
             float[2] UV1 = geometry_vertex_uvs[I[1]];
@@ -262,7 +262,6 @@ ethel::shader_glsl_compute! {
             float[2] NE1 = geometry_vertex_normals[I[1]];
             float[2] NE2 = geometry_vertex_normals[I[2]];
 
-            vec3 W = rendrs_FrameSpace_GetBWeights(F);
             vec2 UV = vec2(UV0[0], UV0[1]) * W.x
                     + vec2(UV1[0], UV1[1]) * W.y
                     + vec2(UV2[0], UV2[1]) * W.z;
@@ -294,7 +293,13 @@ ethel::shader_glsl_compute! {
             vec3 N0 = rendrs_unpackOctahedron(vec2(NE0[0], NE0[1]));
             vec3 N1 = rendrs_unpackOctahedron(vec2(NE1[0], NE1[1]));
             vec3 N2 = rendrs_unpackOctahedron(vec2(NE2[0], NE2[1]));
-            vec3 N = N0 * W.x + N1 * W.y + N2 * W.z;
+
+            //fix: N0 sign is often discontinuous in respect to the rest
+            // of the triangle, a quick sign correction is applied here
+            // but this issue should be addressed at the source
+            N0 *= dot(N0, N2) > 0.0 ? 1.0 : -1.0;
+
+            vec3 N = normalize(N0 * W.x + N1 * W.y + N2 * W.z);
             vec3 T = rendrs_FrameSpace_GetTanFrame(F);
 
             vec3  m_diffuse = pow(qDiffuseAlpha.rgb, vec3(2.2));
@@ -306,7 +311,7 @@ ethel::shader_glsl_compute! {
             float m_metal   = qOrmd.b;
             //float displacement = qOrmd.a;
 
-            vec3 B = cross(T, N);
+            vec3 B = normalize(cross(T, N));
             mat3 TBN = mat3(T, B, N);
             m_normal = m_normal * 2.0 - 1.0;
             N = normalize(TBN * m_normal);
