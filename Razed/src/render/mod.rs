@@ -417,7 +417,13 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             );
         }
 
-        rendrs::geometry::barrier_geom_compose();
+        unsafe {
+            janus::gl::MemoryBarrier(
+                janus::gl::SHADER_STORAGE_BARRIER_BIT
+                    | janus::gl::ATOMIC_COUNTER_BARRIER_BIT
+                    | janus::gl::ELEMENT_ARRAY_BARRIER_BIT,
+            );
+        }
 
         {
             let gcounters = self.geometry_bank.get_gcounters();
@@ -452,9 +458,11 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             self.view_data.view_mat,
         );
 
-        //todo: determine sync point in pipeline
-        rendrs::geometry::barrier_geom_rasterize();
-        janus::gl::barrier_texture_fetch();
+        unsafe {
+            janus::gl::MemoryBarrier(
+                janus::gl::SHADER_IMAGE_ACCESS_BARRIER_BIT | janus::gl::TEXTURE_FETCH_BARRIER_BIT,
+            );
+        }
 
         rendrs::framebuffer::bind_default();
 
@@ -466,7 +474,11 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             self.view_data.view_mat,
         );
 
-        rendrs::geometry::barrier_geom_attrib_interp();
+        unsafe {
+            janus::gl::MemoryBarrier(
+                janus::gl::SHADER_IMAGE_ACCESS_BARRIER_BIT | janus::gl::TEXTURE_FETCH_BARRIER_BIT,
+            );
+        }
 
         {
             let resolution = self.resolution;
