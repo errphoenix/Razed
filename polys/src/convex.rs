@@ -69,7 +69,7 @@ impl Convex<Vec<u32>> {
             Facen::new([4, 5, 6, 7], glam::vec3(0.0, 0.0, 1.0)),
             Facen::new([0, 1, 5, 4], glam::vec3(0.0, -1.0, 0.0)),
             Facen::new([2, 3, 7, 6], glam::vec3(0.0, 1.0, 0.0)),
-            Facen::new([0, 3, 7, 4], glam::vec3(-1.0, 0.0, 0.0)),
+            Facen::new([0, 4, 7, 3], glam::vec3(-1.0, 0.0, 0.0)),
             Facen::new([1, 2, 6, 5], glam::vec3(1.0, 0.0, 0.0)),
         ];
         Self { vertices, faces }

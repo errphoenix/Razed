@@ -157,7 +157,7 @@ ethel::shader_glsl_compute! {
                       float(S_raster_in.x) / 35000.0,
                       float(S_raster_in.y) / 1500.0
                     );
-                    v_output.b = 0.25;
+                    v_output.b = 0.0;
                     break;
             }
 

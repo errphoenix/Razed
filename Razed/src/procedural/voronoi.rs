@@ -57,8 +57,7 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
             let seed = offset_seeds[i];
             let mut mesh = Convex::<Vec<u32>>::parallelepiped(half_volume);
             mesh.translate(half_volume - half_unit);
-
-            let mut clip_mesh = polys::clip::ClipMesh::new(mesh);
+            let mut mapped = polys::MappedMesh::new(mesh);
 
             for j in 0..self.seeds.len() {
                 if i == j {
@@ -77,12 +76,13 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
                 let d = normal.dot(m);
 
                 let plane = Plane::new(normal, d);
-                clip_mesh.process_vertices(&plane);
-                clip_mesh.process_edges();
-                clip_mesh.process_faces(&plane);
+                mapped.clip_process_vertices(&plane);
+                mapped.clip_process_edges();
+                mapped.clip_process_faces(&plane);
             }
+            mapped.preserve_hard_edges(45f32.to_radians().cos());
 
-            let mut mesh = clip_mesh.finish();
+            let mut mesh = mapped.unmap();
 
             let centroid = mesh.centroid();
             mesh.make_local();
@@ -118,7 +118,7 @@ impl<R: Rng> CubeVoronoiGenerator<R> {
                 });
             }
             for (&v, &n) in mesh.vertices().iter().zip(&t_nb) {
-                const UV_SCALING: f32 = 0.5;
+                const UV_SCALING: f32 = 1.0 / 3.0;
                 let uv = polys::compute_uv_cubic(v, n, UV_SCALING);
                 t_vb.push(Vertex {
                     pos_x: v.x,
