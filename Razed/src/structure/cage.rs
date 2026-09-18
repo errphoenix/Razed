@@ -19,7 +19,7 @@ use crate::{
 pub const PER_POINT_LATTICE_ATTACHMENTS: usize = 4;
 pub const PER_CAGE_MAX_LATTICE_ATTACHMENTS: usize = 8;
 pub const PER_CAGE_POINTS: usize = 8;
-pub const CAGE_DIAG_EXTENT: f32 = 1.5;
+pub const CAGE_DIAG_EXTENT: f32 = 0.5;
 pub const QUERY_LATTICE_ATTACH_MAX_RANGE: f32 = 32.0;
 
 #[derive(Clone, Copy, Debug)]

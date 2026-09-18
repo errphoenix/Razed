@@ -205,7 +205,7 @@ rendrs::geometry_submission_job! {
             // ---- positional deformation ----
 
             vec3 u_pos = m_pos + sm_cage_pose; // fragment-local pos
-            vec3 W = sm_cage_B_inv * (u_pos - sm_cage_lpoint0[0]);
+            vec3 W = sm_cage_B_inv * (m_pos - sm_cage_lpoint0[0]);
 
             vec3 rc00  = mix(sm_cage_lpoint1[0], sm_cage_lpoint1[1], W.x);
             vec3 rc01  = mix(sm_cage_lpoint1[4], sm_cage_lpoint1[5], W.x);
@@ -215,7 +215,7 @@ rendrs::geometry_submission_job! {
             vec3 rc1   = mix(rc01, rc11, W.y);
             vec3 delta = mix(rc0,  rc1,  W.z);
 
-            vec3 w_pos = u_pos + delta;
+            vec3 w_pos = sm_cage_pose + delta;
 
             // ---- normal derivation ----
 
