@@ -1,9 +1,9 @@
 use ethel::shader::ShaderKind;
-use rendrs::pipeline::DrawPass;
+use rendrs::pipeline::{DrawPass, OutputObject, RenderTargetAccessor};
 
 use crate::data::CagePartitionedBuffer;
 
-pub type DebugCageDrawPass = DrawPass<DebugCageDrawCtxWrapper, 0, 0>;
+pub type DebugCageDrawPass = DrawPass<DebugCageDrawCtxWrapper, 0, 1>;
 
 #[derive(Debug)]
 pub struct DebugCageDrawCtx<'data> {
@@ -14,21 +14,27 @@ pub struct DebugCageDrawCtx<'data> {
 
 rendrs::context_wrapper!(for<'ctx> DebugCageDrawCtx);
 
-pub const fn pass(shader: &ShaderDebugCage) -> DebugCageDrawPass {
+pub const fn pass(shader: &ShaderDebugCage, ldr_output: RenderTargetAccessor) -> DebugCageDrawPass {
     let handle_view = shader.handle().view();
-    DebugCageDrawPass::new(handle_view, [], [], |_, ctx| {
-        ctx.cage_data
-            .bind_ssbo_pod_bindref(Some(SSBO_INDEX_POD_CAGE_REFERENCE));
-        ctx.cage_data
-            .bind_ssbo_pod_points(Some(SSBO_INDEX_POD_CAGE_POINTS));
+    DebugCageDrawPass::new(
+        handle_view,
+        [],
+        [OutputObject::Color(ldr_output)],
+        |_, ctx| {
+            ctx.cage_data
+                .bind_ssbo_pod_bindref(Some(SSBO_INDEX_POD_CAGE_REFERENCE));
+            ctx.cage_data
+                .bind_ssbo_pod_points(Some(SSBO_INDEX_POD_CAGE_POINTS));
 
-        let count = ctx.cage_total_count as i32 * crate::structure::cage::PER_CAGE_POINTS as i32;
-        let point_size = ctx.point_size;
-        unsafe {
-            janus::gl::PointSize(point_size);
-            janus::gl::DrawArrays(janus::gl::POINTS, 0, count);
-        }
-    })
+            let count =
+                ctx.cage_total_count as i32 * crate::structure::cage::PER_CAGE_POINTS as i32;
+            let point_size = ctx.point_size;
+            unsafe {
+                janus::gl::PointSize(point_size);
+                janus::gl::DrawArrays(janus::gl::POINTS, 0, count);
+            }
+        },
+    )
 }
 
 macro_rules! ssbo_binding {
