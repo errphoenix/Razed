@@ -172,7 +172,8 @@ ethel::table_spec! {
         hover_tint: glam::Vec4;
         press_tint: glam::Vec4;
 
-        callback: InteractableCallback<InteractionTime>;
+        extra_flag: bool;
+        callback: ButtonCallback;
     }
 }
 ethel::table_spec! {
@@ -190,9 +191,18 @@ ethel::table_spec! {
         // if the slider value may be affected by external systems, its value
         // will be polled every frame from the environment before other updates
         value_sync: Option<StringHash>;
-        callback: InteractableCallback<f32>;
+        callback: SliderCallback;
     }
 }
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ButtonInteractionState {
+    pub time: InteractionTime,
+    pub extra_flag: bool,
+}
+
+pub type ButtonCallback = InteractableCallback<ButtonInteractionState>;
+pub type SliderCallback = InteractableCallback<f32>;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub enum InteractableCallback<T: Clone + Copy + Debug + Default> {
@@ -562,15 +572,30 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                         let direct = self.buttons.solve_indirect(handle).unwrap();
                         let callback = button_callbacks[direct.as_index()];
                         let press_time = &mut press_time[i];
+
+                        let button_eflags = &mut self.buttons.extra_flag;
+                        let eflags = &mut button_eflags[direct.as_index()];
+
+                        let mut statedata = ButtonInteractionState {
+                            time: *press_time,
+                            extra_flag: *eflags,
+                        };
                         match callback {
                             InteractableCallback::None => {}
-                            InteractableCallback::Once(cb) => {
-                                if press_time.frames == 1 {
-                                    cb(&mut self.environment, press_time)
+                            e => {
+                                match e {
+                                    InteractableCallback::Once(cb) => {
+                                        if press_time.frames == 1 {
+                                            cb(&mut self.environment, &mut statedata)
+                                        }
+                                    }
+                                    InteractableCallback::Repeating(cb) => {
+                                        cb(&mut self.environment, &mut statedata)
+                                    }
+                                    _ => unreachable!(),
                                 }
-                            }
-                            InteractableCallback::Repeating(cb) => {
-                                cb(&mut self.environment, press_time)
+                                *press_time = statedata.time;
+                                *eflags = statedata.extra_flag;
                             }
                         }
                     }
@@ -939,11 +964,14 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         base_color: glam::Vec3,
         hover_tint: glam::Vec4,
         press_tint: glam::Vec4,
-        callback: InteractableCallback<InteractionTime>,
+        extra_flag: bool,
+        callback: ButtonCallback,
     ) -> Result<IndirectIndex, WidgetError> {
         if let Some(commons_id) = self.commons.solve_indirect(root_id.0) {
             self.assert_null_archetype(commons_id)?;
-            let button_element = (text_id, base_color, hover_tint, press_tint, callback);
+            let button_element = (
+                text_id, base_color, hover_tint, press_tint, extra_flag, callback,
+            );
             let button_id = self.buttons.insert(button_element);
             self.commons.archetype[commons_id.as_index()] = ComponentKind::Button {
                 handle: button_id,
@@ -966,7 +994,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         scroll_step: f32,
         value_init: f32,
         value_sync: Option<StringHash>,
-        callback: InteractableCallback<f32>,
+        callback: SliderCallback,
     ) -> Result<IndirectIndex, WidgetError> {
         if let Some(commons_id) = self.commons.solve_indirect(root_id.0) {
             self.assert_null_archetype(commons_id)?;
@@ -1173,6 +1201,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                     button_params.bg_color,
                     button_params.bg_hover_tint,
                     button_params.bg_press_tint,
+                    button_params.extra_flag,
                     button_params.callback,
                 )
             }
@@ -1282,7 +1311,8 @@ pub struct ButtonParams {
     pub bg_color: glam::Vec3,
     pub bg_hover_tint: glam::Vec4,
     pub bg_press_tint: glam::Vec4,
-    pub callback: InteractableCallback<InteractionTime>,
+    pub extra_flag: bool,
+    pub callback: ButtonCallback,
 }
 impl Default for ButtonParams {
     fn default() -> Self {
@@ -1291,6 +1321,7 @@ impl Default for ButtonParams {
             bg_color: DEFAULT_GENERIC_COLOR,
             bg_hover_tint: DEFAULT_GENERIC_HOVER_TINT,
             bg_press_tint: DEFAULT_GENERIC_PRESS_TINT,
+            extra_flag: false,
             callback: InteractableCallback::default(),
         }
     }
@@ -1360,7 +1391,7 @@ pub struct SliderParams {
     /// Normalized (0.0, 1.0)
     pub value_init: f32,
     pub value_sync_handle: Option<StringHash>,
-    pub callback: InteractableCallback<f32>,
+    pub callback: SliderCallback,
 }
 impl SliderParams {
     pub const DEFAULT_TRACK_COLOR: glam::Vec3 = glam::Vec3::splat(0.65);
