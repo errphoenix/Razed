@@ -562,7 +562,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         let button_callbacks = &self.buttons.callback;
         let slider_callbacks = &self.sliders.callback;
 
-        for i in 1..count {
+        for i in (1..count).rev() {
             let archetype = archetypes[i];
 
             match archetype {
@@ -648,7 +648,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         let hovered = &mut self.commons.hovered;
         let hover_time = &mut self.commons.hover_time;
 
-        for i in 1..count {
+        for i in (1..count).rev() {
             let bounds = bounds[i];
             if bounds.contains(x, y) {
                 hovered[i] = true;
@@ -714,7 +714,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
 
     pub fn feed_input(&mut self, events: &[InputEvent], scroll_delta: f32, delta: DeltaTime) {
         let count = self.commons.len();
-        for i in 1..count {
+        for i in (1..count).rev() {
             for event in events {
                 if let Some(event) = event.key() {
                     self.process_key_input(i, event, delta);
@@ -1103,51 +1103,51 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         Ok(id)
     }
 
-    pub fn core_data(&self) -> &InterfaceCommonRowTable {
+    pub const fn core_data(&self) -> &InterfaceCommonRowTable {
         &self.commons
     }
 
-    pub fn core_data_mut(&mut self) -> &mut InterfaceCommonRowTable {
+    pub const fn core_data_mut(&mut self) -> &mut InterfaceCommonRowTable {
         &mut self.commons
     }
 
-    pub fn panel_data(&self) -> &InterfacePanelRowTable {
+    pub const fn panel_data(&self) -> &InterfacePanelRowTable {
         &self.panels
     }
 
-    pub fn panel_data_mut(&mut self) -> &mut InterfacePanelRowTable {
+    pub const fn panel_data_mut(&mut self) -> &mut InterfacePanelRowTable {
         &mut self.panels
     }
 
-    pub fn image_data(&self) -> &InterfaceImageRowTable {
+    pub const fn image_data(&self) -> &InterfaceImageRowTable {
         &self.images
     }
 
-    pub fn image_data_mut(&mut self) -> &mut InterfaceImageRowTable {
+    pub const fn image_data_mut(&mut self) -> &mut InterfaceImageRowTable {
         &mut self.images
     }
 
-    pub fn text_data(&self) -> &InterfaceTextRowTable {
+    pub const fn text_data(&self) -> &InterfaceTextRowTable {
         &self.texts
     }
 
-    pub fn text_data_mut(&mut self) -> &mut InterfaceTextRowTable {
+    pub const fn text_data_mut(&mut self) -> &mut InterfaceTextRowTable {
         &mut self.texts
     }
 
-    pub fn button_data(&self) -> &InterfaceButtonRowTable {
+    pub const fn button_data(&self) -> &InterfaceButtonRowTable {
         &self.buttons
     }
 
-    pub fn button_data_mut(&mut self) -> &mut InterfaceButtonRowTable {
+    pub const fn button_data_mut(&mut self) -> &mut InterfaceButtonRowTable {
         &mut self.buttons
     }
 
-    pub fn slider_data(&self) -> &InterfaceSliderRowTable {
+    pub const fn slider_data(&self) -> &InterfaceSliderRowTable {
         &self.sliders
     }
 
-    pub fn slider_data_mut(&mut self) -> &mut InterfaceSliderRowTable {
+    pub const fn slider_data_mut(&mut self) -> &mut InterfaceSliderRowTable {
         &mut self.sliders
     }
 
