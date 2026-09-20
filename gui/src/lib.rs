@@ -147,6 +147,31 @@ ethel::table_spec! {
     }
 }
 ethel::table_spec! {
+    struct InterfaceFloatData {
+        grab_area: FloatGrabArea;
+        offset: glam::Vec2;
+        grabbing: bool;
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+pub enum FloatGrabArea {
+    SectionHoriz { height: f32 },
+    SectionVert { width: f32 },
+    Corner { width: f32, height: f32 },
+}
+impl FloatGrabArea {
+    pub const DEFAULT_HEIGHT: f32 = 22f32;
+}
+impl Default for FloatGrabArea {
+    fn default() -> Self {
+        Self::SectionHoriz {
+            height: Self::DEFAULT_HEIGHT,
+        }
+    }
+}
+
+ethel::table_spec! {
     struct InterfaceText {
         contents: TextContents;
         cached_text: StringHash;
@@ -172,7 +197,6 @@ ethel::table_spec! {
         hover_tint: glam::Vec4;
         press_tint: glam::Vec4;
 
-        extra_flag: bool;
         callback: ButtonCallback;
     }
 }
@@ -195,13 +219,7 @@ ethel::table_spec! {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct ButtonInteractionState {
-    pub time: InteractionTime,
-    pub extra_flag: bool,
-}
-
-pub type ButtonCallback = InteractableCallback<ButtonInteractionState>;
+pub type ButtonCallback = InteractableCallback<InteractionTime>;
 pub type SliderCallback = InteractableCallback<f32>;
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -378,6 +396,7 @@ pub struct InterfaceSystem<const LAYERS: usize = 10> {
 
     pub commons: InterfaceCommonRowTable,
     pub panels: InterfacePanelRowTable,
+    pub floating: InterfaceFloatDataRowTable,
     pub texts: InterfaceTextRowTable,
     pub images: InterfaceImageRowTable,
     pub buttons: InterfaceButtonRowTable,
@@ -396,6 +415,10 @@ pub struct InterfaceSystem<const LAYERS: usize = 10> {
     /// these will require a relayout if the contents
     /// change, which is expensive
     text_dynamic_list: Vec<WidgetId>,
+
+    /// if cursor is currently grabbing a floating panel
+    /// other cursor events should be ignored if true
+    grabbing: bool,
 }
 /// Safety:
 /// TaffyTree is !Send and !SYnc due to internal implementation details
@@ -432,6 +455,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             resolution,
             commons,
             panels: InterfacePanelRowTable::new(),
+            floating: InterfaceFloatDataRowTable::new(),
             texts: InterfaceTextRowTable::new(),
             images: InterfaceImageRowTable::new(),
             buttons: InterfaceButtonRowTable::new(),
@@ -443,7 +467,12 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             environment,
             text_resolve_buf: String::new(),
             text_dynamic_list: Vec::new(),
+            grabbing: false,
         }
+    }
+
+    pub const fn is_grabbing(&self) -> bool {
+        self.grabbing
     }
 
     pub const fn env(&self) -> &UiEnv {
@@ -497,6 +526,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             text_resolve_buf: &mut self.text_resolve_buf,
             commons: InterfaceCommonRowTableView::from(&self.commons),
             panels: InterfacePanelRowTableView::from(&self.panels),
+            floating: InterfaceFloatDataRowTableView::from(&self.floating),
             texts: InterfaceTextRowTableView::from(&self.texts),
             images: InterfaceImageRowTableView::from(&self.images),
             buttons: InterfaceButtonRowTableView::from(&self.buttons),
@@ -573,30 +603,19 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                         let callback = button_callbacks[direct.as_index()];
                         let press_time = &mut press_time[i];
 
-                        let button_eflags = &mut self.buttons.extra_flag;
-                        let eflags = &mut button_eflags[direct.as_index()];
-
-                        let mut statedata = ButtonInteractionState {
-                            time: *press_time,
-                            extra_flag: *eflags,
-                        };
                         match callback {
                             InteractableCallback::None => {}
-                            e => {
-                                match e {
-                                    InteractableCallback::Once(cb) => {
-                                        if press_time.frames == 1 {
-                                            cb(&mut self.environment, &mut statedata)
-                                        }
+                            e => match e {
+                                InteractableCallback::Once(cb) => {
+                                    if press_time.frames == 1 {
+                                        cb(&mut self.environment, press_time)
                                     }
-                                    InteractableCallback::Repeating(cb) => {
-                                        cb(&mut self.environment, &mut statedata)
-                                    }
-                                    _ => unreachable!(),
                                 }
-                                *press_time = statedata.time;
-                                *eflags = statedata.extra_flag;
-                            }
+                                InteractableCallback::Repeating(cb) => {
+                                    cb(&mut self.environment, press_time)
+                                }
+                                _ => unreachable!(),
+                            },
                         }
                     }
                 }
@@ -964,14 +983,11 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         base_color: glam::Vec3,
         hover_tint: glam::Vec4,
         press_tint: glam::Vec4,
-        extra_flag: bool,
         callback: ButtonCallback,
     ) -> Result<IndirectIndex, WidgetError> {
         if let Some(commons_id) = self.commons.solve_indirect(root_id.0) {
             self.assert_null_archetype(commons_id)?;
-            let button_element = (
-                text_id, base_color, hover_tint, press_tint, extra_flag, callback,
-            );
+            let button_element = (text_id, base_color, hover_tint, press_tint, callback);
             let button_id = self.buttons.insert(button_element);
             self.commons.archetype[commons_id.as_index()] = ComponentKind::Button {
                 handle: button_id,
@@ -1201,7 +1217,6 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                     button_params.bg_color,
                     button_params.bg_hover_tint,
                     button_params.bg_press_tint,
-                    button_params.extra_flag,
                     button_params.callback,
                 )
             }
@@ -1311,7 +1326,6 @@ pub struct ButtonParams {
     pub bg_color: glam::Vec3,
     pub bg_hover_tint: glam::Vec4,
     pub bg_press_tint: glam::Vec4,
-    pub extra_flag: bool,
     pub callback: ButtonCallback,
 }
 impl Default for ButtonParams {
@@ -1321,7 +1335,6 @@ impl Default for ButtonParams {
             bg_color: DEFAULT_GENERIC_COLOR,
             bg_hover_tint: DEFAULT_GENERIC_HOVER_TINT,
             bg_press_tint: DEFAULT_GENERIC_PRESS_TINT,
-            extra_flag: false,
             callback: InteractableCallback::default(),
         }
     }

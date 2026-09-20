@@ -11,8 +11,9 @@ use janus::{
 use rendrs::batch::{Batch, BatchGroupIndex, BatchManager, BatchUnitIndex};
 
 use crate::{
-    InterfaceButtonRowTableView, InterfaceCommonRowTableView, InterfaceImageRowTableView,
-    InterfacePanelRowTableView, InterfaceSliderRowTableView, InterfaceTextRowTableView,
+    InterfaceButtonRowTableView, InterfaceCommonRowTableView, InterfaceFloatDataRowTableView,
+    InterfaceImageRowTableView, InterfacePanelRowTableView, InterfaceSliderRowTableView,
+    InterfaceTextRowTableView,
     env::UiEnv,
     text::{GlyphAtlas, TextComposer},
 };
@@ -22,6 +23,7 @@ pub struct InterfaceAggregator<'t> {
     pub environment: &'t UiEnv,
     pub commons: InterfaceCommonRowTableView<'t>,
     pub panels: InterfacePanelRowTableView<'t>,
+    pub floating: InterfaceFloatDataRowTableView<'t>,
     pub texts: InterfaceTextRowTableView<'t>,
     pub images: InterfaceImageRowTableView<'t>,
     pub buttons: InterfaceButtonRowTableView<'t>,
