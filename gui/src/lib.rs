@@ -452,8 +452,17 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         let mut layout = TaffyTree::with_capacity(1);
         const ROOT_ID: WidgetId = WidgetId(IndirectIndex::null(0));
 
+        // for some reason taffy defaults the layout strategy to flexbox if
+        // the feature is enabled, which is kinda silly?
+        // we explicitly default to block
+        let default_style = {
+            let mut ds = Style::default();
+            ds.display = Display::Block;
+            ds
+        };
+
         let tree_id = layout
-            .new_leaf_with_context(Style::default(), ROOT_ID)
+            .new_leaf_with_context(default_style, ROOT_ID)
             .unwrap();
 
         let root_node = NodeJointId {
@@ -913,7 +922,9 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             width: AvailableSpace::Definite(self.resolution.width),
             height: AvailableSpace::Definite(self.resolution.height),
         };
-        let _ = self.layout.mark_dirty(taffy_id.0);
+        if force {
+            let _ = self.layout.mark_dirty(taffy_id.0);
+        }
         self.layout
             .compute_layout_with_measure(
                 taffy_id.0,
