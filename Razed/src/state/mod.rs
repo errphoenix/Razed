@@ -672,8 +672,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         self.ui_system.process_widget_states(delta);
 
         if let Some(re_ev) = self.ui_system.process_floating(input.cursor()) {
+            self.ui_system.rebind_layout(re_ev);
             self.ui_system.evaluate_layout_node(re_ev, true);
-            self.ui_system.synchronise_layout();
         }
 
         let vp_prev = view_point.get();

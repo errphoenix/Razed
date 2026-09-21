@@ -83,8 +83,6 @@ impl InterfaceAggregator<'_> {
         let layer = self.commons.layer[common_handle];
         let panel_size = bounds.size();
 
-        println!("pos panel={:?}", bounds.min);
-
         out.push(InterfaceObject {
             position: bounds.min,
             size: panel_size,
@@ -95,6 +93,7 @@ impl InterfaceAggregator<'_> {
 
         if let Some(float_id) = float_id {
             let (area, offset, &state) = self.floating.coalesced(*float_id);
+            let active = matches!(state, FloatState::Active);
 
             // draw panel grab-area always
             {
@@ -106,20 +105,27 @@ impl InterfaceAggregator<'_> {
                 };
 
                 //debug color
-                const GRAB_COLOR: glam::Vec4 = glam::vec4(1.0, 0.0, 0.0, 1.0);
+                const GRAB_COLOR: glam::Vec4 = glam::vec4(0.36, 0.36, 0.36, 1.0);
+                const GRAB_COLOR_HOVER: glam::Vec4 = glam::vec4(0.86, 0.86, 0.86, 1.0);
                 out.push(InterfaceObject {
                     position,
                     size,
-                    color: GRAB_COLOR,
+                    color: if hovered | active {
+                        GRAB_COLOR_HOVER
+                    } else {
+                        GRAB_COLOR
+                    },
                     attachment: None,
                     layer: layer + 1,
                 });
             }
 
             // draw floating new-bounds preview
-            if matches!(state, FloatState::Active) {
+            if active {
                 const THICKNESS: f32 = 2.0;
-                let color = glam::vec4(1.0 - color.x, 1.0 - color.y, 1.0 - color.z, 0.8);
+                // slight offset to blue
+                // negative values are clamped to 0 automatically
+                let color = glam::vec4(0.79 - color.x, 0.89 - color.y, 1.0 - color.z, 0.8);
                 let base_pos = bounds.min() + *offset;
 
                 out.push(InterfaceObject {

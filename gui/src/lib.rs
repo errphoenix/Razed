@@ -673,7 +673,6 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                             x: Some(Value::Absolute(p_anchor.x + offset.x)),
                             y: Some(Value::Absolute(p_anchor.y + offset.y)),
                         };
-                        println!("{:?}", layout.layout_position);
 
                         *offset = glam::Vec2::ZERO;
                         float_state[fdid] = FloatState::Idle;
@@ -870,40 +869,55 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         self.root_id().table_id == id
     }
 
+    pub fn rebind_layout(&mut self, id: WidgetId) {
+        if let Some(did) = self.commons.solve_indirect(id.0) {
+            let layout = &self.commons.layout_options[did.as_index()];
+            let taffy_id = self.commons.taffy_id[did.as_index()];
+            let _ = self.layout.set_style(taffy_id.0, layout.into_taffy_style());
+        }
+    }
+
+    fn impl_synchronise_layout(&mut self, did: DirectIndex) {
+        let taffy_id = self.commons.taffy_id[did.as_index()];
+        if taffy_id.is_null() {
+            return;
+        }
+
+        let parent = self.commons.parent[did.as_index()];
+        let (offset_x, offset_y) = if !self.is_root(parent) {
+            let direct = unsafe { self.commons.solve_indirect_unchecked(parent.0) };
+            let position = self.commons.feedback_anchor[direct.as_index()];
+            (position.x, position.y)
+        } else {
+            (0.0, 0.0)
+        };
+
+        let fb_anchor = &mut self.commons.feedback_anchor[did.as_index()];
+        let fb_bounds = &mut self.commons.feedback_bounds[did.as_index()];
+        let taffy_id = taffy_id.0;
+
+        let node = self.layout.get_final_layout(taffy_id);
+        let position = node.location;
+        let size = node.size;
+        let position_x = position.x + offset_x;
+        let position_y = position.y + offset_y;
+        let min = glam::vec2(position_x, position_y);
+        let max = glam::vec2(position_x + size.width, position_y + size.height);
+
+        *fb_anchor = glam::vec2(position_x, position_y);
+        *fb_bounds = Box2d { min, max };
+    }
+
+    pub fn synchronise_layout_node(&mut self, node: WidgetId) {
+        if let Some(did) = self.commons.solve_indirect(node.0) {
+            self.impl_synchronise_layout(did);
+        }
+    }
+
     pub fn synchronise_layout(&mut self) {
         let count = self.commons.len();
-        let taffy_ids = &self.commons.taffy_id;
-        let parents = &self.commons.parent;
-
         for i in 1..count {
-            let taffy_id = taffy_ids[i];
-            if taffy_id.is_null() {
-                continue;
-            }
-
-            let parent = parents[i];
-            let (offset_x, offset_y) = if !self.is_root(parent) {
-                let direct = unsafe { self.commons.solve_indirect_unchecked(parent.0) };
-                let position = self.commons.feedback_anchor[direct.as_index()];
-                (position.x, position.y)
-            } else {
-                (0.0, 0.0)
-            };
-
-            let fb_anchor = &mut self.commons.feedback_anchor[i];
-            let fb_bounds = &mut self.commons.feedback_bounds[i];
-            let taffy_id = taffy_id.0;
-
-            let node = self.layout.get_final_layout(taffy_id);
-            let position = node.location;
-            let size = node.size;
-            let position_x = position.x + offset_x;
-            let position_y = position.y + offset_y;
-            let min = glam::vec2(position_x, position_y);
-            let max = glam::vec2(position_x + size.width, position_y + size.height);
-
-            *fb_anchor = glam::vec2(position_x, position_y);
-            *fb_bounds = Box2d { min, max };
+            self.impl_synchronise_layout(DirectIndex::from_index(i, 0));
         }
     }
 

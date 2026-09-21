@@ -1,4 +1,4 @@
-use gui::DEFAULT_GENERIC_COLOR;
+use gui::{ButtonCallback, DEFAULT_GENERIC_COLOR, FloatGrabArea, FloatParams};
 
 pub use super::*;
 
@@ -114,19 +114,28 @@ pub fn root(
                         align_content: ContentAlignment::Stretch,
                         align_items: ItemAlignment::Stretch,
                     },
-                    justify_self: ItemAlignment::Center,
-                    align_self: ItemAlignment::End,
-                    layout_position: LayoutPosition::Relative,
+                    // justify_self: ItemAlignment::Center,
+                    // align_self: ItemAlignment::End,
+                    layout_position: LayoutPosition::Absolute {
+                        x: Some(Value::Absolute(512f32)),
+                        y: Some(Value::Absolute(512f32)),
+                    },
                     size: Some(Point {
                         x: Value::Absolute(400f32),
                         y: Value::Absolute(340f32),
                     }),
-                    margin: Some(Rectangle::splat(Value::Absolute(8f32))),
+                    //margin: Some(Rectangle::splat(Value::Absolute(8f32))),
                     ..Default::default()
                 },
                 layer: 5,
             },
-            Default::default(),
+            PanelParams {
+                float_params: Some(FloatParams {
+                    base_pos: Some(glam::vec2(512f32, 512f32)),
+                    grab_area: FloatGrabArea::SectionHoriz { height: 20f32 },
+                }),
+                ..Default::default()
+            },
         ))
         .unwrap()
         .0;
@@ -205,17 +214,11 @@ pub fn root(
     root
 }
 
-const fn params_dbg_button(
-    text: &'static str,
-    cb: InteractableCallback<InteractionTime>,
-) -> ButtonParams {
+const fn params_dbg_button(text: &'static str, cb: ButtonCallback) -> ButtonParams {
     params_dbg_button_with_text(TextNode::Static(text), cb)
 }
 
-const fn params_dbg_button_with_text(
-    text: TextNode,
-    cb: InteractableCallback<InteractionTime>,
-) -> ButtonParams {
+const fn params_dbg_button_with_text(text: TextNode, cb: ButtonCallback) -> ButtonParams {
     ButtonParams {
         text: TextParams {
             contents: TextContents::from_node(text),

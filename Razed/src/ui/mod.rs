@@ -39,13 +39,14 @@ pub fn initialize_default(
                 children: None,
                 layer: 5,
                 layout_options: LayoutOptions {
-                    container: ContainerLayout::Flexbox {
-                        direction: FlexDirection::Column,
-                        wrap: Wrap::Wrap,
-                        justify_content: ContentAlignment::Auto,
-                        align_content: ContentAlignment::Auto,
-                        align_items: ItemAlignment::Auto,
-                    },
+                    // container: ContainerLayout::Flexbox {
+                    //     direction: FlexDirection::Column,
+                    //     wrap: Wrap::Wrap,
+                    //     justify_content: ContentAlignment::Auto,
+                    //     align_content: ContentAlignment::Auto,
+                    //     align_items: ItemAlignment::Auto,
+                    // },
+                    container: ContainerLayout::Block,
                     align_self: ItemAlignment::Stretch,
                     justify_self: ItemAlignment::Stretch,
                     layout_position: LayoutPosition::Relative,
