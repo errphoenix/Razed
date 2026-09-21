@@ -4,9 +4,9 @@ use ethel::{
 };
 use gui::{
     ButtonParams, ContainerLayout, ContentAlignment, CoreElementParams, ElementParams,
-    InteractableCallback, InteractionTime, InterfaceButtonRowTable, InterfaceSystem, ItemAlignment,
-    LayoutOptions, LayoutPosition, PanelParams, Point, Rectangle, SliderParams, TextContents,
-    TextNode, TextParams, Value, WidgetId, Wrap,
+    InteractableCallback, InterfaceButtonRowTable, InterfaceSystem, ItemAlignment, LayoutOptions,
+    LayoutPosition, PanelParams, Point, Rectangle, SliderParams, TextContents, TextNode,
+    TextParams, Value, WidgetId, Wrap,
     env::{EnvValue, UiEnv},
     style::FlexDirection,
 };

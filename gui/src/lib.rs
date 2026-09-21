@@ -13,7 +13,11 @@ use ethel::{
     },
 };
 
-use janus::{StringHash, context::DeltaTime, input::KeyEvent};
+use janus::{
+    StringHash,
+    context::DeltaTime,
+    input::{Cursor, KeyEvent},
+};
 
 pub mod draw;
 pub mod env;
@@ -144,13 +148,18 @@ ethel::table_spec! {
         background_color: glam::Vec3;
         hover_tint: glam::Vec4;
         opacity: f32;
+
+        root_rvid: WidgetId;
+
+        // index in InterfaceFloatData table
+        floating: Option<IndirectIndex>;
     }
 }
 ethel::table_spec! {
     struct InterfaceFloatData {
         grab_area: FloatGrabArea;
         offset: glam::Vec2;
-        grabbing: bool;
+        state: FloatState;
     }
 }
 
@@ -169,6 +178,14 @@ impl Default for FloatGrabArea {
             height: Self::DEFAULT_HEIGHT,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Default)]
+pub enum FloatState {
+    #[default]
+    Idle,
+    Active,
+    Released,
 }
 
 ethel::table_spec! {
@@ -579,6 +596,87 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         }
     }
 
+    /// Process floating events and interactions.
+    ///
+    /// # Returns
+    /// Returns the ID of the element that may require layout
+    /// re-evaluation (with [`Self::evaluate_layout_node`]), if any.
+    pub fn process_floating(&mut self, cursor: &Cursor) -> Option<WidgetId> {
+        let panels_count = self.panels.len();
+        let float_ids = &self.panels.floating;
+
+        let (x, y, dx, dy) = {
+            let c = cursor.current_f32();
+            let d = cursor.delta_f32();
+            (c.0, c.1, d.0, d.1)
+        };
+
+        for i in (1..panels_count).rev() {
+            if let Some(float_id) = float_ids[i]
+                && let Some(fdid) = self.floating.solve_indirect(float_id)
+            {
+                let fdid = fdid.as_index();
+                let roots = &self.panels.root_rvid;
+                let float_bounds = &self.floating.grab_area;
+                let float_offset = &mut self.floating.offset;
+                let float_state = &mut self.floating.state;
+
+                let root = self.commons.solve_indirect(roots[i].0).unwrap();
+                let layouts = &mut self.commons.layout_options;
+
+                match float_state[fdid] {
+                    FloatState::Idle => {
+                        if self.commons.pressed[root.as_index()] {
+                            let bounds = {
+                                let p_bounds = self.commons.feedback_bounds[root.as_index()];
+                                let (min, max) = (p_bounds.min, p_bounds.max);
+                                let (min, max) = match float_bounds[fdid] {
+                                    FloatGrabArea::SectionHoriz { height } => {
+                                        (min, glam::vec2(max.x, min.y + height))
+                                    }
+                                    FloatGrabArea::SectionVert { width } => {
+                                        (min, glam::vec2(min.x + width, max.y))
+                                    }
+                                    FloatGrabArea::Corner { width, height } => {
+                                        (min, min + glam::vec2(width, height))
+                                    }
+                                };
+                                Box2d::new(min, max)
+                            };
+
+                            self.grabbing = bounds.contains(x, y);
+                            float_state[fdid] = FloatState::Active;
+                        }
+                    }
+                    FloatState::Active => {
+                        if self.grabbing {
+                            float_offset[fdid] += glam::vec2(dx, dy);
+                        } else {
+                            float_state[fdid] = FloatState::Released;
+                        }
+                    }
+                    FloatState::Released => {
+                        let layout = &mut layouts[root.as_index()];
+                        let p_anchor = self.commons.feedback_anchor[root.as_index()];
+
+                        let offset = &mut float_offset[fdid];
+                        layout.layout_position = LayoutPosition::Absolute {
+                            x: Some(Value::Absolute(p_anchor.x + offset.x)),
+                            y: Some(Value::Absolute(p_anchor.y + offset.y)),
+                        };
+                        println!("{:?}", layout.layout_position);
+
+                        *offset = glam::Vec2::ZERO;
+                        float_state[fdid] = FloatState::Idle;
+
+                        return Some(roots[i]);
+                    }
+                }
+            }
+        }
+        None
+    }
+
     pub fn process_widget_states(&mut self, delta: DeltaTime) {
         let delta = delta.as_f32();
         let count = self.commons.len();
@@ -732,6 +830,22 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     }
 
     pub fn feed_input(&mut self, events: &[InputEvent], scroll_delta: f32, delta: DeltaTime) {
+        const INTERACT_KEY_KB: u16 = janus::input::KeyCode::Space as u16;
+        for &ev in events {
+            if ev.key_and(|ev| {
+                matches!(
+                    ev,
+                    KeyEvent::Keyboard {
+                        code: INTERACT_KEY_KB,
+                        release: true,
+                        ..
+                    }
+                )
+            }) {
+                self.grabbing = false;
+            }
+        }
+
         let count = self.commons.len();
         for i in (1..count).rev() {
             for event in events {
@@ -784,15 +898,25 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         }
     }
 
-    pub fn evaluate_layout(&mut self) {
+    pub fn evaluate_layout_node(&mut self, node: WidgetId, force: bool) {
+        if let Some(cdid) = self.commons.solve_indirect(node.0) {
+            let taffy_id = self.commons.taffy_id[cdid.as_index()];
+            if taffy_id.is_null() {
+                return;
+            }
+            self.impl_evaluate_layout(taffy_id, force);
+        }
+    }
+
+    fn impl_evaluate_layout(&mut self, taffy_id: TaffyNodeId, force: bool) {
         let available = Size {
             width: AvailableSpace::Definite(self.resolution.width),
             height: AvailableSpace::Definite(self.resolution.height),
         };
-
+        let _ = self.layout.mark_dirty(taffy_id.0);
         self.layout
             .compute_layout_with_measure(
-                self.root_node.tree_id,
+                taffy_id.0,
                 available,
                 |known_size, available, _id, ctx, _style| {
                     let id = ctx.expect("node has no associated widget with it");
@@ -833,6 +957,10 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 },
             )
             .expect("failed to evaluate taffy layout");
+    }
+
+    pub fn evaluate_layout(&mut self, force: bool) {
+        self.impl_evaluate_layout(TaffyNodeId(self.root_node.tree_id), force);
     }
 
     pub fn invalidate_text_changes(&mut self) {
@@ -892,10 +1020,27 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         color: glam::Vec3,
         hover_tint: glam::Vec4,
         opacity: f32,
+        float_params: Option<FloatParams>,
     ) -> Result<IndirectIndex, WidgetError> {
         if let Some(commons_id) = self.commons.solve_indirect(id.0) {
             self.assert_null_archetype(commons_id)?;
-            let panel_element = (color, hover_tint, opacity);
+
+            let float_id = float_params.map(|params| {
+                if let Some(base_pos) = params.base_pos {
+                    let cdid = commons_id.as_index();
+                    self.commons.feedback_anchor[cdid] = base_pos;
+                    let layout = &mut self.commons.layout_options[cdid];
+                    layout.layout_position = LayoutPosition::Absolute {
+                        x: Some(Value::Absolute(base_pos.x)),
+                        y: Some(Value::Absolute(base_pos.y)),
+                    };
+                }
+
+                self.floating
+                    .insert((params.grab_area, glam::Vec2::ZERO, FloatState::Idle))
+            });
+
+            let panel_element = (color, hover_tint, opacity, id, float_id);
             let panel_id = self.panels.insert(panel_element);
             self.commons.archetype[commons_id.as_index()] = ComponentKind::Panel(panel_id);
             Ok(panel_id)
@@ -1187,6 +1332,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 panel_params.color,
                 panel_params.hover_tint,
                 panel_params.opacity,
+                panel_params.float_params,
             ),
             ElementParams::Button(core, button_params) => {
                 let text = &button_params.text;
@@ -1305,10 +1451,19 @@ pub const DEFAULT_GENERIC_PRESS_TINT: glam::Vec4 = glam::vec4(0.45, 0.45, 0.45, 
 pub const DEFAULT_GENERIC_OPACITY: f32 = 0.4;
 
 #[derive(Clone, Debug)]
+pub struct FloatParams {
+    pub base_pos: Option<glam::Vec2>,
+    pub grab_area: FloatGrabArea,
+}
+
+#[derive(Clone, Debug)]
 pub struct PanelParams {
     pub color: glam::Vec3,
     pub hover_tint: glam::Vec4,
     pub opacity: f32,
+    /// if present, any positional layout (flex, grid) is overriden with
+    /// the absolute `base_pos` defined in [`FloatParams`]
+    pub float_params: Option<FloatParams>,
 }
 impl Default for PanelParams {
     fn default() -> Self {
@@ -1316,6 +1471,7 @@ impl Default for PanelParams {
             color: DEFAULT_GENERIC_COLOR,
             hover_tint: DEFAULT_GENERIC_HOVER_TINT,
             opacity: DEFAULT_GENERIC_OPACITY,
+            float_params: None,
         }
     }
 }

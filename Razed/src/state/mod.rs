@@ -671,6 +671,11 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         self.ui_process_input(input.cursor(), input.mouse_wheel(), delta);
         self.ui_system.process_widget_states(delta);
 
+        if let Some(re_ev) = self.ui_system.process_floating(input.cursor()) {
+            self.ui_system.evaluate_layout_node(re_ev, true);
+            self.ui_system.synchronise_layout();
+        }
+
         let vp_prev = view_point.get();
 
         let surface_options = input.surface_options().read();
@@ -882,7 +887,7 @@ impl State {
 
     pub fn ui_update_layout(&mut self) {
         self.ui_system.invalidate_text_changes();
-        self.ui_system.evaluate_layout();
+        self.ui_system.evaluate_layout(false);
         self.ui_system.synchronise_layout();
     }
 

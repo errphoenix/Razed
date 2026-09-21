@@ -11,9 +11,9 @@ use janus::{
 use rendrs::batch::{Batch, BatchGroupIndex, BatchManager, BatchUnitIndex};
 
 use crate::{
-    InterfaceButtonRowTableView, InterfaceCommonRowTableView, InterfaceFloatDataRowTableView,
-    InterfaceImageRowTableView, InterfacePanelRowTableView, InterfaceSliderRowTableView,
-    InterfaceTextRowTableView,
+    FloatState, InterfaceButtonRowTableView, InterfaceCommonRowTableView,
+    InterfaceFloatDataRowTableView, InterfaceImageRowTableView, InterfacePanelRowTableView,
+    InterfaceSliderRowTableView, InterfaceTextRowTableView,
     env::UiEnv,
     text::{GlyphAtlas, TextComposer},
 };
@@ -71,7 +71,7 @@ impl InterfaceAggregator<'_> {
         out: &mut Vec<InterfaceObject>,
     ) {
         let hovered = self.commons.hovered[common_handle];
-        let (bg_c, hover_t, &opacity) = self.panels.coalesced(panel_index);
+        let (bg_c, hover_t, &opacity, _root, float_id) = self.panels.coalesced(panel_index);
 
         let bg_c = glam::vec4(bg_c.x, bg_c.y, bg_c.y, opacity);
         let hover_c = hover_t + glam::vec4(0f32, 0f32, 0f32, opacity);
@@ -81,14 +81,77 @@ impl InterfaceAggregator<'_> {
 
         let bounds = self.commons.feedback_bounds[common_handle];
         let layer = self.commons.layer[common_handle];
+        let panel_size = bounds.size();
+
+        println!("pos panel={:?}", bounds.min);
 
         out.push(InterfaceObject {
             position: bounds.min,
-            size: bounds.size(),
+            size: panel_size,
             color,
             attachment: None,
             layer,
         });
+
+        if let Some(float_id) = float_id {
+            let (area, offset, &state) = self.floating.coalesced(*float_id);
+
+            // draw panel grab-area always
+            {
+                use crate::FloatGrabArea::*;
+                let (position, size) = match area {
+                    SectionHoriz { height } => (bounds.min, glam::vec2(panel_size.x, *height)),
+                    SectionVert { width } => (bounds.min, glam::vec2(*width, panel_size.y)),
+                    Corner { width, height } => (bounds.min, glam::vec2(*width, *height)),
+                };
+
+                //debug color
+                const GRAB_COLOR: glam::Vec4 = glam::vec4(1.0, 0.0, 0.0, 1.0);
+                out.push(InterfaceObject {
+                    position,
+                    size,
+                    color: GRAB_COLOR,
+                    attachment: None,
+                    layer: layer + 1,
+                });
+            }
+
+            // draw floating new-bounds preview
+            if matches!(state, FloatState::Active) {
+                const THICKNESS: f32 = 2.0;
+                let color = glam::vec4(1.0 - color.x, 1.0 - color.y, 1.0 - color.z, 0.8);
+                let base_pos = bounds.min() + *offset;
+
+                out.push(InterfaceObject {
+                    position: base_pos,
+                    size: glam::vec2(panel_size.x, THICKNESS),
+                    color,
+                    attachment: None,
+                    layer: layer + 1,
+                });
+                out.push(InterfaceObject {
+                    position: base_pos,
+                    size: glam::vec2(THICKNESS, panel_size.y),
+                    color,
+                    attachment: None,
+                    layer: layer + 1,
+                });
+                out.push(InterfaceObject {
+                    position: base_pos + glam::vec2(0f32, panel_size.y - THICKNESS),
+                    size: glam::vec2(panel_size.x, THICKNESS),
+                    color,
+                    attachment: None,
+                    layer: layer + 1,
+                });
+                out.push(InterfaceObject {
+                    position: base_pos + glam::vec2(panel_size.x - THICKNESS, 0f32),
+                    size: glam::vec2(THICKNESS, panel_size.y),
+                    color,
+                    attachment: None,
+                    layer: layer + 1,
+                });
+            }
+        }
     }
 
     fn gather_text(
