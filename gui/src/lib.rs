@@ -654,7 +654,9 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                             };
 
                             self.grabbing = bounds.contains(x, y);
-                            float_state[fdid] = FloatState::Active;
+                            if self.grabbing {
+                                float_state[fdid] = FloatState::Active;
+                            }
                         }
                     }
                     FloatState::Active => {
@@ -789,13 +791,16 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         }
     }
 
-    fn process_key_input(&mut self, table_index: usize, event: KeyEvent, delta: DeltaTime) {
+    fn process_key_input(&mut self, table_index: usize, event: KeyEvent, delta: DeltaTime) -> bool {
         let delta = delta.as_f32();
         let hovered = &self.commons.hovered;
         let pressed = &mut self.commons.pressed;
         let press_time = &mut self.commons.press_time;
 
-        // mouse press, hold, release
+        // keyboard text (todo)
+        {}
+
+        // click (only kb), hold, release
         {
             const PRESS_KEY: u16 = janus::input::KeyCode::Space as u16;
             let click = matches!(
@@ -811,10 +816,9 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             let pt = &mut press_time[table_index];
             pt.seconds = (pt.seconds + delta) * press as u32 as f32;
             pt.frames = (pt.frames + 1) * press as u32;
-        }
 
-        // keyboard (todo)
-        {}
+            return press;
+        }
     }
 
     fn process_scroll_input(&mut self, table_index: usize, scroll_delta: f32) {
@@ -837,7 +841,12 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         }
     }
 
-    pub fn feed_input(&mut self, events: &[InputEvent], scroll_delta: f32, delta: DeltaTime) {
+    pub fn feed_input(
+        &mut self,
+        events: &[InputEvent],
+        scroll_delta: f32,
+        delta: DeltaTime,
+    ) -> bool {
         const INTERACT_KEY_KB: u16 = janus::input::KeyCode::Space as u16;
         for &ev in events {
             if ev.key_and(|ev| {
@@ -854,15 +863,21 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             }
         }
 
+        let mut consumed = false;
+
         let count = self.commons.len();
         for i in (1..count).rev() {
             for event in events {
                 if let Some(event) = event.key() {
-                    self.process_key_input(i, event, delta);
+                    if self.process_key_input(i, event, delta) {
+                        consumed = true;
+                    }
                 }
             }
             self.process_scroll_input(i, scroll_delta);
         }
+
+        consumed
     }
 
     pub fn is_root(&self, id: WidgetId) -> bool {

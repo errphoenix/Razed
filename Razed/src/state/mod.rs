@@ -687,7 +687,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         self.update_environment();
         self.ui_system.poll_environment_changes();
         self.ui_update_layout();
-        self.ui_process_input(input.cursor(), input.mouse_wheel(), delta);
+        let ui_consume_input = self.ui_process_input(input.cursor(), input.mouse_wheel(), delta);
         self.ui_system.process_widget_states(delta);
 
         if let Some(re_ev) = self.ui_system.process_floating(input.cursor()) {
@@ -698,35 +698,37 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         let vp_prev = view_point.get();
 
         let surface_options = input.surface_options().read();
-        if !surface_options.cursor_grabbed() {
-            screen.sync().unwrap();
-            self.select_lattice_raycast(input, screen.get(), view_point);
-        } else {
-            {
-                const ANCHOR_Y_MOVE: glam::Vec3 = glam::vec3(0.0, 1.0, 0.0);
-                const ANCHOR_Y_MOVE_SPRINT: f32 = 4.0;
-                let anchor = self.camera.anchor();
+        if !ui_consume_input {
+            if !surface_options.cursor_grabbed() {
+                screen.sync().unwrap();
+                self.select_lattice_raycast(input, screen.get(), view_point);
+            } else {
+                {
+                    const ANCHOR_Y_MOVE: glam::Vec3 = glam::vec3(0.0, 1.0, 0.0);
+                    const ANCHOR_Y_MOVE_SPRINT: f32 = 4.0;
+                    let anchor = self.camera.anchor();
 
-                let mut d = ANCHOR_Y_MOVE * delta.as_f32();
-                if input.keys().key_down(janus::input::KeyCode::ShiftLeft) {
-                    d *= ANCHOR_Y_MOVE_SPRINT;
+                    let mut d = ANCHOR_Y_MOVE * delta.as_f32();
+                    if input.keys().key_down(janus::input::KeyCode::ShiftLeft) {
+                        d *= ANCHOR_Y_MOVE_SPRINT;
+                    }
+
+                    if input.keys().key_down(janus::input::KeyCode::ArrowUp) {
+                        self.camera.set_anchor(anchor + d);
+                    } else if input.keys().key_down(janus::input::KeyCode::ArrowDown) {
+                        self.camera.set_anchor(anchor - d);
+                    }
                 }
 
-                if input.keys().key_down(janus::input::KeyCode::ArrowUp) {
-                    self.camera.set_anchor(anchor + d);
-                } else if input.keys().key_down(janus::input::KeyCode::ArrowDown) {
-                    self.camera.set_anchor(anchor - d);
-                }
+                let (dx, dy) = input.cursor().delta_f32();
+                let (dx, dy) = (dx.to_radians(), dy.to_radians());
+                self.camera.update(dx, dy);
+
+                let dw = input.mouse_wheel();
+                *self.camera.distance_mut() -= dw * delta.as_f32() * 100.0;
+
+                let _ = view_point.set_and_advance(*self.camera.viewpoint());
             }
-
-            let (dx, dy) = input.cursor().delta_f32();
-            let (dx, dy) = (dx.to_radians(), dy.to_radians());
-            self.camera.update(dx, dy);
-
-            let dw = input.mouse_wheel();
-            *self.camera.distance_mut() -= dw * delta.as_f32() * 100.0;
-
-            let _ = view_point.set_and_advance(*self.camera.viewpoint());
         }
 
         // shadow tricell with previous read viewpoint value
@@ -924,12 +926,17 @@ impl State {
         self.ui_system.synchronise_layout();
     }
 
-    pub fn ui_process_input(&mut self, cursor: &Cursor, scroll_delta: f32, delta: DeltaTime) {
+    pub fn ui_process_input(
+        &mut self,
+        cursor: &Cursor,
+        scroll_delta: f32,
+        delta: DeltaTime,
+    ) -> bool {
         let x = cursor.x_f32();
         let y = cursor.y_f32();
         self.ui_system.process_hover_events(x, y, delta);
         self.ui_system
-            .feed_input(&self.local_keyev_buf, scroll_delta, delta);
+            .feed_input(&self.local_keyev_buf, scroll_delta, delta)
     }
 
     pub fn ui_composite_batches(&mut self) {
