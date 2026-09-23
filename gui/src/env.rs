@@ -152,6 +152,17 @@ impl EnvValue {
             EnvValue::DynamicString(dyn_str) => write!(string, "{dyn_str}"),
         }
     }
+
+    pub fn invert(&mut self) {
+        match self {
+            EnvValue::Null => {}
+            EnvValue::Boolean(b) => *b = !*b,
+            EnvValue::Integer(i) => *i = -*i,
+            EnvValue::Float(f) => *f = 1f32 - *f,
+            EnvValue::HashedLiteral(_) => {}
+            EnvValue::DynamicString(_) => {}
+        }
+    }
 }
 impl From<String> for EnvValue {
     fn from(value: String) -> Self {

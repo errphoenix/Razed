@@ -200,6 +200,20 @@ layout_buffer! {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct DebugRenderOptions {
+    pub draw_viz_lattice: bool,
+    pub draw_viz_cage: bool,
+}
+impl Default for DebugRenderOptions {
+    fn default() -> Self {
+        Self {
+            draw_viz_lattice: true,
+            draw_viz_cage: true,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct FrameDataBuffers {
     // barebone fragment geom repr.
@@ -231,8 +245,8 @@ pub struct FrameDataBuffers {
     pub debug_shading_mode: TriCell<Option<ShadeDebugAttribsMode>>,
     pub render_params: RenderParams,
     pub render_stats: TriCell<RenderStats>,
+    pub debug_render_options: TriCell<DebugRenderOptions>,
 }
-
 impl FrameDataBuffers {
     pub fn new() -> Self {
         let generic_objects_buffer = PartitionedTriBuffer::new(LayoutRenderableData::create());
@@ -280,6 +294,7 @@ impl FrameDataBuffers {
             debug_shading_mode: TriCell::new(None),
             render_params: RenderParams::default(),
             render_stats: TriCell::new(RenderStats::default()),
+            debug_render_options: Default::default(),
         }
     }
 }

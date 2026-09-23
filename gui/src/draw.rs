@@ -106,7 +106,7 @@ impl InterfaceAggregator<'_> {
 
                 //debug color
                 const GRAB_COLOR: glam::Vec4 = glam::vec4(0.36, 0.36, 0.36, 1.0);
-                const GRAB_COLOR_HOVER: glam::Vec4 = glam::vec4(0.86, 0.86, 0.86, 1.0);
+                const GRAB_COLOR_HOVER: glam::Vec4 = glam::vec4(0.26, 0.26, 0.26, 1.0);
                 out.push(InterfaceObject {
                     position,
                     size,

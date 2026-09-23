@@ -92,8 +92,13 @@ pub(crate) fn button_color_state(
 pub mod widget_names {
     use janus::StringHash;
 
-    pub const DEBUG_CTL_VSYNC_BUTTON: StringHash =
+    pub const DEBUG_CTL_DISPLAY_VSYNC_BUTTON: StringHash =
         janus::hash_string("__debug.control.display.vsync:button");
+
+    pub const DEBUG_CTL_RENDER_LATTICE_BUTTON: StringHash =
+        janus::hash_string("__debug.control.render.lattice:button");
+    pub const DEBUG_CTL_RENDER_CAGE_BUTTON: StringHash =
+        janus::hash_string("__debug.control.render.cage:button");
 }
 
 pub mod env_names {
@@ -128,6 +133,11 @@ pub mod env_names {
 
     pub const DEBUG_CTL_DISPLAY_VSYNC: StringHash =
         janus::hash_string("__debug.control.display.vsync");
+
+    pub const DEBUG_CTL_RENDER_LATTICE: StringHash =
+        janus::hash_string("__debug.control.render.lattice");
+    pub const DEBUG_CTL_RENDER_CAGE: StringHash = janus::hash_string("__debug.control.render.cage");
+
     pub const DEBUG_CTL_GRAPHICS_GAMMA: StringHash =
         janus::hash_string("__debug.control.graphics.gamma");
 

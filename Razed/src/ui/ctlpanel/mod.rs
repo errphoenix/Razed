@@ -114,24 +114,25 @@ pub fn root(
                         align_content: ContentAlignment::Stretch,
                         align_items: ItemAlignment::Stretch,
                     },
-                    // justify_self: ItemAlignment::Center,
-                    // align_self: ItemAlignment::End,
                     layout_position: LayoutPosition::Absolute {
-                        x: Some(Value::Absolute(512f32)),
-                        y: Some(Value::Absolute(512f32)),
+                        x: Some(Value::Percentage(0.2f32)),
+                        y: Some(Value::Percentage(0.5f32)),
                     },
                     size: Some(Point {
                         x: Value::Absolute(400f32),
                         y: Value::Absolute(340f32),
                     }),
-                    //margin: Some(Rectangle::splat(Value::Absolute(8f32))),
+                    padding: Some(Rectangle {
+                        top: Value::Absolute(26f32),
+                        ..Default::default()
+                    }),
                     ..Default::default()
                 },
                 layer: 5,
             },
             PanelParams {
                 float_params: Some(FloatParams {
-                    base_pos: Some(glam::vec2(512f32, 512f32)),
+                    base_pos: None,
                     grab_area: FloatGrabArea::SectionHoriz { height: 20f32 },
                 }),
                 ..Default::default()
@@ -140,30 +141,54 @@ pub fn root(
         .unwrap()
         .0;
 
-    let dbg_button_vsync = system
-        .create_element(ElementParams::Button(
-            CoreElementParams {
-                parent: Some(root),
-                children: None,
-                layout_options: LayoutOptions {
-                    align_self: ItemAlignment::Start,
-                    justify_self: ItemAlignment::Start,
-                    ..Default::default()
+    fn dbg_toggle_button<const PROP: u64>(
+        system: &mut InterfaceSystem,
+        root: WidgetId,
+        label: &'static str,
+    ) -> (WidgetId, IndirectIndex) {
+        system
+            .create_element(ElementParams::Button(
+                CoreElementParams {
+                    parent: Some(root),
+                    children: None,
+                    layout_options: LayoutOptions {
+                        align_self: ItemAlignment::Start,
+                        justify_self: ItemAlignment::Start,
+                        ..Default::default()
+                    },
+                    layer: 5,
                 },
-                layer: 5,
-            },
-            params_dbg_button(
-                "V-SYNC",
-                InteractableCallback::Once(|env, _time| {
-                    if let Some(vsync) = env.get_mut(&env_names::DEBUG_CTL_DISPLAY_VSYNC) {
-                        let v = vsync.as_boolean_mut().unwrap();
-                        *v = !*v;
-                    }
-                }),
-            ),
-        ))
-        .unwrap();
-    map.insert(DEBUG_CTL_VSYNC_BUTTON, dbg_button_vsync);
+                params_dbg_button(
+                    label,
+                    InteractableCallback::Once(|env, _time| {
+                        if let Some(prop) = env.get_mut(&janus::StringHash::from_u64(PROP)) {
+                            prop.invert();
+                        }
+                    }),
+                ),
+            ))
+            .unwrap()
+    }
+
+    let dbg_button_vsync = dbg_toggle_button::<{ env_names::DEBUG_CTL_DISPLAY_VSYNC.as_u64() }>(
+        system,
+        root,
+        "Toggle: V-sync",
+    );
+    let dbg_button_lattice = dbg_toggle_button::<{ env_names::DEBUG_CTL_RENDER_LATTICE.as_u64() }>(
+        system,
+        root,
+        "Viz: lattice",
+    );
+    let dbg_button_cage = dbg_toggle_button::<{ env_names::DEBUG_CTL_RENDER_CAGE.as_u64() }>(
+        system,
+        root,
+        "Viz: cage",
+    );
+
+    map.insert(DEBUG_CTL_DISPLAY_VSYNC_BUTTON, dbg_button_vsync);
+    map.insert(DEBUG_CTL_RENDER_LATTICE_BUTTON, dbg_button_lattice);
+    map.insert(DEBUG_CTL_RENDER_CAGE_BUTTON, dbg_button_cage);
 
     system
         .create_element(ElementParams::Slider(
@@ -215,19 +240,22 @@ pub fn root(
 }
 
 const fn params_dbg_button(text: &'static str, cb: ButtonCallback) -> ButtonParams {
-    params_dbg_button_with_text(TextNode::Static(text), cb)
-}
-
-const fn params_dbg_button_with_text(text: TextNode, cb: ButtonCallback) -> ButtonParams {
-    ButtonParams {
-        text: TextParams {
-            contents: TextContents::from_node(text),
+    params_dbg_button_with_text(
+        TextParams {
+            contents: TextContents::from_node(TextNode::Static(text)),
             never_invalidate: true,
             font_name: TextParams::DEFAULT_FONT,
             color: TextParams::DEFAULT_COLOR,
             font_size: TextParams::DEFAULT_FONT_SIZE,
             line_height: TextParams::DEFAULT_LINE_HEIGHT,
         },
+        cb,
+    )
+}
+
+const fn params_dbg_button_with_text(text: TextParams, cb: ButtonCallback) -> ButtonParams {
+    ButtonParams {
+        text,
         bg_color: DEFAULT_GENERIC_COLOR,
         bg_hover_tint: COLORTINT_HOVER_INVARIANT,
         bg_press_tint: COLORTINT_HOVER_INVARIANT,

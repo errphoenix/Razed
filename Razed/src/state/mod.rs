@@ -8,8 +8,8 @@ use std::{
 
 use crate::{
     data::{
-        FrameDataBuffers, LayoutDebrisData, LayoutFragmentData, LayoutRenderableData,
-        LayoutXpbdDebugData,
+        DebugRenderOptions, FrameDataBuffers, LayoutDebrisData, LayoutFragmentData,
+        LayoutRenderableData, LayoutXpbdDebugData,
     },
     procedural::{VoxelGrid, VoxelGridOptions},
     render::{
@@ -310,6 +310,25 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                     let gamma = Gamma::from_normalized(gamma_n);
                     render_params.gamma.set_and_advance(gamma).unwrap();
                 }
+
+                let draw_viz_lattice = self
+                    .ui_system
+                    .env()
+                    .get(&DEBUG_CTL_RENDER_LATTICE)
+                    .and_then(|v| v.as_boolean())
+                    .unwrap_or_default();
+                let draw_viz_cage = self
+                    .ui_system
+                    .env()
+                    .get(&DEBUG_CTL_RENDER_CAGE)
+                    .and_then(|v| v.as_boolean())
+                    .unwrap_or_default();
+                let _ = storage
+                    .debug_render_options
+                    .set_and_advance(DebugRenderOptions {
+                        draw_viz_lattice,
+                        draw_viz_cage,
+                    });
             }
 
             // setup geometry data
@@ -796,6 +815,8 @@ impl State {
             let env = self.ui_system.env_mut();
             if self.first_frame {
                 env.insert(DEBUG_CTL_DISPLAY_VSYNC, true);
+                env.insert(DEBUG_CTL_RENDER_LATTICE, true);
+                env.insert(DEBUG_CTL_RENDER_CAGE, true);
                 env.insert(DEBUG_CTL_GRAPHICS_GAMMA, Gamma::DEFAULT_NORMALIZED);
                 env.insert(DEBUG_CTL_SHADE_MODE, 0);
             } else {
@@ -859,7 +880,19 @@ impl State {
         }
 
         crate::ui::button_color_state(
-            &[(DEBUG_CTL_DISPLAY_VSYNC, DEBUG_CTL_VSYNC_BUTTON)],
+            &[(DEBUG_CTL_DISPLAY_VSYNC, DEBUG_CTL_DISPLAY_VSYNC_BUTTON)],
+            &self.ui_map,
+            &mut self.ui_system.buttons,
+            &self.ui_system.environment,
+        );
+        crate::ui::button_color_state(
+            &[(DEBUG_CTL_RENDER_LATTICE, DEBUG_CTL_RENDER_LATTICE_BUTTON)],
+            &self.ui_map,
+            &mut self.ui_system.buttons,
+            &self.ui_system.environment,
+        );
+        crate::ui::button_color_state(
+            &[(DEBUG_CTL_RENDER_CAGE, DEBUG_CTL_RENDER_CAGE_BUTTON)],
             &self.ui_map,
             &mut self.ui_system.buttons,
             &self.ui_system.environment,

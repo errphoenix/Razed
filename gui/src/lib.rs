@@ -1535,8 +1535,8 @@ impl TextParams {
     pub const DEFAULT_FONT: &'static str = "Arial";
 
     pub const DEFAULT_COLOR: glam::Vec4 = glam::Vec4::ONE;
-    pub const DEFAULT_FONT_SIZE: f32 = 11.0;
-    pub const DEFAULT_LINE_HEIGHT: f32 = 14.0;
+    pub const DEFAULT_FONT_SIZE: f32 = 14.0;
+    pub const DEFAULT_LINE_HEIGHT: f32 = 20.0;
 }
 impl Default for TextParams {
     fn default() -> Self {

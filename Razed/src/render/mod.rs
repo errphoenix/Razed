@@ -545,24 +545,35 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 .execute(section, render_pool, &ctx);
         }
 
-        self.pipeline().debug_lattice_draw_pass.execute(
-            section,
-            render_pool,
-            &DebugLatticeDrawCtx {
-                lattice_data: &frame_data.lattice_debug,
-                constraints_count: frame_data.lattice_constraint_count.load(Ordering::Acquire)
-                    as i32,
-            },
-        );
-        self.pipeline().debug_cage_draw_pass.execute(
-            section,
-            render_pool,
-            &DebugCageDrawCtx {
-                cage_data: &frame_data.cages,
-                point_size: 1.5,
-                cage_total_count: frame_data.cage_points_count.load(Ordering::Acquire),
-            },
-        );
+        // lattice & cage optional viz. draw passes
+        {
+            let opts = frame_data.debug_render_options.get();
+
+            if opts.draw_viz_lattice {
+                self.pipeline().debug_lattice_draw_pass.execute(
+                    section,
+                    render_pool,
+                    &DebugLatticeDrawCtx {
+                        lattice_data: &frame_data.lattice_debug,
+                        constraints_count: frame_data
+                            .lattice_constraint_count
+                            .load(Ordering::Acquire)
+                            as i32,
+                    },
+                );
+            }
+            if opts.draw_viz_cage {
+                self.pipeline().debug_cage_draw_pass.execute(
+                    section,
+                    render_pool,
+                    &DebugCageDrawCtx {
+                        cage_data: &frame_data.cages,
+                        point_size: 1.5,
+                        cage_total_count: frame_data.cage_points_count.load(Ordering::Acquire),
+                    },
+                );
+            }
+        }
 
         self.pipeline().blit_pass.execute(section, render_pool, &());
 
