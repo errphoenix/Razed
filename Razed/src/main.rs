@@ -8,7 +8,7 @@ use gui::text::{GlyphAtlas, GlyphAtlasTexture};
 use janus::{context::Setup, window::DisplayParameters};
 use rendrs::geometry::GeometryBank;
 
-use crate::{
+use razed::{
     data::FrameDataBuffers,
     procedural::{CubeVoronoi, voxel_grid},
     render::RenderGroup,
@@ -16,8 +16,8 @@ use crate::{
 
 const DISPLAY_PARAMS: DisplayParameters = DisplayParameters::fullscreen("Razed");
 
-type State = ethel::state::State<FrameDataBuffers, state::State, RenderGroup>;
-type Renderer = ethel::render::Renderer<FrameDataBuffers, render::Renderer>;
+type State = ethel::state::State<FrameDataBuffers, razed::state::State, RenderGroup>;
+type Renderer = ethel::render::Renderer<FrameDataBuffers, razed::render::Renderer>;
 
 fn main() {
     tracing_subscriber::FmtSubscriber::builder().init();
@@ -30,7 +30,7 @@ fn main() {
 
     let mut start_handler = StartupHandler::new(input_system, || FrameDataBuffers::new());
 
-    let mut textures_master_registry = assets::TextureRegistryBuilder::build();
+    let mut textures_master_registry = razed::assets::TextureRegistryBuilder::build();
     let textures_metadata_registry = textures_master_registry.create_metadata_registry();
     let texture_pipe = textures_master_registry.command_pipe();
 
@@ -41,8 +41,8 @@ fn main() {
 
         start_handler.with_mesh_data(mesh_stage);
         start_handler.with_mesh_layouts(
-            data::LayoutMeshStorageStatic::create(),
-            data::LayoutMeshStorageTris::create(),
+            razed::data::LayoutMeshStorageStatic::create(),
+            razed::data::LayoutMeshStorageTris::create(),
         );
 
         group.mapping
@@ -136,7 +136,7 @@ fn generate_fragment_meshes(cubic_area: glam::Vec3, mesh_stage: MeshStaging) -> 
     }
 
     let prev_head = mesh_stage.metadata().len();
-    let voronoi = procedural::cubic_voronoi(
+    let voronoi = razed::procedural::cubic_voronoi(
         &seeds,
         cubic_area,
         glam::Vec3::splat(FRAG_UNIT),
