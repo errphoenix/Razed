@@ -334,11 +334,14 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             // setup geometry data
             {
                 let fragment_count = self.fragments.data().len() - 1;
-                let _debris_count = self.debris.total_debris_count();
+                let debris_count = self.debris.total_debris_count();
 
                 let _ = storage
                     .fragment_geom_count
                     .set_and_advance(fragment_count as u32);
+                let _ = storage
+                    .debris_geom_count
+                    .set_and_advance(debris_count as u32);
             }
 
             // load cage deformation feedback data

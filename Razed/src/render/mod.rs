@@ -396,6 +396,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         self.geometry_bank.bind_vertex_buffers();
         self.geometry_bank.bind_triangle_buffers();
         self.geometry_bank.bind_gcounter_buffer();
+        self.geometry_bank.bind_instancing_buffers();
 
         // geometry composition pass - fragments
         {
@@ -422,7 +423,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         // geometry composition pass - debris
         {
-            let debris_count = frame_data.debris_count.load(Ordering::Relaxed);
+            let debris_count = frame_data.debris_geom_count.get();
             let debris_data = &frame_data.debris;
             let view_data = self.view_data;
             let inst_mesh_base = 0; //todo

@@ -216,13 +216,14 @@ impl Default for DebugRenderOptions {
 
 #[derive(Debug, Default)]
 pub struct FrameDataBuffers {
-    // barebone fragment geom repr.
+    // count of fragment geom entities
     pub fragment_geom_count: TriCell<u32>,
+    // count of debris geom entities
+    pub debris_geom_count: TriCell<u32>,
 
     pub generic_objects: PartitionedTriBuffer<RENDERABLE_STORAGE_PARTS>,
     pub fragments: PartitionedTriBuffer<FRAGMENTS_STORAGE_PARTS>,
     pub debris: PartitionedTriBuffer<DEBRIS_STORAGE_PARTS>,
-    pub debris_count: Arc<AtomicU32>,
 
     pub cages: CagePartitionedBuffer,
     pub cage_map: TriBuffer<DirectIndex>,
@@ -268,11 +269,11 @@ impl FrameDataBuffers {
 
         Self {
             fragment_geom_count: TriCell::new(0),
+            debris_geom_count: TriCell::new(0),
 
             generic_objects: generic_objects_buffer,
             fragments: fragment_data,
             debris: debris_data,
-            debris_count: Arc::new(AtomicU32::new(0)),
 
             cages: CagePartitionedBuffer::new(),
             cage_map: TriBuffer::zeroed(CAGES_ALLOC),

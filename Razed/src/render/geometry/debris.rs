@@ -112,7 +112,7 @@ rendrs::geometry_submission_job! {
         "
         #define DOMAIN_THREAD_SIZE 64
 
-        const uint inst_mesh_id = inst_mesh_base + rendrs_DomainIndex;
+        const uint inst_mesh_id = inst_mesh_base + rendrs_WorkGroupID;
 
         uint m_tris_length;
         uint m_tris_base;
@@ -143,23 +143,16 @@ rendrs::geometry_submission_job! {
 
         uint thread_inst_count = 0;
 
-        const uint thread_each = debris_count / DOMAIN_THREAD_SIZE;
-        const uint thread_base = thread_each * rendrs_ThreadID;
-        const uint thread_margin = debris_count % DOMAIN_THREAD_SIZE;
-        const uint thread_end_bounds = thread_base + thread_each;
+        const uint thread_div_int = debris_count / DOMAIN_THREAD_SIZE;
+        const uint thread_base     = thread_div_int * rendrs_ThreadID;
+        const uint thread_div_rest = debris_count % DOMAIN_THREAD_SIZE;
+        const uint thread_this     = thread_div_rest == 0 ? thread_div_int : thread_div_rest;
+        const uint thread_end_bounds = thread_base + thread_this;
 
         for (uint i = thread_base; i < thread_end_bounds; ++i) {
             uint mesh_id = pod_mesh_id[i];
             if (mesh_id == inst_mesh_id) {
                 thread_inst_count += 1;
-            }
-        }
-        if (rendrs_ThreadID == DOMAIN_THREAD_SIZE - 1) {
-            for (uint i = thread_end_bounds; i < thread_end_bounds + thread_margin; ++i) {
-                uint mesh_id = pod_mesh_id[i];
-                if (mesh_id == inst_mesh_id) {
-                    thread_inst_count += 1;
-                }
             }
         }
         sm_inst_mesh_inst_count_thread[rendrs_ThreadID] = thread_inst_count;
@@ -191,17 +184,6 @@ rendrs::geometry_submission_job! {
                 InstanceDataTransform(i_base + j, position, rotation);
             }
             j++;
-        }
-        if (rendrs_ThreadID == DOMAIN_THREAD_SIZE - 1) {
-            for (uint i = thread_end_bounds; i < thread_end_bounds + thread_margin; ++i) {
-                uint mesh_id = pod_mesh_id[i];
-                vec3 position = pod_position[i].xyz;
-                vec4 rotation = pod_rotation[i];
-                if (mesh_id == inst_mesh_id) {
-                    InstanceDataTransform(i_base + j, position, rotation);
-                }
-                j++;
-            }
         }
 
         "
