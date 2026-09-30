@@ -14,14 +14,6 @@ use crate::{
     render::RenderGroup,
 };
 
-mod assets;
-mod data;
-mod procedural;
-mod render;
-mod state;
-mod structure;
-mod ui;
-
 const DISPLAY_PARAMS: DisplayParameters = DisplayParameters::fullscreen("Razed");
 
 type State = ethel::state::State<FrameDataBuffers, state::State, RenderGroup>;
