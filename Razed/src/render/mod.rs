@@ -603,7 +603,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     render_pool,
                     &DebugCageDrawCtx {
                         cage_data: &frame_data.cages,
-                        point_size: 1.5,
+                        point_size: 8.0,
                         cage_total_count: frame_data.cage_points_count.load(Ordering::Acquire),
                     },
                 );
@@ -752,10 +752,12 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 debug_cage_draw_pass: pass::debug_cage_draw::pass(
                     &self.shaders.cage_visual,
                     mapped_ldr,
+                    base_depth,
                 ),
                 debug_lattice_draw_pass: pass::debug_lattice_draw::pass(
                     &self.shaders.lattice,
                     mapped_ldr,
+                    base_depth,
                 ),
                 #[cfg(feature = "devmode")]
                 debug_lines_draw_pass: pass::debug_lines_draw::pass(&self.shaders.lines),

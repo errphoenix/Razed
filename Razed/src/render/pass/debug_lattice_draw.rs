@@ -5,7 +5,7 @@ use rendrs::pipeline::{DrawPass, OutputObject, RenderTargetAccessor};
 
 use crate::render::shader_commons;
 
-pub type DebugLatticeDrawPass = DrawPass<DebugLatticeDrawCtxWrapper, 0, 1>;
+pub type DebugLatticeDrawPass = DrawPass<DebugLatticeDrawCtxWrapper, 0, 2>;
 
 #[derive(Debug)]
 pub struct DebugLatticeDrawCtx<'data> {
@@ -18,17 +18,22 @@ rendrs::context_wrapper!(for<'ctx> DebugLatticeDrawCtx);
 pub const fn pass(
     shader: &ShaderDebugLattice,
     ldr_output: RenderTargetAccessor,
+    depth_output: RenderTargetAccessor,
 ) -> DebugLatticeDrawPass {
     let handle_view = shader.handle().view();
     DebugLatticeDrawPass::new(
         handle_view,
         [],
-        [OutputObject::Color(ldr_output)],
+        [
+            OutputObject::Color(ldr_output),
+            OutputObject::Depth(depth_output),
+        ],
         |section, ctx| {
             let section = section.as_index();
             ctx.lattice_data.bind_shader_storage(section);
             let count = ctx.constraints_count;
             unsafe {
+                janus::gl::LineWidth(5.0);
                 janus::gl::DrawArraysInstanced(janus::gl::LINES, 0, 2, count);
             }
         },

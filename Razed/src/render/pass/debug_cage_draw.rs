@@ -3,7 +3,7 @@ use rendrs::pipeline::{DrawPass, OutputObject, RenderTargetAccessor};
 
 use crate::data::CagePartitionedBuffer;
 
-pub type DebugCageDrawPass = DrawPass<DebugCageDrawCtxWrapper, 0, 1>;
+pub type DebugCageDrawPass = DrawPass<DebugCageDrawCtxWrapper, 0, 2>;
 
 #[derive(Debug)]
 pub struct DebugCageDrawCtx<'data> {
@@ -14,12 +14,19 @@ pub struct DebugCageDrawCtx<'data> {
 
 rendrs::context_wrapper!(for<'ctx> DebugCageDrawCtx);
 
-pub const fn pass(shader: &ShaderDebugCage, ldr_output: RenderTargetAccessor) -> DebugCageDrawPass {
+pub const fn pass(
+    shader: &ShaderDebugCage,
+    ldr_output: RenderTargetAccessor,
+    depth_output: RenderTargetAccessor,
+) -> DebugCageDrawPass {
     let handle_view = shader.handle().view();
     DebugCageDrawPass::new(
         handle_view,
         [],
-        [OutputObject::Color(ldr_output)],
+        [
+            OutputObject::Color(ldr_output),
+            OutputObject::Depth(depth_output),
+        ],
         |_, ctx| {
             ctx.cage_data
                 .bind_ssbo_pod_bindref(Some(SSBO_INDEX_POD_CAGE_REFERENCE));

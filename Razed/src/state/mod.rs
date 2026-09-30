@@ -499,9 +499,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                         debris_offset_1,
                     );
                 }
-
-                let debris_count = self.debris.total_debris_count() as u32;
-                storage.debris_count.store(debris_count, Ordering::Release);
             }
 
             // generic objects upload
