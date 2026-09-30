@@ -23,7 +23,7 @@ use janus::{
     texture::{ImageFormat, ImageType, MipLevels, Texture, TextureFiltering},
 };
 use rendrs::{
-    geometry::TriangleAttribs,
+    geometry::{TriangleAttribs, rasterize::ShaderGeomRasterizeVariants},
     graphics::{PixelResolution, ShCoeffsBuffer},
     pipeline::{
         ImageObject, OutputObject, Pass, RenderPool, RenderTarget, RenderTargetDescriptor,
@@ -37,7 +37,7 @@ use crate::{
     assets,
     data::FrameDataBuffers,
     render::{
-        geometry::FragmentsGeomCtx,
+        geometry::{DebrisGeomCtx, FragmentsGeomCtx},
         graphics::{Materials, RenderStats},
         pass::{DebugCageDrawCtx, DebugLatticeDrawCtx, ShadeDebugAttribsCtx, ShadePbrCtx},
     },
@@ -132,9 +132,11 @@ pub struct RenderPipeline {
 
     // geometry composition
     geom_fragments: geometry::FragmentsGeomPass,
+    geom_debris: geometry::DebrisGeomPass,
 
     // geometry rasterization & attrib. interpolation
     geom_rasterize: geometry::GeomRasterizePass,
+    geom_rasterize_inst: geometry::GeomRasterizePass,
     attr_interp: geometry::AttribInterpolationPass,
 
     // shading
@@ -162,9 +164,11 @@ impl RenderPipeline {
     fn revalidate(&mut self, render_pool: &RenderPool) {
         // geometry composition
         self.geom_fragments.revalidate(render_pool);
+        self.geom_debris.revalidate(render_pool);
 
         // geometry rasterization & attrib. interpolation
         self.geom_rasterize.revalidate(render_pool);
+        self.geom_rasterize_inst.revalidate(render_pool);
         self.attr_interp.revalidate(render_pool);
 
         // shading
@@ -215,7 +219,6 @@ pub struct RenderShaders {
     interface: gui::render::ShaderUiBasic,
 
     cage_deform: pass::ComputeShaderCageDeform,
-    // fd_preprocess: pass::ComputeShaderProcessCommand,
     util_equirect_decode: pass::ComputeShaderEquirectDecode,
 
     vfx_tonemap: pass::ComputeShaderTonemap,
@@ -417,6 +420,29 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             );
         }
 
+        // geometry composition pass - debris
+        {
+            let debris_count = frame_data.debris_count.load(Ordering::Relaxed);
+            let debris_data = &frame_data.debris;
+            let view_data = self.view_data;
+            let inst_mesh_base = 0; //todo
+            let inst_mesh_count = 27; //todo
+            let material_registry = self.materials.locations();
+
+            self.pipeline().geom_debris.execute(
+                section,
+                render_pool,
+                &DebrisGeomCtx {
+                    debris_count,
+                    debris_data,
+                    view_data,
+                    inst_mesh_base,
+                    inst_mesh_count,
+                    material_registry,
+                },
+            );
+        }
+
         unsafe {
             janus::gl::MemoryBarrier(
                 janus::gl::SHADER_STORAGE_BARRIER_BIT
@@ -451,12 +477,21 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             .clear_pass
             .execute(section, render_pool, &());
 
-        self.pipeline().geom_rasterize.execute(
-            render_pool,
-            &self.geometry_bank,
-            self.view_data.proj_mat,
-            self.view_data.view_mat,
-        );
+        // rasterization
+        {
+            self.pipeline().geom_rasterize.execute(
+                render_pool,
+                &self.geometry_bank,
+                self.view_data.proj_mat,
+                self.view_data.view_mat,
+            );
+            self.pipeline().geom_rasterize_inst.execute(
+                render_pool,
+                &self.geometry_bank,
+                self.view_data.proj_mat,
+                self.view_data.view_mat,
+            );
+        }
 
         unsafe {
             janus::gl::MemoryBarrier(
@@ -665,8 +700,15 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 ),
 
                 geom_fragments: geometry::geom_fragments_pass(),
+                geom_debris: geometry::geom_debris_pass(),
 
                 geom_rasterize: rendrs::geometry::GeomRasterizePass::new(
+                    ShaderGeomRasterizeVariants::Batched,
+                    OutputObject::Color(geom_raster),
+                    OutputObject::Depth(base_depth),
+                ),
+                geom_rasterize_inst: rendrs::geometry::GeomRasterizePass::new(
+                    ShaderGeomRasterizeVariants::Instanced,
                     OutputObject::Color(geom_raster),
                     OutputObject::Depth(base_depth),
                 ),

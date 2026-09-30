@@ -1,5 +1,7 @@
+pub mod debris;
 pub mod fragments;
 
+pub use debris::*;
 pub use fragments::*;
 
 rendrs::geometry_buffers! {
