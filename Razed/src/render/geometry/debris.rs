@@ -28,20 +28,11 @@ pub fn geom_debris_pass_with_shader(shader: ComputeShaderDebrisGeomSubmit) -> De
 
         let section = section.as_index();
 
-        debris_data.bind_shader_storage_single(
+        debris_data.bind_shader_storage_arrays(
             section,
             LayoutDebrisData::PodPositions as usize,
-            Some(G_DEBRIS_SSBO_BIND_POD_POSITION),
-        );
-        debris_data.bind_shader_storage_single(
-            section,
-            LayoutDebrisData::PodRotations as usize,
-            Some(G_DEBRIS_SSBO_BIND_POD_ROTATION),
-        );
-        debris_data.bind_shader_storage_single(
-            section,
-            LayoutDebrisData::PodMeshId as usize,
-            Some(G_DEBRIS_SSBO_BIND_POD_MESHID),
+            3,
+            Some(G_DEBRIS_SSBO_BIND_POD),
         );
 
         shader.uniform_camera_forward_vec3v([view_data.view_dir]);
@@ -86,14 +77,14 @@ rendrs::geometry_submission_job! {
         ssbo {
             shader_commons::ETH_MESH_SSBO_STATIC // bind 10
             shader_commons::ETH_MESH_SSBO_TRIS   // bind 11
-
-            G_DEBRIS_SSBO_POD_POSITION
-            G_DEBRIS_SSBO_POD_ROTATION
-            G_DEBRIS_SSBO_POD_MESHID
+            G_DEBRIS_SSBO_POD
         }
         share {
             uint sm_inst_mesh_inst_count_thread[64];
             uint sm_inst_mesh_inst_count;
+            uint sm_inst_base;
+            uint sm_m_tris_length;
+            uint sm_m_tris_base;
         }
 
         context {
@@ -114,18 +105,16 @@ rendrs::geometry_submission_job! {
 
         const uint inst_mesh_id = inst_mesh_base + rendrs_WorkGroupID;
 
-        uint m_tris_length;
-        uint m_tris_base;
         if (rendrs_ThreadID == 0) {
             const MeshMetadata metadata = eth_meshmeta[inst_mesh_id];
 
             const uint m_vert_offset = metadata.vert_offset;
             const uint m_vert_length = metadata.vert_length;
             const uint m_tris_offset = metadata.tris_offset;
-            m_tris_length = metadata.tris_length;
+            sm_m_tris_length = metadata.tris_length;
 
             const uint m_vert_base = AllocVertex(m_vert_length);
-            m_tris_base = AllocTriangle(m_tris_length);
+            sm_m_tris_base = AllocTriangle(sm_m_tris_length);
 
             for (uint i = 0; i < m_vert_length; ++i) {
                 const MeshVertex m_vert = eth_vertex_buffer[m_vert_offset + i];
@@ -134,23 +123,22 @@ rendrs::geometry_submission_job! {
                 const vec2 m_uv  = vec2(m_vert.uv_x, m_vert.uv_y);
                 VertexData(m_vert_base + i, m_pos, m_nor, m_uv);
             }
-            for (uint i = 0; i < m_tris_length; ++i) {
+            for (uint i = 0; i < sm_m_tris_length; ++i) {
                 MeshTriangle m_tri = eth_tris_buffer[m_tris_offset + i];
                 const uint[3] indices = uint[]( m_tri.v0, m_tri.v1, m_tri.v2 );
-                TriangleData(m_tris_base + i, indices, inst_mesh_id);
+                TriangleData(sm_m_tris_base + i, indices, inst_mesh_id);
             }
         }
 
+        const uint q = debris_count / DOMAIN_THREAD_SIZE;
+        const uint r = debris_count % DOMAIN_THREAD_SIZE;
+        const uint thread_base = rendrs_ThreadID * q + min(rendrs_ThreadID, r);
+        const uint thread_this = q + uint(rendrs_ThreadID < r);
+        const uint thread_end = thread_base + thread_this;
+
         uint thread_inst_count = 0;
-
-        const uint thread_div_int = debris_count / DOMAIN_THREAD_SIZE;
-        const uint thread_base     = thread_div_int * rendrs_ThreadID;
-        const uint thread_div_rest = debris_count % DOMAIN_THREAD_SIZE;
-        const uint thread_this     = thread_div_rest == 0 ? thread_div_int : thread_div_rest;
-        const uint thread_end_bounds = thread_base + thread_this;
-
-        for (uint i = thread_base; i < thread_end_bounds; ++i) {
-            uint mesh_id = pod_mesh_id[i];
+        for (uint i = thread_base; i < thread_end; ++i) {
+            uint mesh_id = pod_mesh_id[i + 1];
             if (mesh_id == inst_mesh_id) {
                 thread_inst_count += 1;
             }
@@ -159,31 +147,31 @@ rendrs::geometry_submission_job! {
 
         barrier();
 
-        uint i_base;
         if (rendrs_ThreadID == 0) {
+            sm_inst_mesh_inst_count = 0;
             for (uint i = 0; i < DOMAIN_THREAD_SIZE; ++i) {
                sm_inst_mesh_inst_count += sm_inst_mesh_inst_count_thread[i];
             }
 
-            i_base = AllocInstances(sm_inst_mesh_inst_count);
+            sm_inst_base = AllocInstances(sm_inst_mesh_inst_count);
 
             AllocInstanceListData(inst_mesh_id,
-                m_tris_base, m_tris_length,
-                i_base, sm_inst_mesh_inst_count
+                sm_m_tris_base, sm_m_tris_length,
+                sm_inst_base, sm_inst_mesh_inst_count
             );
         }
 
         barrier();
 
         uint j = 0;
-        for (uint i = thread_base; i < thread_end_bounds; ++i) {
-            uint mesh_id = pod_mesh_id[i];
-            vec3 position = pod_position[i].xyz;
-            vec4 rotation = pod_rotation[i];
+        for (uint i = thread_base; i < thread_end; ++i) {
+            uint mesh_id = pod_mesh_id[i + 1];
             if (mesh_id == inst_mesh_id) {
-                InstanceDataTransform(i_base + j, position, rotation);
+                vec3 position = pod_position[i + 1].xyz;
+                vec4 rotation = pod_rotation[i + 1];
+                InstanceDataTransform(sm_inst_base + j, position, rotation);
+                j++;
             }
-            j++;
         }
 
         "
@@ -191,35 +179,17 @@ rendrs::geometry_submission_job! {
 }
 
 macro_rules! ssbo_binding {
-    (POD_Position) => {
+    (POD_Debris) => {
         5
-    };
-    (POD_Rotation) => {
-        6
-    };
-    (POD_MeshID) => {
-        7
     };
 }
 
-pub const G_DEBRIS_SSBO_BIND_POD_POSITION: u32 = ssbo_binding!(POD_Position);
-pub const G_DEBRIS_SSBO_BIND_POD_ROTATION: u32 = ssbo_binding!(POD_Rotation);
-pub const G_DEBRIS_SSBO_BIND_POD_MESHID: u32 = ssbo_binding!(POD_MeshID);
+pub const G_DEBRIS_SSBO_BIND_POD: u32 = ssbo_binding!(POD_Debris);
 
-pub const G_DEBRIS_SSBO_POD_POSITION: GlslStorage = ethel::shader_glsl_ssbo! {
-    buf POD_Position => {
-        [dyn_array vec4: pod_position]
-    }
-};
-
-pub const G_DEBRIS_SSBO_POD_ROTATION: GlslStorage = ethel::shader_glsl_ssbo! {
-    buf POD_Rotation => {
-        [dyn_array vec4: pod_rotation]
-    }
-};
-
-pub const G_DEBRIS_SSBO_POD_MESHID: GlslStorage = ethel::shader_glsl_ssbo! {
-    buf POD_MeshID => {
-        [dyn_array uint: pod_mesh_id]
+pub const G_DEBRIS_SSBO_POD: GlslStorage = ethel::shader_glsl_ssbo! {
+    buf POD_Debris => {
+        vec4 : pod_position[131072];
+        vec4 : pod_rotation[131072];
+        uint : pod_mesh_id[131072];
     }
 };

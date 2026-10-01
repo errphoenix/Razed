@@ -65,7 +65,7 @@ pub fn shade_mode_selector(system: &mut InterfaceSystem, root: WidgetId) -> Widg
                         operation: |var| {
                             let id = var.as_integer().unwrap_or_default() as u32;
                             EnvValue::from_str(match id {
-                                0 => "Standard/PBR|dbg",
+                                0 => "Standard/PBR",
                                 1 => "Attr./Barycentric Weights",
                                 2 => "Attr./Tangent Frame",
                                 3 => "Attr./Screen Derivatives",
