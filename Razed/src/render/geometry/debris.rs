@@ -125,8 +125,12 @@ rendrs::geometry_submission_job! {
             }
             for (uint i = 0; i < sm_m_tris_length; ++i) {
                 MeshTriangle m_tri = eth_tris_buffer[m_tris_offset + i];
-                const uint[3] indices = uint[]( m_tri.v0, m_tri.v1, m_tri.v2 );
-                TriangleData(sm_m_tris_base + i, indices, inst_mesh_id);
+                const uint[3] indices = uint[](
+                    m_tri.v0 - m_vert_offset + m_vert_base,
+                    m_tri.v1 - m_vert_offset + m_vert_base,
+                    m_tri.v2 - m_vert_offset + m_vert_base
+                );
+                TriangleData(sm_m_tris_base + i, indices, rendrs_GeometryID);
             }
         }
 
@@ -155,7 +159,7 @@ rendrs::geometry_submission_job! {
 
             sm_inst_base = AllocInstances(sm_inst_mesh_inst_count);
 
-            AllocInstanceListData(inst_mesh_id,
+            AllocInstanceListData(rendrs_GeometryID,
                 sm_m_tris_base, sm_m_tris_length,
                 sm_inst_base, sm_inst_mesh_inst_count
             );
@@ -164,6 +168,10 @@ rendrs::geometry_submission_job! {
         barrier();
 
         uint j = 0;
+        for (uint k = 0; k < rendrs_ThreadID; ++k) {
+            j += sm_inst_mesh_inst_count_thread[k];
+        }
+
         for (uint i = thread_base; i < thread_end; ++i) {
             uint mesh_id = pod_mesh_id[i + 1];
             if (mesh_id == inst_mesh_id) {
@@ -173,7 +181,6 @@ rendrs::geometry_submission_job! {
                 j++;
             }
         }
-
         "
     }
 }
