@@ -153,11 +153,13 @@ ethel::shader_glsl_compute! {
                     v_output = S_gradients;
                     break;
                 case 3:
-                    v_output.rg = vec2(
-                      float(S_raster_in.x) / 35000.0,
-                      float(S_raster_in.y) / 1500.0
+                    // triangle ID output
+                    uint Tid = S_raster_in.x;
+                    v_output.rgb = vec3(
+                        float(Tid         & 255u) / 255.0,
+                        float((Tid >> 8 ) & 255u) / 255.0,
+                        float((Tid >> 16) & 255u) / 255.0
                     );
-                    v_output.b = 0.0;
                     break;
             }
 
