@@ -165,7 +165,9 @@ rendrs::geometry_submission_job! {
                 sm_cage_lpoint0[4] - sm_cage_lpoint0[0]
             );
             sm_cage_B = B;
-            sm_cage_B_inv = inverse(B); // B is NOT orthogonal
+            // B *cannot* be assumed to be orthogonal, thus
+            // its inverse cannot be assumed to be its transpose
+            sm_cage_B_inv = inverse(B);
 
             sm_cage_edges = vec3[](
                 sm_cage_lpoint1[1] - sm_cage_lpoint1[0],

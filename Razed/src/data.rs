@@ -22,9 +22,6 @@ use crate::structure::fragment::ANCHORS_COUNT as FRAGMENT_ANCHORS_COUNT;
 
 pub const INTERFACE_COMMANDS_ALLOC: usize = 2048;
 
-pub const RENDERABLE_STORAGE_PARTS: usize = 8;
-pub const ENTITY_ALLOCATION: usize = 8192;
-
 pub const LATTICE_CONSTRAINT_ALLOC: usize = 32768;
 pub const LATTICE_NODE_ALLOC: usize = 8192;
 pub const LATTICE_STORAGE_PARTS: usize = 4;
@@ -43,34 +40,9 @@ pub const INTERFACE_INSTANCES_ALLOC: usize = 8192;
 
 layout_mesh_buffer!(
     count    : 2048;
-    vertices : 65536;
+    vertices : 32768;
     tris     : 32768
 );
-
-layout_buffer! {
-    const RenderableData: RENDERABLE_STORAGE_PARTS, {
-        enum MeshID: ENTITY_ALLOCATION => {
-            type u32;
-            bind 0;
-            shader 0;
-        };
-        enum PodPositions: ENTITY_ALLOCATION => {
-            type [f32; 4];
-            bind 1;
-            shader 1;
-        };
-        enum PodRotations: ENTITY_ALLOCATION => {
-            type [f32; 4];
-            bind 2;
-            shader 2;
-        };
-        enum PodScales: ENTITY_ALLOCATION => {
-            type [f32; 4];
-            bind 3;
-            shader 3;
-        };
-    }
-}
 
 layout_buffer! {
     const XpbdDebugData: LATTICE_STORAGE_PARTS, {
@@ -221,7 +193,6 @@ pub struct FrameDataBuffers {
     // count of debris geom entities
     pub debris_geom_count: TriCell<u32>,
 
-    pub generic_objects: PartitionedTriBuffer<RENDERABLE_STORAGE_PARTS>,
     pub fragments: PartitionedTriBuffer<FRAGMENTS_STORAGE_PARTS>,
     pub debris: PartitionedTriBuffer<DEBRIS_STORAGE_PARTS>,
 
@@ -250,9 +221,6 @@ pub struct FrameDataBuffers {
 }
 impl FrameDataBuffers {
     pub fn new() -> Self {
-        let generic_objects_buffer = PartitionedTriBuffer::new(LayoutRenderableData::create());
-        LayoutRenderableData::initialise_partitions_tri(&generic_objects_buffer);
-
         let xpbd_visualiser = PartitionedTriBuffer::new(LayoutXpbdDebugData::create());
         LayoutXpbdDebugData::initialise_partitions_tri(&xpbd_visualiser);
 
@@ -271,7 +239,6 @@ impl FrameDataBuffers {
             fragment_geom_count: TriCell::new(0),
             debris_geom_count: TriCell::new(0),
 
-            generic_objects: generic_objects_buffer,
             fragments: fragment_data,
             debris: debris_data,
 

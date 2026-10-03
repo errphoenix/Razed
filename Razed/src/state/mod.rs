@@ -9,7 +9,7 @@ use std::{
 use crate::{
     data::{
         DebugRenderOptions, FrameDataBuffers, LayoutDebrisData, LayoutFragmentData,
-        LayoutRenderableData, LayoutXpbdDebugData,
+        LayoutXpbdDebugData,
     },
     procedural::{VoxelGrid, VoxelGridOptions},
     render::{
@@ -500,41 +500,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                         LayoutDebrisData::PodMeshId as usize,
                         pod_mesh_id_rubber,
                         debris_offset_1,
-                    );
-                }
-            }
-
-            // generic objects upload
-            {
-                let scene = &storage.generic_objects;
-
-                let mesh_ids = self.generic_objects.mesh_id_slice();
-                let pod_positions = self.generic_objects.position_slice();
-                let pod_rotations = self.generic_objects.rotation_slice();
-                let pod_scales = self.generic_objects.scale_slice();
-
-                // SAFETY: the use of LayoutRenderableData ensures we blit
-                // to a valid section of the partitioned buffer.
-                unsafe {
-                    scene.blit_part(buf_idx, LayoutRenderableData::MeshId as usize, mesh_ids, 0);
-
-                    scene.blit_part(
-                        buf_idx,
-                        LayoutRenderableData::PodPositions as usize,
-                        pod_positions,
-                        0,
-                    );
-                    scene.blit_part(
-                        buf_idx,
-                        LayoutRenderableData::PodRotations as usize,
-                        pod_rotations,
-                        0,
-                    );
-                    scene.blit_part(
-                        buf_idx,
-                        LayoutRenderableData::PodScales as usize,
-                        pod_scales,
-                        0,
                     );
                 }
             }

@@ -16,10 +16,10 @@ pub fn shade_mode_selector(system: &mut InterfaceSystem, root: WidgetId) -> Widg
                         align_content: ContentAlignment::Stretch,
                         align_items: ItemAlignment::Stretch,
                     },
-                    align_self: ItemAlignment::Center,
-                    justify_self: ItemAlignment::Center,
-                    //layout_position: (),
-                    //size: (),
+                    margin: Some(Rectangle {
+                        top: Value::Absolute(16f32),
+                        ..Default::default()
+                    }),
                     ..Default::default()
                 },
                 layer: 5,
@@ -51,9 +51,7 @@ pub fn shade_mode_selector(system: &mut InterfaceSystem, root: WidgetId) -> Widg
                 parent: Some(panel),
                 children: None,
                 layout_options: LayoutOptions {
-                    align_self: ItemAlignment::Start,
-                    justify_self: ItemAlignment::Start,
-                    size: Some(Point::new(Value::Absolute(134f32), Value::Absolute(18f32))),
+                    size: Some(Point::new(Value::Absolute(256f32), Value::Absolute(22f32))),
                     ..Default::default()
                 },
                 layer: 5,
