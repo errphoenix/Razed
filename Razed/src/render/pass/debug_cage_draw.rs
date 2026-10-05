@@ -1,7 +1,7 @@
 use ethel::shader::ShaderKind;
 use rendrs::pipeline::{DrawPass, OutputObject, RenderTargetAccessor};
 
-use crate::data::CagePartitionedBuffer;
+use crate::{data::CagePartitionedBuffer, simulation::cage};
 
 pub type DebugCageDrawPass = DrawPass<DebugCageDrawCtxWrapper, 0, 2>;
 
@@ -33,8 +33,7 @@ pub const fn pass(
             ctx.cage_data
                 .bind_ssbo_pod_points(Some(SSBO_INDEX_POD_CAGE_POINTS));
 
-            let count =
-                ctx.cage_total_count as i32 * crate::structure::cage::PER_CAGE_POINTS as i32;
+            let count = ctx.cage_total_count as i32 * cage::PER_CAGE_POINTS as i32;
             let point_size = ctx.point_size;
             unsafe {
                 janus::gl::PointSize(point_size);

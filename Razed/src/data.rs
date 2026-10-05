@@ -6,7 +6,7 @@ use crate::{
         graphics::{RenderParams, RenderStats},
         pass::{CagePoints, ShadeDebugAttribsMode},
     },
-    structure::cage::{
+    simulation::cage::{
         CageSyncFrameBuffers, OffsetRotation, PER_CAGE_MAX_LATTICE_ATTACHMENTS, PER_CAGE_POINTS,
     },
 };
@@ -18,7 +18,7 @@ use ethel::{
 use gui::render::{UiCommandsBuffer, UiDataBuffer};
 use janus::{context::DeltaTime, sync::TriCell};
 
-use crate::structure::fragment::ANCHORS_COUNT as FRAGMENT_ANCHORS_COUNT;
+use crate::simulation::fragment::ANCHORS_COUNT as FRAGMENT_ANCHORS_COUNT;
 
 pub const INTERFACE_COMMANDS_ALLOC: usize = 2048;
 

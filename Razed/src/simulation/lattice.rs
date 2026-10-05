@@ -1,11 +1,9 @@
-use std::f32;
-
 use ethel::state::data::{Column, IndirectIndex};
 use janus::context::DeltaTime;
 use physics::xpbd::{Constraints, HasConstraints, HasNodes, Nodes, RawXpbdLattice, XpbdSolver};
 use rustc_hash::FxHashMap;
 
-use crate::structure::FragmentsRowTableView;
+use crate::simulation::fragment::FragmentsRowTableView;
 
 ethel::table_spec! {
     struct Nodes {

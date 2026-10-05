@@ -16,7 +16,7 @@ use razed::{
 
 const DISPLAY_PARAMS: DisplayParameters = DisplayParameters::fullscreen("Razed");
 
-type State = ethel::state::State<FrameDataBuffers, razed::state::State, RenderGroup>;
+type State = ethel::state::State<FrameDataBuffers, razed::simulation::State, RenderGroup>;
 type Renderer = ethel::render::Renderer<FrameDataBuffers, razed::render::Renderer>;
 
 fn main() {

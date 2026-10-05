@@ -6,7 +6,7 @@ use rendrs::pipeline::ComputePass;
 
 use crate::{
     data::{CagePartitionedBuffer, LayoutXpbdDebugData},
-    structure::cage::{self, OffsetRotation},
+    simulation::cage::{self, OffsetRotation},
 };
 
 pub type CageDeformComputePass = ComputePass<CageDeformComputeCtxWrapper, 0, 0>;

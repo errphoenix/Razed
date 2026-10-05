@@ -911,7 +911,7 @@ impl Renderer {
             const RANGE: f32 = 20.0;
             const RANGE_CELLS: i32 = (RANGE / RESOLUTION.get()) as i32;
 
-            const RESOLUTION: SpatialResolution = crate::structure::debris::HASH_RESOLUTION;
+            const RESOLUTION: SpatialResolution = crate::simulation::debris::HASH_RESOLUTION;
 
             let camera = RESOLUTION.encode_point(view.position);
             let f_camera = RESOLUTION.approx_point(camera);

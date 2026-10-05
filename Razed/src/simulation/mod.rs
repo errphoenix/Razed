@@ -1,3 +1,8 @@
+pub mod cage;
+pub mod debris;
+pub mod fragment;
+pub mod lattice;
+
 use std::{
     io::BufWriter,
     path::PathBuf,
@@ -17,11 +22,10 @@ use crate::{
         graphics::{Gamma, RenderStats},
         pass::ShadeDebugAttribsMode,
     },
-    structure::{
-        CageSystem, DebrisSystem, FragmentSystem, FragmentsRowTableView,
-        cage::OffsetRotation,
-        create_structure_lattice,
-        debris::MotionAccumulator,
+    simulation::{
+        cage::{CageSystem, OffsetRotation},
+        debris::{DebrisSystem, MotionAccumulator},
+        fragment::{FragmentSystem, FragmentsRowTableView},
         lattice::{LatticeSystem, NodesRowTableView},
     },
 };
@@ -1017,7 +1021,7 @@ impl State {
                 inherit_v *= 0.035;
                 inherit_av *= 0.01;
 
-                let position = position + offset.xyz() - glam::Vec3::X * 2.0;
+                let position = position + offset.xyz();
 
                 buffer.push(DebrisData {
                     position,
@@ -1073,14 +1077,15 @@ impl State {
     }
 
     fn spawn_debug_structure(&mut self, view_point: &ViewPoint) {
-        const WIDTH: f32 = 12.0;
-        const HEIGHT: f32 = 6.0;
-        const DEPTH: f32 = 12.0;
+        const WIDTH: f32 = 9.0;
+        const HEIGHT: f32 = 3.0;
+        const DEPTH: f32 = 9.0;
         const FLOORS: u32 = 6;
         const TOTAL_HEIGHT: f32 = HEIGHT * FLOORS as f32;
 
         let center = glam::vec3(view_point.position.x, GROUND_LEVEL, view_point.position.z);
-        let lattice = create_structure_lattice(center, WIDTH, HEIGHT, DEPTH, FLOORS);
+        let lattice =
+            crate::structure::create_structure_lattice(center, WIDTH, HEIGHT, DEPTH, FLOORS);
 
         const INNER_SPACE: i32 = 3;
 

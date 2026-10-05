@@ -9,8 +9,8 @@ use rustc_hash::FxHashSet;
 
 use crate::{
     procedural::VoxelGrid,
-    structure::{
-        CageSystem,
+    simulation::{
+        cage::CageSystem,
         lattice::{DamagedNode, NodesRowTableView},
     },
 };

@@ -13,7 +13,7 @@ use janus::sync::TriVec;
 use crate::{
     data::{CagePartitionedBuffer, LayoutCage},
     render::pass::{CagePoints, LatticeAttachments, NodeAttachment},
-    structure::lattice::NodesRowTableView,
+    simulation::lattice::NodesRowTableView,
 };
 
 pub const PER_POINT_LATTICE_ATTACHMENTS: usize = 4;

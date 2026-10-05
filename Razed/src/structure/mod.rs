@@ -1,20 +1,4 @@
-pub mod cage;
-pub mod debris;
-pub mod fragment;
-pub mod lattice;
-
 use physics::xpbd::{RawXpbdLattice, XpbdLatticeBuilder, XpbdLinkOptions, XpbdNodeOptions as Node};
-
-#[allow(unused_imports)]
-pub use debris::{
-    DebrisRowTable, DebrisRowTableView, DebrisSystem, RubberRowTable, RubberRowTableView,
-};
-
-#[allow(unused_imports)]
-pub use cage::CageSystem;
-
-#[allow(unused_imports)]
-pub use fragment::{FragmentSystem, FragmentsRowTable, FragmentsRowTableView};
 
 // height is per floor, not total building; todo: docs
 pub fn create_structure_lattice(

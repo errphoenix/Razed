@@ -7,7 +7,7 @@ use rendrs::{geometry::DomainData, graphics::material::MaterialLocationRegistry}
 
 use crate::{
     data::{CagePartitionedBuffer, FRAGMENTS_STORAGE_PARTS},
-    render::{ViewData, shader_commons},
+    render::{shader_commons, ViewData},
 };
 
 pub fn geom_fragments_pass() -> FragmentsGeomPass {
