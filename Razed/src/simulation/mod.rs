@@ -1085,23 +1085,14 @@ impl State {
 
         let center = glam::vec3(view_point.position.x, GROUND_LEVEL, view_point.position.z);
         let lattice =
-            crate::structure::create_structure_lattice(center, WIDTH, HEIGHT, DEPTH, FLOORS);
-
-        const INNER_SPACE: i32 = 3;
+            crate::structure::presets::cuboid::lattice(center, WIDTH, HEIGHT, DEPTH, FLOORS);
 
         let mut voxel_grid = VoxelGrid::new(
-            |cell| {
-                let half_cell = Cell {
-                    x: (WIDTH * 0.5) as i32,
-                    y: (FLOORS as f32 * HEIGHT * 0.5) as i32,
-                    z: (DEPTH * 0.5) as i32,
-                };
-                let cell = cell + half_cell;
-
-                cell.x < INNER_SPACE
-                    || cell.x > (WIDTH as i32) - INNER_SPACE - 1
-                    || cell.z < INNER_SPACE
-                    || cell.z > (DEPTH as i32) - INNER_SPACE - 1
+            crate::structure::presets::cuboid::CuboidVoxelFn {
+                width: WIDTH,
+                height: HEIGHT,
+                depth: DEPTH,
+                levels: FLOORS,
             },
             VoxelGridOptions::default()
                 .with_width(WIDTH)
@@ -1111,7 +1102,7 @@ impl State {
         voxel_grid.repopulate_defaults();
 
         let center = center + glam::vec3(0.0, TOTAL_HEIGHT * 0.5, 0.0);
-        self.generate_structure(center, &voxel_grid, lattice);
+        self.generate_structure(center, &mut voxel_grid, lattice);
     }
 
     fn save_profiler_report(&mut self) {
@@ -1232,7 +1223,7 @@ impl State {
     pub fn generate_structure(
         &mut self,
         origin: glam::Vec3,
-        grid: &VoxelGrid,
+        grid: &mut VoxelGrid,
         lattice: RawXpbdLattice,
     ) {
         let l0 = self.lattice.nodes().handles().len();
@@ -1264,9 +1255,9 @@ impl State {
             self.lattice_bind_pose.extend(new_positions);
         }
 
-        let abs_grid = grid.to_abs_space();
+        grid.make_abs();
         let frag_meshmap = &self.frag_meshmap;
-        self.fragments.generate(origin, &abs_grid, &frag_meshmap);
+        self.fragments.generate(origin, &grid, &frag_meshmap);
 
         self.fragments.bind_lattice(&lattice_hash, &lattice);
         self.fragments

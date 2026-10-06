@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use ethel::state::data::hash::{Cell, FxSpatialHash, SpatialResolution};
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
@@ -62,33 +64,69 @@ impl VoxelGridOptions {
     }
 }
 
-pub type VoxelGridFn = fn(Cell) -> bool;
+pub trait VoxelFn: Debug {
+    fn pass(&self, cell: Cell) -> bool;
+}
+impl<F> VoxelFn for F
+where
+    F: Fn(Cell) -> bool + Debug,
+{
+    fn pass(&self, cell: Cell) -> bool {
+        self(cell)
+    }
+}
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NullVoxelFn;
+impl VoxelFn for NullVoxelFn {
+    fn pass(&self, _cell: Cell) -> bool {
+        false
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct FullVoxelFn;
+impl VoxelFn for FullVoxelFn {
+    fn pass(&self, _cell: Cell) -> bool {
+        true
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct AlternatingVoxelFn;
+impl VoxelFn for AlternatingVoxelFn {
+    fn pass(&self, cell: Cell) -> bool {
+        if cell.y % 2 == 0 {
+            cell.x % 2 == 0 && cell.z % 2 == 0
+        } else {
+            cell.x % 2 == 1 && cell.z % 2 == 1
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct VoxelGrid {
-    pub generator: VoxelGridFn,
+    pub generator: Box<dyn VoxelFn>,
     options: VoxelGridOptions,
 
     voxels: FxSpatialHash<glam::Vec3>,
 }
-
 impl Default for VoxelGrid {
     fn default() -> Self {
         let options = VoxelGridOptions::default();
         let voxels = FxSpatialHash::new(SpatialResolution::new(options.cell_size));
 
         Self {
-            generator: |_| true,
+            generator: Box::new(FullVoxelFn),
             options,
             voxels,
         }
     }
 }
-
 impl VoxelGrid {
-    pub fn new(generator: VoxelGridFn, options: VoxelGridOptions) -> Self {
+    pub fn new<F: VoxelFn + Debug + 'static>(generator: F, options: VoxelGridOptions) -> Self {
         Self {
-            generator,
+            generator: Box::new(generator),
             options,
             voxels: FxSpatialHash::new(SpatialResolution::new(options.cell_size)),
         }
@@ -107,7 +145,7 @@ impl VoxelGrid {
     /// # Panics
     /// If this [`VoxelGrid`] is empty, as the lowest left-most point cannot be
     /// determined.
-    pub fn to_abs_space(&self) -> Self {
+    pub fn make_abs(&mut self) {
         let lowest_cell = {
             let mut min_cell = Cell::MAX;
             for &cell in self.voxels.cells() {
@@ -124,11 +162,7 @@ impl VoxelGrid {
             voxels.put(a_cell, a_point);
         }
 
-        Self {
-            generator: self.generator,
-            options: self.options,
-            voxels,
-        }
+        self.voxels = voxels;
     }
 
     pub fn quantize_point(&self, point: glam::Vec3) -> Cell {
@@ -164,7 +198,7 @@ impl VoxelGrid {
             for y in -hvh..(hvh + (vh % 2)) {
                 for z in -hvd..(hvd + (vd % 2)) {
                     let cell = Cell { x, y, z };
-                    if (self.generator)(cell) {
+                    if self.generator.pass(cell) {
                         let point = point_from_cell(cell);
                         self.voxels.put(cell, point);
                     }
@@ -173,12 +207,16 @@ impl VoxelGrid {
         }
     }
 
-    pub fn options(&self) -> &VoxelGridOptions {
+    pub const fn options(&self) -> &VoxelGridOptions {
         &self.options
     }
 
-    pub fn voxels(&self) -> &FxSpatialHash<glam::Vec3> {
+    pub const fn voxels(&self) -> &FxSpatialHash<glam::Vec3> {
         &self.voxels
+    }
+
+    pub fn to_voxels(self) -> FxSpatialHash<glam::Vec3> {
+        self.voxels
     }
 
     pub fn count(&self) -> usize {
@@ -189,7 +227,7 @@ impl VoxelGrid {
     ///
     /// This value depends on the width, height, depth, and density options
     /// specified in [`VoxelGridOptions`].
-    pub fn dimensions(&self) -> (i32, i32, i32) {
+    pub const fn dimensions(&self) -> (i32, i32, i32) {
         let w = self.options.width;
         let h = self.options.height;
         let d = self.options.depth;

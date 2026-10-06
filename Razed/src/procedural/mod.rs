@@ -41,7 +41,7 @@ pub fn cubic_voronoi(
 
 pub fn voxel_grid(width: f32, height: f32, depth: f32, cell_size: f32) -> VoxelGrid {
     VoxelGrid::new(
-        |_| true,
+        voxel::FullVoxelFn,
         VoxelGridOptions {
             width,
             height,
@@ -57,7 +57,7 @@ pub fn voxel_grid_by(
     height: f32,
     depth: f32,
     cell_size: f32,
-    condition: voxel::VoxelGridFn,
+    condition: impl voxel::VoxelFn + 'static,
 ) -> VoxelGrid {
     VoxelGrid::new(
         condition,
