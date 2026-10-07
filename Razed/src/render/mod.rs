@@ -37,7 +37,7 @@ use crate::{
     assets,
     data::FrameDataBuffers,
     render::{
-        geometry::{DebrisGeomCtx, FragmentsGeomCtx},
+        geometry::{DebrisGeomCtx, FragmentsGeomCtx, PlaneGeomCtx},
         graphics::{Materials, RenderStats},
         pass::{DebugCageDrawCtx, DebugLatticeDrawCtx, ShadeDebugAttribsCtx, ShadePbrCtx},
     },
@@ -133,6 +133,7 @@ pub struct RenderPipeline {
     // geometry composition
     geom_fragments: geometry::FragmentsGeomPass,
     geom_debris: geometry::DebrisGeomPass,
+    geom_groundplane: geometry::PlaneGeomPass,
 
     // geometry rasterization & attrib. interpolation
     geom_rasterize: geometry::GeomRasterizePass,
@@ -165,6 +166,7 @@ impl RenderPipeline {
         // geometry composition
         self.geom_fragments.revalidate(render_pool);
         self.geom_debris.revalidate(render_pool);
+        self.geom_groundplane.revalidate(render_pool);
 
         // geometry rasterization & attrib. interpolation
         self.geom_rasterize.revalidate(render_pool);
@@ -336,15 +338,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         skybox.uniform_projection_mat4v([proj_mat]);
         skybox.uniform_view_mat4v([view_mat]);
 
-        // debris.uniform_camera_forward_vec3v([view_dir]);
-        // debris.uniform_projection_mat4v([proj_mat]);
-        // debris.uniform_view_mat4v([view_mat]);
-
-        // frags.uniform_camera_forward_vec3v([view_dir]);
-        // frags.uniform_camera_position_vec3v([view_pos]);
-        // frags.uniform_projection_mat4v([proj_mat]);
-        // frags.uniform_view_mat4v([view_mat]);
-
         // copy requested glyphs to atlas
         {
             if let Some(pipe) = &self.glyph_pipe {
@@ -398,6 +391,19 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         self.geometry_bank.bind_gcounter_buffer();
         self.geometry_bank.bind_instancing_buffers();
 
+        // geometry composition pass - ground plane
+        {
+            self.pipeline().geom_groundplane.execute(
+                section,
+                render_pool,
+                &PlaneGeomCtx {
+                    _marker: std::marker::PhantomData,
+                    size: 64.0,
+                    uv_scaling: 8.0,
+                },
+            );
+        }
+
         // geometry composition pass - fragments
         {
             let frag_count = frame_data.fragment_geom_count.get();
@@ -411,6 +417,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 section,
                 render_pool,
                 &FragmentsGeomCtx {
+                    _marker: std::marker::PhantomData,
                     frag_count,
                     cages_data,
                     cages_map,
@@ -434,6 +441,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 section,
                 render_pool,
                 &DebrisGeomCtx {
+                    _marker: std::marker::PhantomData,
                     debris_count,
                     debris_data,
                     view_data,
@@ -702,6 +710,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
                 geom_fragments: geometry::geom_fragments_pass(),
                 geom_debris: geometry::geom_debris_pass(),
+                geom_groundplane: geometry::geom_plane_pass(),
 
                 geom_rasterize: rendrs::geometry::GeomRasterizePass::new(
                     ShaderGeomRasterizeVariants::Batched,
