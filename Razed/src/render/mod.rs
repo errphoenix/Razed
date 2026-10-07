@@ -393,15 +393,18 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         // geometry composition pass - ground plane
         {
-            self.pipeline().geom_groundplane.execute(
-                section,
-                render_pool,
-                &PlaneGeomCtx {
-                    _marker: std::marker::PhantomData,
-                    size: 64.0,
-                    uv_scaling: 8.0,
-                },
-            );
+            let groundplane = frame_data.groundplane.get();
+            if groundplane.draw {
+                self.pipeline().geom_groundplane.execute(
+                    section,
+                    render_pool,
+                    &PlaneGeomCtx {
+                        _marker: std::marker::PhantomData,
+                        size: groundplane.scale,
+                        uv_scaling: groundplane.uvscale,
+                    },
+                );
+            }
         }
 
         // geometry composition pass - fragments

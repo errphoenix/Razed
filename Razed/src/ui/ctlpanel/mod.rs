@@ -1,5 +1,7 @@
 use gui::{ButtonCallback, DEFAULT_GENERIC_COLOR, FloatGrabArea, FloatParams};
 
+pub mod groundctl;
+
 pub use super::*;
 
 pub fn shade_mode_selector(system: &mut InterfaceSystem, root: WidgetId) -> WidgetId {
@@ -139,35 +141,6 @@ pub fn root(
         .unwrap()
         .0;
 
-    fn dbg_toggle_button<const PROP: u64>(
-        system: &mut InterfaceSystem,
-        root: WidgetId,
-        label: &'static str,
-    ) -> (WidgetId, IndirectIndex) {
-        system
-            .create_element(ElementParams::Button(
-                CoreElementParams {
-                    parent: Some(root),
-                    children: None,
-                    layout_options: LayoutOptions {
-                        align_self: ItemAlignment::Start,
-                        justify_self: ItemAlignment::Start,
-                        ..Default::default()
-                    },
-                    layer: 5,
-                },
-                params_dbg_button(
-                    label,
-                    InteractableCallback::Once(|env, _time| {
-                        if let Some(prop) = env.get_mut(&janus::StringHash::from_u64(PROP)) {
-                            prop.invert();
-                        }
-                    }),
-                ),
-            ))
-            .unwrap()
-    }
-
     let dbg_button_vsync = dbg_toggle_button::<{ env_names::DEBUG_CTL_DISPLAY_VSYNC.as_u64() }>(
         system,
         root,
@@ -237,7 +210,7 @@ pub fn root(
     root
 }
 
-const fn params_dbg_button(text: &'static str, cb: ButtonCallback) -> ButtonParams {
+pub const fn params_dbg_button(text: &'static str, cb: ButtonCallback) -> ButtonParams {
     params_dbg_button_with_text(
         TextParams {
             contents: TextContents::from_node(TextNode::Static(text)),
@@ -251,7 +224,7 @@ const fn params_dbg_button(text: &'static str, cb: ButtonCallback) -> ButtonPara
     )
 }
 
-const fn params_dbg_button_with_text(text: TextParams, cb: ButtonCallback) -> ButtonParams {
+pub const fn params_dbg_button_with_text(text: TextParams, cb: ButtonCallback) -> ButtonParams {
     ButtonParams {
         text,
         bg_color: DEFAULT_GENERIC_COLOR,
@@ -259,4 +232,33 @@ const fn params_dbg_button_with_text(text: TextParams, cb: ButtonCallback) -> Bu
         bg_press_tint: COLORTINT_HOVER_INVARIANT,
         callback: cb,
     }
+}
+
+pub fn dbg_toggle_button<const PROP: u64>(
+    system: &mut InterfaceSystem,
+    root: WidgetId,
+    label: &'static str,
+) -> (WidgetId, IndirectIndex) {
+    system
+        .create_element(ElementParams::Button(
+            CoreElementParams {
+                parent: Some(root),
+                children: None,
+                layout_options: LayoutOptions {
+                    align_self: ItemAlignment::Start,
+                    justify_self: ItemAlignment::Start,
+                    ..Default::default()
+                },
+                layer: 5,
+            },
+            params_dbg_button(
+                label,
+                InteractableCallback::Once(|env, _time| {
+                    if let Some(prop) = env.get_mut(&janus::StringHash::from_u64(PROP)) {
+                        prop.invert();
+                    }
+                }),
+            ),
+        ))
+        .unwrap()
 }

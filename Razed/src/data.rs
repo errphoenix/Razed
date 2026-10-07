@@ -186,6 +186,47 @@ impl Default for DebugRenderOptions {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+pub struct Groundplane {
+    pub scale: f32,
+    pub uvscale: f32,
+    pub draw: bool,
+}
+impl Default for Groundplane {
+    fn default() -> Self {
+        Self {
+            scale: Self::DEFAULT_SCALE,
+            uvscale: Default::default(),
+            draw: true,
+        }
+    }
+}
+impl Groundplane {
+    pub const MAX_SCALE: f32 = 1024f32;
+    pub const DEFAULT_SCALE: f32 = 64f32;
+    pub const DEFAULT_SCALE_NORMALIZED: f32 = Self::DEFAULT_SCALE / Self::MAX_SCALE;
+    const INV_MAX_SCALE: f32 = 1f32 / Self::MAX_SCALE;
+
+    pub const MAX_UVSCALE: f32 = 64f32;
+    pub const DEFAULT_UVSCALE: f32 = 4f32;
+    pub const DEFAULT_UVSCALE_NORMALIZED: f32 = Self::DEFAULT_UVSCALE / Self::MAX_UVSCALE;
+    const INV_MAX_UVSCALE: f32 = 1f32 / Self::MAX_UVSCALE;
+
+    pub const fn scale_from_normalized(normalized: f32) -> f32 {
+        normalized * Self::MAX_SCALE
+    }
+    pub const fn normalize_scale(scale: f32) -> f32 {
+        scale * Self::INV_MAX_SCALE
+    }
+
+    pub const fn uvscale_from_normalized(normalized: f32) -> f32 {
+        normalized * Self::MAX_UVSCALE
+    }
+    pub const fn normalize_uvscale(uvscale: f32) -> f32 {
+        uvscale * Self::INV_MAX_UVSCALE
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct FrameDataBuffers {
     // count of fragment geom entities
@@ -218,6 +259,8 @@ pub struct FrameDataBuffers {
     pub render_params: RenderParams,
     pub render_stats: TriCell<RenderStats>,
     pub debug_render_options: TriCell<DebugRenderOptions>,
+
+    pub groundplane: TriCell<Groundplane>,
 }
 impl FrameDataBuffers {
     pub fn new() -> Self {
@@ -263,6 +306,7 @@ impl FrameDataBuffers {
             render_params: RenderParams::default(),
             render_stats: TriCell::new(RenderStats::default()),
             debug_render_options: Default::default(),
+            groundplane: Default::default(),
         }
     }
 }

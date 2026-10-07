@@ -68,6 +68,7 @@ pub fn initialize_default(
 
     infopanel::root(&mut system, root);
     ctlpanel::root(&mut system, root, &mut map);
+    ctlpanel::groundctl::root(&mut system, root, &mut map);
 
     (system, map)
 }
@@ -99,6 +100,9 @@ pub mod widget_names {
         janus::hash_string("__debug.control.render.lattice:button");
     pub const DEBUG_CTL_RENDER_CAGE_BUTTON: StringHash =
         janus::hash_string("__debug.control.render.cage:button");
+
+    pub const DEBUG_CTL_GROUND_DRAW_BUTTON: StringHash =
+        janus::hash_string("__debug.control.ground.draw:button");
 }
 
 pub mod env_names {
@@ -142,4 +146,10 @@ pub mod env_names {
         janus::hash_string("__debug.control.graphics.gamma");
 
     pub const DEBUG_CTL_SHADE_MODE: StringHash = janus::hash_string("__debug.control.shading.mode");
+
+    pub const DEBUG_CTL_GROUND_DRAW: StringHash = janus::hash_string("__debug.control.ground.draw");
+    pub const DEBUG_CTL_GROUND_SCALE: StringHash =
+        janus::hash_string("__debug.control.ground.scale");
+    pub const DEBUG_CTL_GROUND_UVSCALE: StringHash =
+        janus::hash_string("__debug.control.ground.uv-scale");
 }

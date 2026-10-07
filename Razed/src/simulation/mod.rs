@@ -13,7 +13,7 @@ use std::{
 
 use crate::{
     data::{
-        DebugRenderOptions, FrameDataBuffers, LayoutDebrisData, LayoutFragmentData,
+        DebugRenderOptions, FrameDataBuffers, Groundplane, LayoutDebrisData, LayoutFragmentData,
         LayoutXpbdDebugData,
     },
     procedural::{VoxelGrid, VoxelGridOptions},
@@ -44,7 +44,7 @@ use ethel::{
         cross::{Cross, Producer},
         data::{
             Column, IndirectIndex,
-            hash::{Cell, FxSpatialHash, SpatialResolution},
+            hash::{FxSpatialHash, SpatialResolution},
         },
         time::AccumulationWindow,
     },
@@ -333,6 +333,31 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                         draw_viz_lattice,
                         draw_viz_cage,
                     });
+
+                let groundplane = &storage.groundplane;
+                let groundplane_draw = self
+                    .ui_system
+                    .env()
+                    .get(&DEBUG_CTL_GROUND_DRAW)
+                    .and_then(|v| v.as_boolean())
+                    .unwrap_or(true);
+                let groundplane_scale = self
+                    .ui_system
+                    .env()
+                    .get(&DEBUG_CTL_GROUND_SCALE)
+                    .and_then(|v| v.as_float())
+                    .unwrap_or(Groundplane::DEFAULT_SCALE_NORMALIZED);
+                let groundplane_uvscale = self
+                    .ui_system
+                    .env()
+                    .get(&DEBUG_CTL_GROUND_UVSCALE)
+                    .and_then(|v| v.as_float())
+                    .unwrap_or(Groundplane::DEFAULT_UVSCALE_NORMALIZED);
+                let _ = groundplane.set_and_advance(Groundplane {
+                    scale: Groundplane::scale_from_normalized(groundplane_scale),
+                    uvscale: Groundplane::uvscale_from_normalized(groundplane_uvscale),
+                    draw: groundplane_draw,
+                });
             }
 
             // setup geometry data
@@ -790,6 +815,15 @@ impl State {
                 env.insert(DEBUG_CTL_RENDER_CAGE, true);
                 env.insert(DEBUG_CTL_GRAPHICS_GAMMA, Gamma::DEFAULT_NORMALIZED);
                 env.insert(DEBUG_CTL_SHADE_MODE, 0);
+                env.insert(DEBUG_CTL_GROUND_DRAW, true);
+                env.insert(
+                    DEBUG_CTL_GROUND_SCALE,
+                    Groundplane::DEFAULT_SCALE_NORMALIZED,
+                );
+                env.insert(
+                    DEBUG_CTL_GROUND_UVSCALE,
+                    Groundplane::DEFAULT_UVSCALE_NORMALIZED,
+                );
             } else {
                 let shade_mode = env
                     .get(&DEBUG_CTL_SHADE_MODE)
@@ -864,6 +898,12 @@ impl State {
         );
         crate::ui::button_color_state(
             &[(DEBUG_CTL_RENDER_CAGE, DEBUG_CTL_RENDER_CAGE_BUTTON)],
+            &self.ui_map,
+            &mut self.ui_system.buttons,
+            &self.ui_system.environment,
+        );
+        crate::ui::button_color_state(
+            &[(DEBUG_CTL_GROUND_DRAW, DEBUG_CTL_GROUND_DRAW_BUTTON)],
             &self.ui_map,
             &mut self.ui_system.buttons,
             &self.ui_system.environment,
