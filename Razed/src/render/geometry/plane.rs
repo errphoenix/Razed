@@ -59,8 +59,8 @@ rendrs::geometry_submission_job! {
         VertexData(v2, p01, N, u01);
         VertexData(v3, p11, N, u11);
 
-        TriangleData(tris_base + 0, uint[] (v0, v1, v2), 0);
-        TriangleData(tris_base + 1, uint[] (v2, v1, v3), 0);
+        TriangleData(tris_base + 0, uint[] (v0, v1, v2), 0, 1);
+        TriangleData(tris_base + 1, uint[] (v2, v1, v3), 0, 1);
 
         "
     }

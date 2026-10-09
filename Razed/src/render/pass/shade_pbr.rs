@@ -5,7 +5,10 @@ use rendrs::{
     pipeline::{ImageAccessKind, ImageObject, ImageObjectTarget, Sampler, SamplerObject},
 };
 
-use crate::render::{ViewData, geometry::GeometryBank};
+use crate::{
+    assets::MaterialStorage,
+    render::{ViewData, geometry::GeometryBank},
+};
 
 pub type ShadePbrPass = ComputePass<ShadePbrCtxWrapper, 4, 4>;
 
@@ -60,9 +63,9 @@ pub const fn shade_pbr_pass(
                 shader,
                 gbank,
                 irradiance_sh,
+                materials_buf,
                 resolution,
                 view_data,
-                dev_mat_page,
             } = ctx;
 
             gbank
@@ -77,14 +80,15 @@ pub const fn shade_pbr_pass(
             gbank
                 .triangle_buffers()
                 .bind_ssbo_attribs(Some(SSBO_BIND_GEOM_TRIANGLE_ATTRIBS));
+
             irradiance_sh.bind_shader_storage(SSBO_BIND_PROBE_IRRADIANCE, 0);
+            materials_buf.bind_shader_storage(SSBO_BIND_MATERIALS, 0);
 
             let m_vp = view_data.proj_mat * view_data.view_mat;
             shader.uniform_inv_viewproj_mat4v([m_vp.inverse()]);
             shader.uniform_resolution_uvec2v([[resolution.width(), resolution.height()]]);
             shader.uniform_camera_position_vec3v([view_data.view_pos]);
             shader.uniform_camera_forward_vec3v([view_data.view_dir]);
-            shader.uniform_dev_material_pages_uintv(*dev_mat_page);
 
             let wg_x = resolution.width().div_ceil(WORKGROUP_SIZE_XY);
             let wg_y = resolution.height().div_ceil(WORKGROUP_SIZE_XY);
@@ -99,14 +103,10 @@ pub struct ShadePbrCtx<'ctx> {
 
     pub gbank: &'ctx GeometryBank,
     pub irradiance_sh: &'ctx ShCoeffsBuffer,
+    pub materials_buf: &'ctx MaterialStorage,
 
     pub resolution: PixelResolution,
     pub view_data: ViewData,
-
-    // 0 = diffuse + alpha
-    // 1 = normal + emissive
-    // 2 = ormd
-    pub dev_mat_page: [u32; 3],
 }
 rendrs::context_wrapper!(for<'ctx> ShadePbrCtx);
 
@@ -138,6 +138,9 @@ macro_rules! ssbo_binding {
     (Probe_Irradiance) => {
         4
     };
+    (Materials) => {
+        5
+    };
 }
 
 pub const SSBO_BIND_GEOM_VERTEX_NORMALS: u32 = ssbo_binding!(Geometry_VertexNormals);
@@ -145,6 +148,7 @@ pub const SSBO_BIND_GEOM_VERTEX_UVS: u32 = ssbo_binding!(Geometry_VertexUvs);
 pub const SSBO_BIND_GEOM_TRIANGLE_INDICES: u32 = ssbo_binding!(Geometry_TriangleIndices);
 pub const SSBO_BIND_GEOM_TRIANGLE_ATTRIBS: u32 = ssbo_binding!(Geometry_TriangleAttribs);
 pub const SSBO_BIND_PROBE_IRRADIANCE: u32 = ssbo_binding!(Probe_Irradiance);
+pub const SSBO_BIND_MATERIALS: u32 = ssbo_binding!(Materials);
 
 ethel::shader_glsl_compute! {
     struct ShadePbr > [460] {
@@ -157,11 +161,6 @@ ethel::shader_glsl_compute! {
 
             length 1, camera_forward: vec3 => glam::Vec3;
             length 1, camera_position: vec3 => glam::Vec3;
-
-            // 0 = diffuse + alpha
-            // 1 = normal + emissive
-            // 2 = ormd
-            length 3, dev_material_pages: uint => u32;
         };
         sampler {
             on SAMPLER_UNIT_TEXTURE_MAP, for 1     => texture_map          : sampler2DArray;
@@ -211,12 +210,15 @@ ethel::shader_glsl_compute! {
                     ShCoeffs : probe_irradiance;
                 }
             }
+            ethel::shader_glsl_ssbo! {
+                buf Materials => {
+                    MaterialLocation : materials[2048];
+                }
+            }
         };
         const {
             crate::render::shader_commons::CONST_AMBIENT_LIGHT
             crate::render::shader_commons::CONST_REFLECTION_MAX_LOD
-            Constant::new("DEV_MATERIAL_GROUP", 0u32)
-            Constant::new("UV_SCALE", 0.25)
         };
         lib {
             rendrs::pack::PACK_OCTAHEDRON_DECODE;
@@ -251,8 +253,32 @@ ethel::shader_glsl_compute! {
                 return;
             }
 
-            uint[3] I = geometry_triangle_indices[G.x - 1];
+            // full 32 bits for triangle index
+            const uint Tid = G.x - 1;
+
+            // 16 bits for optional instance id
+            // 1  bit  for 'is instanced' flag
+            // 15 bits for material id
+            #define G_MASK_15B 0x7fff
+            const uint Mid = G.y & G_MASK_15B;
+
+            const MaterialLocation maLocation = materials[Mid];
+            const uint[3] I = geometry_triangle_indices[Tid];
+
             vec3 W = rendrs_FrameSpace_GetBWeights(F);
+
+            const vec2 maUvScale = vec2(maLocation.width, maLocation.height);
+            const MaterialEntryLocation maC_AA = maLocation.diffuse_and_alpha;
+            const uint maC_AA_group = maC_AA.page16_group16 & 0xffffu;
+            const uint maC_AA_page  = maC_AA.page16_group16 >> 16;
+
+            const MaterialEntryLocation maC_NE = maLocation.normal_and_emissive;
+            const uint maC_NE_group = maC_NE.page16_group16 & 0xffffu;
+            const uint maC_NE_page  = maC_NE.page16_group16 >> 16;
+
+            const MaterialEntryLocation maC_ORMD = maLocation.ormd;
+            const uint maC_ORMD_group = maC_ORMD.page16_group16 & 0xffffu;
+            const uint maC_ORMD_page  = maC_ORMD.page16_group16 >> 16;
 
             float[2] UV0 = geometry_vertex_uvs[I[0]];
             float[2] UV1 = geometry_vertex_uvs[I[1]];
@@ -265,28 +291,24 @@ ethel::shader_glsl_compute! {
             vec2 UV = vec2(UV0[0], UV0[1]) * W.x
                     + vec2(UV1[0], UV1[1]) * W.y
                     + vec2(UV2[0], UV2[1]) * W.z;
-            //UV *= UV_SCALE;
+            UV *= maUvScale;
 
             vec2 sUv = (vec2(id) + 0.5) / vec2(resolution);
             vec3 P = rendrs_DepthWorldPosition(depth, sUv, inv_viewproj);
 
-            uint DIFFUSE_ALPHA_PAGE = dev_material_pages[0];
-            uint NORMAL_EMISSIVE_PAGE = dev_material_pages[1];
-            uint ORMD_PAGE = dev_material_pages[2];
-
             vec4 qDiffuseAlpha = textureGrad(
-                texture_map[DEV_MATERIAL_GROUP],
-                vec3(UV, float(DIFFUSE_ALPHA_PAGE)),
+                texture_map[maC_AA_group],
+                vec3(UV, float(maC_AA_page)),
                 vec2(d.x, d.y), vec2(d.z, d.w)
             );
             vec4 qNormalEmissive = textureGrad(
-                texture_map[DEV_MATERIAL_GROUP],
-                vec3(UV, float(NORMAL_EMISSIVE_PAGE)),
+                texture_map[maC_NE_group],
+                vec3(UV, float(maC_NE_page)),
                 vec2(d.x, d.y), vec2(d.z, d.w)
             );
             vec4 qOrmd = textureGrad(
-                texture_map[DEV_MATERIAL_GROUP],
-                vec3(UV, float(ORMD_PAGE)),
+                texture_map[maC_ORMD_group],
+                vec3(UV, float(maC_ORMD_page)),
                 vec2(d.x, d.y), vec2(d.z, d.w)
             );
 

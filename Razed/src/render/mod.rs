@@ -542,6 +542,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             let view_data = self.view_data;
             let gbank = &self.geometry_bank;
             let irradiance_sh = &self.shader_buffers().irradiance_sh_coeffs;
+            let materials_buf = &self.shader_buffers().materials;
 
             let render_mode = frame_data.debug_shading_mode.get();
             match render_mode {
@@ -558,9 +559,9 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                             shader,
                             gbank,
                             irradiance_sh,
+                            materials_buf,
                             resolution,
                             view_data,
-                            dev_mat_page,
                         },
                     );
                 }
