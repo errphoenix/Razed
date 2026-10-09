@@ -1,6 +1,12 @@
-use rendrs::graphics::material::{MaterialGroup, MaterialLocationRegistry};
+use ethel::render::buffer::SingleBuffer;
+use janus::StringMap;
+use rendrs::graphics::material::{MaterialGroup, MaterialLocation, MaterialLocationRegistry};
 
 use crate::assets::TextureRegistry;
+
+pub type MaterialStorage = SingleBuffer<MaterialLocation>;
+
+pub const MATERIAL_CAPACITY: usize = 2048;
 
 #[derive(Debug)]
 pub struct Groups {
@@ -9,22 +15,72 @@ pub struct Groups {
 
 #[derive(Debug, Default)]
 pub struct Materials {
+    list: Vec<MaterialLocation>,
+    map_registry: StringMap<usize>,
     location_registry: MaterialLocationRegistry,
     pub groups: Option<Groups>,
+    dirty: bool,
 }
 #[allow(unused)]
 impl Materials {
     pub fn empty() -> Self {
         Self {
+            list: Vec::new(),
+            map_registry: StringMap::default(),
             location_registry: MaterialLocationRegistry::new(),
             groups: None,
+            dirty: false,
         }
     }
 
     pub fn initialize(&mut self, texture_registry: &mut TextureRegistry) {
+        self.dirty = true;
+
         self.groups = Some(Groups {
             dev: material_group_dev(0, texture_registry, &mut self.location_registry),
-        })
+        });
+
+        self.location_registry
+            .inner_map()
+            .iter()
+            .for_each(|(&id, &loc)| {
+                let index = self.list.len();
+                self.list.push(loc);
+                self.map_registry.insert(id, index);
+            });
+    }
+
+    pub const fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+
+    pub const fn set_dirty(&mut self) {
+        self.dirty = true;
+    }
+
+    pub unsafe fn upload_to_buffer(&mut self, buffer: &MaterialStorage) {
+        if self.dirty {
+            self.dirty = false;
+            unsafe {
+                buffer.blit(self.list(), 0);
+            }
+        }
+    }
+
+    pub fn list(&self) -> &[MaterialLocation] {
+        &self.list
+    }
+
+    pub const fn list_mut(&mut self) -> &mut Vec<MaterialLocation> {
+        &mut self.list
+    }
+
+    pub const fn map(&self) -> &StringMap<usize> {
+        &self.map_registry
+    }
+
+    pub const fn map_mut(&mut self) -> &mut StringMap<usize> {
+        &mut self.map_registry
     }
 
     pub const fn groups_opt(&self) -> Option<&Groups> {

@@ -34,11 +34,11 @@ use rendrs::{
 #[cfg(feature = "devmode")]
 use crate::render::pass::debug_lines_draw::DebugLinesData;
 use crate::{
-    assets,
+    assets::{self, MaterialStorage},
     data::FrameDataBuffers,
     render::{
         geometry::{DebrisGeomCtx, FragmentsGeomCtx, PlaneGeomCtx},
-        graphics::{Materials, RenderStats},
+        graphics::{Materials, RenderStats, materials},
         pass::{DebugCageDrawCtx, DebugLatticeDrawCtx, ShadeDebugAttribsCtx, ShadePbrCtx},
     },
 };
@@ -199,11 +199,13 @@ impl RenderPipeline {
 #[derive(Debug)]
 pub struct PersistentShaderBuffers {
     pub irradiance_sh_coeffs: ShCoeffsBuffer,
+    pub materials: MaterialStorage,
 }
 impl Default for PersistentShaderBuffers {
     fn default() -> Self {
         Self {
             irradiance_sh_coeffs: SingleBuffer::zeroed(32),
+            materials: MaterialStorage::zeroed(materials::MATERIAL_CAPACITY),
         }
     }
 }
@@ -344,6 +346,14 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 while let Ok(raster) = pipe.try_recv() {
                     self.glyph_atlas_texture.copy_glyph(raster);
                 }
+            }
+        }
+
+        // prepare materials for this frame
+        {
+            let matbuf = &self.shader_buffers.as_ref().unwrap().materials;
+            unsafe {
+                self.materials.upload_to_buffer(matbuf);
             }
         }
     }
