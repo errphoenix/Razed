@@ -14,16 +14,13 @@ pub mod shade_pbr;
 #[cfg(feature = "devmode")]
 pub mod debug_lines_draw;
 
-#[allow(unused_imports)]
 pub use self::{
     cage_deform_compute::*, debris_draw::*, debug_cage_draw::*, debug_lattice_draw::*,
     equirect_decode_compute::*, fd_preprocess::*, fragments_draw::*, shade_debug_attribs::*,
     shade_pbr::*, skybox_draw::*, tonemap_compute::*,
 };
 
-#[allow(unused_imports)]
 #[cfg(feature = "devmode")]
 pub use debug_lines_draw::*;
 
-#[allow(unused_imports)]
 use super::shader_commons::*;

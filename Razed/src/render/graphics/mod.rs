@@ -1,11 +1,10 @@
 pub mod envmap;
 pub mod materials;
 
-#[allow(unused_imports)]
 pub use envmap::*;
-use janus::sync::TriCell;
-#[allow(unused_imports)]
 pub use materials::*;
+
+use janus::sync::TriCell;
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct Gamma(f32);
@@ -36,7 +35,6 @@ impl Gamma {
         self.0
     }
 
-    #[allow(unused)]
     pub const fn normalize(&self) -> f32 {
         self.0 * Self::INV_MAX
     }
@@ -45,7 +43,6 @@ impl Gamma {
 #[derive(Debug, Default)]
 pub struct RenderParams {
     pub gamma: TriCell<Gamma>,
-    #[allow(unused, reason = "todo")]
     pub exposure: TriCell<f32>, //todo
 }
 

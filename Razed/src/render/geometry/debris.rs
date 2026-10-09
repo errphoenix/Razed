@@ -101,6 +101,7 @@ rendrs::geometry_submission_job! {
         }
 
         "
+        #define DEFAULT_MATERIAL    1
         #define DOMAIN_THREAD_SIZE 64
 
         const uint inst_mesh_id = inst_mesh_base + rendrs_WorkGroupID;
@@ -130,7 +131,7 @@ rendrs::geometry_submission_job! {
                     m_tri.v1 - m_vert_offset + m_vert_base,
                     m_tri.v2 - m_vert_offset + m_vert_base
                 );
-                TriangleData(sm_m_tris_base + i, indices, rendrs_GeometryID);
+                TriangleData(sm_m_tris_base + i, indices, rendrs_GeometryID, DEFAULT_MATERIAL);
             }
         }
 

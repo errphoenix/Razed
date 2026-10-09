@@ -7,7 +7,7 @@ use rendrs::{geometry::DomainData, graphics::material::MaterialLocationRegistry}
 
 use crate::{
     data::{CagePartitionedBuffer, FRAGMENTS_STORAGE_PARTS},
-    render::{shader_commons, ViewData},
+    render::{ViewData, shader_commons},
 };
 
 pub fn geom_fragments_pass() -> FragmentsGeomPass {
@@ -132,6 +132,8 @@ rendrs::geometry_submission_job! {
         }
 
         "
+        #define DEFAULT_MATERIAL 1
+
         // todo: decouple; geom_id is stored in triangle,
         // should be global, not frag-specific. oka for now
         uint fragment_id = rendrs_GeometryID + 1;
@@ -280,7 +282,11 @@ rendrs::geometry_submission_job! {
             uint tris_base = AllocTriangle(t_count);
             for (uint i = 0; i < t_count; ++i) {
                 uvec3 tri_i = tris_prod[i];
-                TriangleData(tris_base + i, uint[] ( tri_i.x, tri_i.y, tri_i.z ), fragment_id);
+                TriangleData(
+                    tris_base + i,
+                    uint[] ( tri_i.x, tri_i.y, tri_i.z ),
+                    fragment_id, DEFAULT_MATERIAL
+                );
             }
         }
         "
