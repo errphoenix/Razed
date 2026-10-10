@@ -24,6 +24,7 @@ pub fn geom_fragments_pass_with_shader(
             cages_map,
             fragments_data,
             view_data,
+            dev_material,
             //material_registry,
             ..
         } = ctx;
@@ -37,6 +38,7 @@ pub fn geom_fragments_pass_with_shader(
 
         shader.uniform_camera_forward_vec3v([view_data.view_dir]);
         shader.uniform_camera_position_vec3v([view_data.view_pos]);
+        shader.uniform_dev_material_uintv([*dev_material]);
 
         let mut i = 0;
         while i < frag_count {
@@ -85,6 +87,7 @@ rendrs::geometry_submission_job! {
         uniform {
             length 1, camera_forward: vec3 => glam::Vec3;
             length 1, camera_position: vec3 => glam::Vec3;
+            length 1, dev_material: uint => u32;
         }
         type {
             shader_commons::ETH_TYPE_MESH_METADATA
@@ -127,13 +130,13 @@ rendrs::geometry_submission_job! {
 
             view_data: ViewData;
 
+            dev_material: u32;
+
             // currently unused
             material_registry: MaterialLocationRegistry, for 'ctx;
         }
 
         "
-        #define DEFAULT_MATERIAL 1
-
         // todo: decouple; geom_id is stored in triangle,
         // should be global, not frag-specific. oka for now
         uint fragment_id = rendrs_GeometryID + 1;
@@ -285,7 +288,7 @@ rendrs::geometry_submission_job! {
                 TriangleData(
                     tris_base + i,
                     uint[] ( tri_i.x, tri_i.y, tri_i.z ),
-                    fragment_id, DEFAULT_MATERIAL
+                    fragment_id, dev_material
                 );
             }
         }

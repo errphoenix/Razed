@@ -18,6 +18,7 @@ pub fn geom_debris_pass_with_shader(shader: ComputeShaderDebrisGeomSubmit) -> De
             view_data,
             inst_mesh_base,
             inst_mesh_count,
+            dev_material,
             //material_registry,
             ..
         } = ctx;
@@ -40,6 +41,7 @@ pub fn geom_debris_pass_with_shader(shader: ComputeShaderDebrisGeomSubmit) -> De
         shader.uniform_debris_count_uintv([*debris_count]);
         shader.uniform_inst_mesh_base_uintv([*inst_mesh_base]);
         shader.uniform_inst_mesh_count_uintv([*inst_mesh_count]);
+        shader.uniform_dev_material_uintv([*dev_material]);
 
         let mut i = 0;
         while i < *inst_mesh_count {
@@ -66,6 +68,7 @@ rendrs::geometry_submission_job! {
             length 1, debris_count: uint => u32;
             length 1, inst_mesh_base: uint => u32;
             length 1, inst_mesh_count: uint => u32;
+            length 1, dev_material: uint => u32;
         }
         type {
             shader_commons::ETH_TYPE_MESH_METADATA
@@ -96,12 +99,13 @@ rendrs::geometry_submission_job! {
             inst_mesh_base: u32;
             inst_mesh_count: u32;
 
+            dev_material: u32;
+
             // currently unused
             material_registry: MaterialLocationRegistry, for 'ctx;
         }
 
         "
-        #define DEFAULT_MATERIAL    1
         #define DOMAIN_THREAD_SIZE 64
 
         const uint inst_mesh_id = inst_mesh_base + rendrs_WorkGroupID;
@@ -131,7 +135,7 @@ rendrs::geometry_submission_job! {
                     m_tri.v1 - m_vert_offset + m_vert_base,
                     m_tri.v2 - m_vert_offset + m_vert_base
                 );
-                TriangleData(sm_m_tris_base + i, indices, rendrs_GeometryID, DEFAULT_MATERIAL);
+                TriangleData(sm_m_tris_base + i, indices, rendrs_GeometryID, dev_material);
             }
         }
 

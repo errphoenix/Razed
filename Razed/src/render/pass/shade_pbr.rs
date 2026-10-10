@@ -1,4 +1,3 @@
-use ethel::shader::Constant;
 use rendrs::{
     ComputePass,
     graphics::{PixelResolution, ShCoeffsBuffer},

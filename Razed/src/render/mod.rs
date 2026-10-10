@@ -417,6 +417,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             }
         }
 
+        let dev_material = frame_data.debug_material_index.get();
+
         // geometry composition pass - fragments
         {
             let frag_count = frame_data.fragment_geom_count.get();
@@ -436,6 +438,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     cages_map,
                     fragments_data,
                     view_data,
+                    dev_material,
                     material_registry,
                 },
             );
@@ -460,6 +463,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     view_data,
                     inst_mesh_base,
                     inst_mesh_count,
+                    dev_material,
                     material_registry,
                 },
             );
@@ -548,10 +552,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             match render_mode {
                 None => {
                     let shader = &self.shaders.shade_pbr;
-                    let dev_mat_page = {
-                        let mat_id = frame_data.debug_material_index.get();
-                        [mat_id * 3, mat_id * 3 + 1, mat_id * 3 + 2]
-                    };
                     self.pipeline().shade_pbr.execute(
                         section,
                         render_pool,
