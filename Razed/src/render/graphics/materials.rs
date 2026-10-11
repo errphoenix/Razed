@@ -36,9 +36,12 @@ impl Materials {
     pub fn initialize(&mut self, texture_registry: &mut TextureRegistry) {
         self.dirty = true;
 
+        tracing::info!("[-] Initializing materials...");
+
         self.groups = Some(Groups {
             dev: material_group_dev(0, texture_registry, &mut self.location_registry),
         });
+        tracing::info!("[-] Created material group 'dev'.");
 
         self.location_registry
             .inner_map()

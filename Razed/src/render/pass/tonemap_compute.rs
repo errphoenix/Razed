@@ -48,8 +48,8 @@ pub const fn pass(
             //let exposure = ctx.render_params.exposure...;
 
             let res = [resolution.width(), resolution.height()];
-            ctx.shader.uniform_resolution_uvec2v([res]);
-            ctx.shader.uniform_gamma_floatv([gamma]);
+            ctx.shader.uniform_resolution_uvec2(res);
+            ctx.shader.uniform_gamma_float(gamma);
 
             let wg_x = resolution.width().div_ceil(WORKGROUP_SIZE_XY);
             let wg_y = resolution.height().div_ceil(WORKGROUP_SIZE_XY);
@@ -67,8 +67,8 @@ ethel::shader_glsl_compute! {
         workgroup [8, 8, 1];
 
         uniform {
-            length 1, resolution : uvec2 => [u32; 2];
-            length 1, gamma      : float => f32;
+            on 0 => resolution : uvec2 from [u32; 2];
+            on 1 => gamma      : float from f32;
         };
 
         image {

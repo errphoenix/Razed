@@ -12,8 +12,8 @@ pub fn geom_plane_pass_with_shader(shader: ComputeShaderPlaneGeomSubmit) -> Plan
             uv_scaling,
         } = ctx;
 
-        shader.uniform_size_floatv([*size]);
-        shader.uniform_uv_scaling_floatv([*uv_scaling]);
+        shader.uniform_size_float(*size);
+        shader.uniform_uv_scaling_float(*uv_scaling);
 
         out.write(DomainData::new(0, 0, 1));
     })
@@ -27,8 +27,8 @@ rendrs::geometry_submission_job! {
         };
 
         uniform {
-            length 1, size       : float => f32;
-            length 1, uv_scaling : float => f32;
+            on 0 => size       : float from f32;
+            on 1 => uv_scaling : float from f32;
         }
         context {
             size       : f32;

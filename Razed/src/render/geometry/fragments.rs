@@ -36,9 +36,9 @@ pub fn geom_fragments_pass_with_shader(
         cages_map.bind_shader_storage(section, G_FRAGS_SSBO_BIND_IMAP_CAGES, 0);
         fragments_data.bind_shader_storage(section);
 
-        shader.uniform_camera_forward_vec3v([view_data.view_dir]);
-        shader.uniform_camera_position_vec3v([view_data.view_pos]);
-        shader.uniform_dev_material_uintv([*dev_material]);
+        shader.uniform_camera_forward_vec3(view_data.view_dir);
+        shader.uniform_camera_position_vec3(view_data.view_pos);
+        shader.uniform_dev_material_uint(*dev_material);
 
         let mut i = 0;
         while i < frag_count {
@@ -85,9 +85,9 @@ rendrs::geometry_submission_job! {
         };
 
         uniform {
-            length 1, camera_forward: vec3 => glam::Vec3;
-            length 1, camera_position: vec3 => glam::Vec3;
-            length 1, dev_material: uint => u32;
+            on 0 => camera_forward  : vec3 from glam::Vec3;
+            on 1 => camera_position : vec3 from glam::Vec3;
+            on 2 => dev_material    : uint from u32;
         }
         type {
             shader_commons::ETH_TYPE_MESH_METADATA

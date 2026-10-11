@@ -34,8 +34,8 @@ pub const fn pass(shader: &ComputeShaderEquirectDecode) -> EquirectDecodePass {
             )
         };
 
-        shader.uniform_resolution_src_uvec2v([res_src]);
-        shader.uniform_resolution_face_uvec2v([res_dst]);
+        shader.uniform_resolution_src_uvec2(res_src);
+        shader.uniform_resolution_face_uvec2(res_dst);
         src_equirect.bind();
         dst_cubemap.bind();
 
@@ -55,8 +55,8 @@ ethel::shader_glsl_compute! {
         workgroup [8, 8, 1];
 
         uniform {
-            length 1, resolution_src : uvec2 => [u32; 2];
-            length 1, resolution_face: uvec2 => [u32; 2];
+            on 0 => resolution_src  : uvec2 from [u32; 2];
+            on 1 => resolution_face : uvec2 from [u32; 2];
         };
         image {
             on IMAGE_BINDING_SRC_EQUIRECT => src_equirect : image2D   as rgba32f readonly;

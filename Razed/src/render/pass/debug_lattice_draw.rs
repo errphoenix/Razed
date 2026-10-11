@@ -80,8 +80,8 @@ ethel::shader_glsl! {
             };
 
             uniform {
-                length 1, projection: mat4 => glam::Mat4;
-                length 1, view: mat4 => glam::Mat4;
+                on 0 => projection : mat4 from glam::Mat4;
+                on 1 => view       : mat4 from glam::Mat4;
             };
 
             type {

@@ -84,10 +84,10 @@ pub const fn shade_pbr_pass(
             materials_buf.bind_shader_storage(SSBO_BIND_MATERIALS, 0);
 
             let m_vp = view_data.proj_mat * view_data.view_mat;
-            shader.uniform_inv_viewproj_mat4v([m_vp.inverse()]);
-            shader.uniform_resolution_uvec2v([[resolution.width(), resolution.height()]]);
-            shader.uniform_camera_position_vec3v([view_data.view_pos]);
-            shader.uniform_camera_forward_vec3v([view_data.view_dir]);
+            shader.uniform_inv_viewproj_mat4(m_vp.inverse());
+            shader.uniform_resolution_uvec2([resolution.width(), resolution.height()]);
+            shader.uniform_camera_position_vec3(view_data.view_pos);
+            shader.uniform_camera_forward_vec3(view_data.view_dir);
 
             let wg_x = resolution.width().div_ceil(WORKGROUP_SIZE_XY);
             let wg_y = resolution.height().div_ceil(WORKGROUP_SIZE_XY);
@@ -109,15 +109,15 @@ pub struct ShadePbrCtx<'ctx> {
 }
 rendrs::context_wrapper!(for<'ctx> ShadePbrCtx);
 
-pub const IMAGE_BIND_RASTER_IN: u32 = 10;
-pub const IMAGE_BIND_SHADE_OUT: u32 = 11;
-pub const IMAGE_BIND_ATTR_FRAME_IN: u32 = 12;
-pub const IMAGE_BIND_ATTR_GRADS_IN: u32 = 13;
+pub const IMAGE_BIND_RASTER_IN: u32 = 4;
+pub const IMAGE_BIND_SHADE_OUT: u32 = 5;
+pub const IMAGE_BIND_ATTR_FRAME_IN: u32 = 6;
+pub const IMAGE_BIND_ATTR_GRADS_IN: u32 = 7;
 
-pub const SAMPLER_UNIT_TEXTURE_MAP: u32 = 5;
-pub const SAMPLER_UNIT_BAKED_BRDF_SPEC: u32 = 6;
-pub const SAMPLER_UNIT_DEBUG_REFLECTION_PROBE: u32 = 7;
-pub const SAMPLER_UNIT_DEPTH_BUFFER: u32 = 8;
+pub const SAMPLER_UNIT_TEXTURE_MAP: u32 = 4;
+pub const SAMPLER_UNIT_BAKED_BRDF_SPEC: u32 = 5;
+pub const SAMPLER_UNIT_DEBUG_REFLECTION_PROBE: u32 = 6;
+pub const SAMPLER_UNIT_DEPTH_BUFFER: u32 = 7;
 
 pub const WORKGROUP_SIZE_XY: u32 = 8;
 
@@ -154,12 +154,10 @@ ethel::shader_glsl_compute! {
         workgroup [8, 8, 1];
 
         uniform {
-            length 1, resolution: uvec2 => [u32; 2];
-
-            length 1, inv_viewproj: mat4 => glam::Mat4;
-
-            length 1, camera_forward: vec3 => glam::Vec3;
-            length 1, camera_position: vec3 => glam::Vec3;
+            on 0 => resolution      : uvec2 from [u32; 2];
+            on 1 => inv_viewproj    : mat4  from glam::Mat4;
+            on 2 => camera_forward  : vec3  from glam::Vec3;
+            on 3 => camera_position : vec3  from glam::Vec3;
         };
         sampler {
             on SAMPLER_UNIT_TEXTURE_MAP, for 1     => texture_map          : sampler2DArray;

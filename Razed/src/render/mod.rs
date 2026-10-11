@@ -3,7 +3,7 @@ pub mod graphics;
 pub mod pass;
 pub mod shader_commons;
 
-use std::sync::atomic::Ordering;
+use std::{sync::atomic::Ordering, time::Instant};
 
 use ethel::{
     render::{
@@ -323,22 +323,22 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             ..
         } = &self.shaders;
 
-        interface.uniform_projection_mat4v([self.view_data.ortho_proj_mat]);
+        interface.uniform_projection_mat4(self.view_data.ortho_proj_mat);
 
-        lattice.uniform_projection_mat4v([proj_mat]);
-        lattice.uniform_view_mat4v([view_mat]);
+        lattice.uniform_projection_mat4(proj_mat);
+        lattice.uniform_view_mat4(view_mat);
 
-        cage_visual.uniform_projection_mat4v([proj_mat]);
-        cage_visual.uniform_view_mat4v([view_mat]);
+        cage_visual.uniform_projection_mat4(proj_mat);
+        cage_visual.uniform_view_mat4(view_mat);
 
         #[cfg(feature = "devmode")]
         {
-            lines.uniform_projection_mat4v([proj_mat]);
-            lines.uniform_view_mat4v([view_mat]);
+            lines.uniform_projection_mat4(proj_mat);
+            lines.uniform_view_mat4(view_mat);
         }
 
-        skybox.uniform_projection_mat4v([proj_mat]);
-        skybox.uniform_view_mat4v([view_mat]);
+        skybox.uniform_projection_mat4(proj_mat);
+        skybox.uniform_view_mat4(view_mat);
 
         // copy requested glyphs to atlas
         {
@@ -388,7 +388,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             self.shaders.cage_deform.bind();
             self.shaders
                 .cage_deform
-                .uniform_total_cage_count_uintv([cage_count]);
+                .uniform_total_cage_count_uint(cage_count);
 
             self.pipeline()
                 .cage_deform_compute_pass
@@ -662,16 +662,24 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
     }
 
     fn init_resources(&mut self, resolution: Resolution) {
+        let t0 = Instant::now();
+        tracing::info!("[*] Initializing rendering pipeline resources...");
+
         self.shader_buffers = Some(PersistentShaderBuffers::default());
+        tracing::info!("Created 2 persistent shader buffers.");
 
         self.initialize_shaders();
         self.initialize_render_targets(resolution);
 
+        tracing::info!("Initializing material resources from texture master registry...");
         let texture_assets = &mut self.textures_master_registry;
         self.materials.initialize(texture_assets);
+        tracing::info!("Loaded {} materials.", self.materials.list().len(),);
 
         // init persistent samplers
         {
+            tracing::info!("[-] Initializing persistent samplers...");
+
             let (env_fs, env_ds) = graphics::load_environment_map(texture_assets);
             let baked_brdf_specular = graphics::bake_brdf_specular();
             let dev_reflection_map = graphics::debug_probe_reflection(env_ds.view());
@@ -684,8 +692,11 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 baked_brdf_specular,
                 reflection_map: dev_reflection_map,
             });
+
+            tracing::info!("[-] Created 4 persistent samplers.");
         }
 
+        tracing::info!("Finalizing & binding pipeline...");
         // init pipeline
         {
             let dev_materials = &self.materials.groups().dev;
@@ -795,6 +806,12 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     OutputObject::Depth(base_depth),
                 ]),
             });
+
+            let t1 = Instant::now();
+            tracing::info!(
+                "[*] Rendering pipeline creation finished in {} milliseconds.",
+                (t1 - t0).as_millis()
+            );
         }
     }
 }
@@ -824,6 +841,7 @@ impl Renderer {
     }
 
     fn initialize_shaders(&mut self) {
+        tracing::info!("[shaders] init");
         self.shaders.shade_pbr = pass::ComputeShaderShadePbr::new_compiled();
         self.shaders.shade_debug_attrib = pass::ComputeShaderShadeDebugAttribs::new_compiled();
         self.shaders.skybox = pass::ShaderSkybox::new_compiled();
@@ -844,6 +862,8 @@ impl Renderer {
     }
 
     fn initialize_render_targets(&mut self, resolution: Resolution) {
+        tracing::info!("[render-targets] init");
+
         let hdr_base = self.render_pool.add(RenderTarget::new(
             "base-drawbuffer-HDR",
             RenderTargetDescriptor::new(
@@ -855,6 +875,7 @@ impl Renderer {
             ),
             resolution,
         ));
+        tracing::info!("[render-targets] base HDR");
         let base_depth = self.render_pool.add(RenderTarget::new(
             "base-drawbuffer-depth24",
             RenderTargetDescriptor::new(
@@ -866,6 +887,7 @@ impl Renderer {
             ),
             resolution,
         ));
+        tracing::info!("[render-targets] base depth");
         let ldr_mapped = self.render_pool.add(RenderTarget::new(
             "mapped-encoded-LDR",
             RenderTargetDescriptor::new(
@@ -877,24 +899,36 @@ impl Renderer {
             ),
             resolution,
         ));
+        tracing::info!("[render-targets] mapped LDR");
 
-        self.target_handles =
-            Some(RenderTargetHandles {
-                hdr_base,
-                base_depth,
-                ldr_mapped,
+        let geom_raster = self
+            .render_pool
+            .add(rendrs::geometry::geom_rasterize_target(resolution, 1.0));
+        tracing::info!("[render-targets] geom raster");
 
-                geom_raster: self
-                    .render_pool
-                    .add(rendrs::geometry::geom_rasterize_target(resolution, 1.0)),
+        let attr_spaceframe =
+            self.render_pool
+                .add(rendrs::geometry::geom_attribs_framespace_target(
+                    resolution, 1.0,
+                ));
+        tracing::info!("[render-targets] geom attr space-frame");
 
-                attr_spaceframe: self.render_pool.add(
-                    rendrs::geometry::geom_attribs_framespace_target(resolution, 1.0),
-                ),
-                attr_gradients: self.render_pool.add(
-                    rendrs::geometry::geom_attribs_gradients_target(resolution, 1.0),
-                ),
-            });
+        let attr_gradients = self
+            .render_pool
+            .add(rendrs::geometry::geom_attribs_gradients_target(
+                resolution, 1.0,
+            ));
+        tracing::info!("[render-targets] geom attr derivatives");
+
+        self.target_handles = Some(RenderTargetHandles {
+            hdr_base,
+            base_depth,
+            ldr_mapped,
+
+            geom_raster,
+            attr_spaceframe,
+            attr_gradients,
+        });
     }
 
     fn setup_debug_lines(&mut self, view: &TriCell<ViewPoint>) {

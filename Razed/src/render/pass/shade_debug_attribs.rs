@@ -52,10 +52,10 @@ pub const fn shade_debug_attribs_pass(
                 mode,
             } = ctx;
 
-            shader.uniform_resolution_uvec2v([[resolution.width(), resolution.height()]]);
-            shader.uniform_camera_position_vec3v([view_data.view_pos]);
-            shader.uniform_camera_forward_vec3v([view_data.view_dir]);
-            shader.uniform_attrib_mode_uintv([mode.clone() as u32]);
+            shader.uniform_resolution_uvec2([resolution.width(), resolution.height()]);
+            shader.uniform_camera_position_vec3(view_data.view_pos);
+            shader.uniform_camera_forward_vec3(view_data.view_dir);
+            shader.uniform_attrib_mode_uint(mode.clone() as u32);
 
             let wg_x = resolution.width().div_ceil(WORKGROUP_SIZE_XY);
             let wg_y = resolution.height().div_ceil(WORKGROUP_SIZE_XY);
@@ -95,10 +95,10 @@ pub struct ShadeDebugAttribsCtx<'ctx> {
 }
 rendrs::context_wrapper!(for<'ctx> ShadeDebugAttribsCtx);
 
-pub const IMAGE_BIND_RASTER_IN: u32 = 10;
-pub const IMAGE_BIND_SHADE_OUT: u32 = 11;
-pub const IMAGE_BIND_ATTR_FRAME_IN: u32 = 12;
-pub const IMAGE_BIND_ATTR_GRADS_IN: u32 = 13;
+pub const IMAGE_BIND_RASTER_IN: u32 = 4;
+pub const IMAGE_BIND_SHADE_OUT: u32 = 5;
+pub const IMAGE_BIND_ATTR_FRAME_IN: u32 = 6;
+pub const IMAGE_BIND_ATTR_GRADS_IN: u32 = 7;
 
 pub const WORKGROUP_SIZE_XY: u32 = 8;
 
@@ -107,12 +107,10 @@ ethel::shader_glsl_compute! {
         workgroup [8, 8, 1];
 
         uniform {
-            length 1, resolution: uvec2 => [u32; 2];
-
-            length 1, camera_forward: vec3 => glam::Vec3;
-            length 1, camera_position: vec3 => glam::Vec3;
-
-            length 1, attrib_mode: uint => u32;
+            on 0 => resolution      : uvec2 from [u32; 2];
+            on 1 => camera_forward  : vec3  from glam::Vec3;
+            on 2 => camera_position : vec3  from glam::Vec3;
+            on 3 => attrib_mode     : uint  from u32;
         };
         image {
             on IMAGE_BIND_RASTER_IN => raster_in : uimage2D as rg32ui  readonly;

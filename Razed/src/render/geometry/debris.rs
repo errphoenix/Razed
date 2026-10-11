@@ -36,12 +36,12 @@ pub fn geom_debris_pass_with_shader(shader: ComputeShaderDebrisGeomSubmit) -> De
             Some(G_DEBRIS_SSBO_BIND_POD),
         );
 
-        shader.uniform_camera_forward_vec3v([view_data.view_dir]);
-        shader.uniform_camera_position_vec3v([view_data.view_pos]);
-        shader.uniform_debris_count_uintv([*debris_count]);
-        shader.uniform_inst_mesh_base_uintv([*inst_mesh_base]);
-        shader.uniform_inst_mesh_count_uintv([*inst_mesh_count]);
-        shader.uniform_dev_material_uintv([*dev_material]);
+        shader.uniform_camera_forward_vec3(view_data.view_dir);
+        shader.uniform_camera_position_vec3(view_data.view_pos);
+        shader.uniform_debris_count_uint(*debris_count);
+        shader.uniform_inst_mesh_base_uint(*inst_mesh_base);
+        shader.uniform_inst_mesh_count_uint(*inst_mesh_count);
+        shader.uniform_dev_material_uint(*dev_material);
 
         let mut i = 0;
         while i < *inst_mesh_count {
@@ -63,12 +63,12 @@ rendrs::geometry_submission_job! {
         };
 
         uniform {
-            length 1, camera_forward: vec3 => glam::Vec3;
-            length 1, camera_position: vec3 => glam::Vec3;
-            length 1, debris_count: uint => u32;
-            length 1, inst_mesh_base: uint => u32;
-            length 1, inst_mesh_count: uint => u32;
-            length 1, dev_material: uint => u32;
+            on 0 => camera_forward  : vec3 from glam::Vec3;
+            on 1 => camera_position : vec3 from glam::Vec3;
+            on 2 => debris_count    : uint from u32;
+            on 3 => inst_mesh_base  : uint from u32;
+            on 4 => inst_mesh_count : uint from u32;
+            on 5 => dev_material    : uint from u32;
         }
         type {
             shader_commons::ETH_TYPE_MESH_METADATA

@@ -151,13 +151,13 @@ ethel::shader_glsl! {
             };
 
             uniform {
-                length 1, camera_forward: vec3 => glam::Vec3;
-                length 1, camera_position: vec3 => glam::Vec3;
+                on 0 => camera_forward  : vec3 from glam::Vec3;
+                on 1 => camera_position : vec3 from glam::Vec3;
 
                 // 0 = diffuse + alpha
                 // 1 = normal + emissive
                 // 2 = ormd
-                length 3, dev_material_pages: uint => u32;
+                on 2 => dev_material_pages : uint from u32;
             };
             sampler {
                 on SAMPLER_UNIT_TEXTURE_MAP, for 1     => texture_map          : sampler2DArray;
@@ -344,8 +344,8 @@ ethel::shader_glsl! {
             };
 
             uniform {
-                length 1, projection: mat4 => glam::Mat4;
-                length 1, view: mat4 => glam::Mat4;
+                on 0 => projection : mat4 from glam::Mat4;
+                on 1 => view       : mat4 from glam::Mat4;
             };
 
             type {

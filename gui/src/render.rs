@@ -74,7 +74,7 @@ pub const fn pass(shader: &ShaderUiBasic) -> UiDrawPass {
 
             let ui_shader = ctx.ui_shader;
             ui_shader.uniform_texture_masks_uintv(texture_masks);
-            ui_shader.uniform_instance_offset_uintv([offset]);
+            ui_shader.uniform_instance_offset_uint(offset);
 
             let count = command.vertex_count;
             let instance_count = command.instance_count;
@@ -129,8 +129,8 @@ ethel::shader_glsl! {
                 }
             };
             uniform {
-                length 1, projection: mat4 => glam::Mat4;
-                length 1, instance_offset: uint => u32;
+                on 0 => projection : mat4 from glam::Mat4;
+                on 1 => instance_offset : uint from u32;
             };
             type {
                 TYPE_QUAD_ELEMENT
@@ -186,7 +186,7 @@ ethel::shader_glsl! {
                 }
             };
             uniform {
-                length 16, texture_masks: uint => u32;
+                on 0, for 16 => texture_masks : uint from u32;
             };
             sampler {
                 on 0, for 16 => texture_map : sampler2D;

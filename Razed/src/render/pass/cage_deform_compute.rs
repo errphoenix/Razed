@@ -147,7 +147,7 @@ ethel::shader_glsl_compute! {
         workgroup [64, 1, 1];
 
         uniform {
-            length 1, total_cage_count: uint => u32;
+            on 0 => total_cage_count : uint from u32;
         };
 
         type {

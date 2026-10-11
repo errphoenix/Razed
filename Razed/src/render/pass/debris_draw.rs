@@ -60,8 +60,8 @@ ethel::shader_glsl! {
             };
 
             uniform {
-                length 1, projection: mat4 => glam::Mat4;
-                length 1, view: mat4 => glam::Mat4;
+                on 0 => projection : mat4 from glam::Mat4;
+                on 1 => view       : mat4 from glam::Mat4;
             };
 
             type {
@@ -145,7 +145,7 @@ ethel::shader_glsl! {
             };
 
             uniform {
-                length 1, camera_forward: vec3 => glam::Vec3;
+                on 0 => camera_forward : vec3 from glam::Vec3;
             };
 
             const {
