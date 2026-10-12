@@ -418,15 +418,15 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             {
                 // cpu-side cage synchronisation
                 {
-                    let sync = storage.cage_sync_frame.cpu();
+                    let cpu_end = storage.cage_sync_frame.cpu();
 
                     let upload_buf = self.cage.upload_buffer();
                     let delete_buf = self.cage.delete_buffer();
-                    sync.upload(section, upload_buf);
-                    sync.delete(section, delete_buf);
+                    cpu_end.upload(section, upload_buf);
+                    cpu_end.delete(section, delete_buf);
 
                     let gpu_map = self.cage.gpu_map_mut();
-                    sync.remap(section, gpu_map);
+                    cpu_end.sync(section, gpu_map);
                 }
 
                 let cage_map = self.cage.gpu_map();
@@ -778,8 +778,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             // synchronizes lattice damage from xpbd-lattice solver
             self.lattice.register_dead_nodes();
         });
-
-        //self.process_cage_damage();
 
         // synchronizes lattice and cage damage to fragments.
         // after this point, the order of fragment elements must not change;

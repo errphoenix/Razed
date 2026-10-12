@@ -226,6 +226,7 @@ ethel::shader_glsl_compute! {
         };
 
         share {
+            bool sm_lattice_use[PER_GROUP_CAGE_COUNT][PER_CAGE_POINT_COUNT];
             vec3 sm_lattice_pos[PER_GROUP_CAGE_COUNT][PER_CAGE_POINT_COUNT];
             vec3 sm_offsets_tmp[PER_GROUP_CAGE_COUNT][PER_CAGE_POINT_COUNT];
         };
@@ -248,6 +249,7 @@ ethel::shader_glsl_compute! {
                 DirectIndex direct = imap_lattice[id.index];
                 vec3 node_position = pod_lattice_position[direct.index].xyz;
                 sm_lattice_pos[cage_local_index][logic_local_index] = node_position;
+                sm_lattice_use[cage_local_index][logic_local_index] = id.index != 0 && direct.index != 0;
             } else {
                 // if the thread is outside the working range just fake it
                 // till the barrier, zero it out because why not.
@@ -255,6 +257,12 @@ ethel::shader_glsl_compute! {
             }
 
             barrier();
+
+            for (uint i = 0; i < 8; ++i) {
+                if (!sm_lattice_use[cage_local_index][i]) {
+                    return;
+                }
+            }
 
             vec4 rotation = vec4(vec3(0.0), 1.0);
             if (cage_global_index < total_cage_count) {
@@ -267,27 +275,32 @@ ethel::shader_glsl_compute! {
                 NodeAttachment point_attachments[PER_POINT_ATTACH_COUNT] = cage_attachments[point_local_index].list;
 
                 vec3 shared_cage_lattice_pos[8] = sm_lattice_pos[cage_local_index];
+                bool shared_cage_lattice_use[8] = sm_lattice_use[cage_local_index];
 
                 // compute real-time barycenter
                 vec3 real_barycenter = vec3(0.0);
                 for (uint i = 0; i < PER_POINT_ATTACH_COUNT; ++i) {
                     NodeAttachment attachment = point_attachments[i];
-                    vec3 real_node_pos = shared_cage_lattice_pos[attachment.index];
-                    real_barycenter += real_node_pos * attachment.weight;
+                    if (shared_cage_lattice_use[attachment.index]) {
+                        vec3 real_node_pos = shared_cage_lattice_pos[attachment.index];
+                        real_barycenter += real_node_pos * attachment.weight;
+                    }
+
                 }
                 real_barycenter -= cage_bind_ref;
 
                 mat3 covariance = mat3(0.0);
                 for (uint i = 0; i < PER_POINT_ATTACH_COUNT; ++i) {
                     NodeAttachment attachment = point_attachments[i];
+                    if (shared_cage_lattice_use[attachment.index]) {
+                        vec3 real_node_pos = shared_cage_lattice_pos[attachment.index];
+                        vec3 bind_node_pos = cage_lattice_binds[attachment.index].xyz;
 
-                    vec3 real_node_pos = shared_cage_lattice_pos[attachment.index];
-                    vec3 bind_node_pos = cage_lattice_binds[attachment.index].xyz;
-
-                    covariance += outer(
-                        real_node_pos - real_barycenter,
-                        bind_node_pos - bind_barycenter
-                    ) * attachment.weight;
+                        covariance += outer(
+                            real_node_pos - real_barycenter,
+                            bind_node_pos - bind_barycenter
+                        ) * attachment.weight;
+                    }
                 }
                 const mat3 MAT3_IDENTITY = mat3(vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 0.0, 1.0));
                 covariance += MAT3_IDENTITY * 0.0001;
@@ -307,16 +320,21 @@ ethel::shader_glsl_compute! {
 
             if (point_local_index == 0) {
                 vec3 offset_sum = vec3(0.0);
-                offset_sum += sm_offsets_tmp[cage_local_index][0];
-                offset_sum += sm_offsets_tmp[cage_local_index][1];
-                offset_sum += sm_offsets_tmp[cage_local_index][2];
-                offset_sum += sm_offsets_tmp[cage_local_index][3];
-                offset_sum += sm_offsets_tmp[cage_local_index][4];
-                offset_sum += sm_offsets_tmp[cage_local_index][5];
-                offset_sum += sm_offsets_tmp[cage_local_index][6];
-                offset_sum += sm_offsets_tmp[cage_local_index][7];
+                if (sm_lattice_use[cage_local_index][0]) offset_sum += sm_offsets_tmp[cage_local_index][0];
+                if (sm_lattice_use[cage_local_index][1]) offset_sum += sm_offsets_tmp[cage_local_index][1];
+                if (sm_lattice_use[cage_local_index][2]) offset_sum += sm_offsets_tmp[cage_local_index][2];
+                if (sm_lattice_use[cage_local_index][3]) offset_sum += sm_offsets_tmp[cage_local_index][3];
+                if (sm_lattice_use[cage_local_index][4]) offset_sum += sm_offsets_tmp[cage_local_index][4];
+                if (sm_lattice_use[cage_local_index][5]) offset_sum += sm_offsets_tmp[cage_local_index][5];
+                if (sm_lattice_use[cage_local_index][6]) offset_sum += sm_offsets_tmp[cage_local_index][6];
+                if (sm_lattice_use[cage_local_index][7]) offset_sum += sm_offsets_tmp[cage_local_index][7];
 
-                vec4 fb_offset = vec4(offset_sum * 0.125, 1.0);
+                uint j = 0;
+                for (int i = 0; i < 8; ++i) {
+                    j += uint(sm_lattice_use[cage_local_index][i]);
+                }
+
+                vec4 fb_offset = vec4(offset_sum / float(j), 1.0);
 
                 out_cage_feedback[cage_global_index][0] = fb_offset;
                 // simply use the rotation of the first corner point

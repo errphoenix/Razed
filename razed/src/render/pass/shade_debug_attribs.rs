@@ -159,6 +159,22 @@ ethel::shader_glsl_compute! {
                         float((Tid >> 16) & 255u) / 255.0
                     );
                     break;
+                case 4:
+                    // material ID output
+                    // 16 bits for optional instance id
+                    // 1  bit  for 'is instanced' flag
+                    // 15 bits for material id
+                    #define G_MASK_15B 0x7fff
+                    const uint G = S_raster_in.y;
+                    const uint G16br = G & 0x0000ffffu;
+                    const bool is_inst = bool(G16br >> 15);
+                    const uint Mid = G16br & G_MASK_15B;
+                    v_output.rgb = vec3(
+                        float(Mid        & 255u) / 255.0,
+                        float((Mid >> 8) & 255u) / 255.0,
+                        float(is_inst) //blue if instanced
+                    );
+                    break;
             }
 
             imageStore(shade_out, px, v_output);

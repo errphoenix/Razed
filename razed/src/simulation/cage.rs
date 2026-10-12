@@ -34,13 +34,20 @@ pub struct CageUploadItem {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Copy)]
-pub struct CageRemapDelta {
-    /// The new GPU index to set
-    ///
-    /// A value of `None` is basically a delete operation.
-    pub gpu_index: Option<NonZeroUsize>,
-    /// The stable ID of the CPU-GPU cage map
-    pub map_id: IndirectIndex,
+pub enum CageSyncOp {
+    Remap {
+        /// The stable ID of the CPU-GPU cage map
+        map_id: IndirectIndex,
+        /// The new GPU index to set
+        ///
+        /// A value of `None` is basically a delete operation.
+        gpu_index: Option<NonZeroUsize>,
+    },
+    RemoveAttachment {
+        /// The stable ID of the CPU-GPU cage map
+        map_id: IndirectIndex,
+        node_id: IndirectIndex,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Copy)]
@@ -51,7 +58,7 @@ pub struct CageDeleteOp {
 #[derive(Clone, Debug, Default)]
 pub struct CageSyncFrameBuffers {
     upload: TriVec<CageUploadItem>,
-    remap: TriVec<CageRemapDelta>,
+    sync: TriVec<CageSyncOp>,
     delete: TriVec<CageDeleteOp>,
 }
 impl CageSyncFrameBuffers {
@@ -348,7 +355,7 @@ pub struct CageSyncGpu;
 pub struct CageSyncFrameOps<'buffers, Op> {
     _op: std::marker::PhantomData<Op>,
     upload: &'buffers TriVec<CageUploadItem>,
-    remap: &'buffers TriVec<CageRemapDelta>,
+    sync: &'buffers TriVec<CageSyncOp>,
     delete: &'buffers TriVec<CageDeleteOp>,
 }
 impl<'buffers, Op> CageSyncFrameOps<'buffers, Op> {
@@ -356,7 +363,7 @@ impl<'buffers, Op> CageSyncFrameOps<'buffers, Op> {
         Self {
             _op: std::marker::PhantomData,
             upload: &buffers.upload,
-            remap: &buffers.remap,
+            sync: &buffers.sync,
             delete: &buffers.delete,
         }
     }
@@ -375,19 +382,22 @@ impl<'buffers> CageSyncFrameOps<'buffers, CageSyncCpu> {
         self.delete.extend_from_slice(section.as_index(), data);
     }
 
-    pub fn remap(&self, section: StorageSection, local_map: &mut IndexArrayColumn<()>) {
-        self.remap.drain(section.as_index(), ..).for_each(
-            |CageRemapDelta { gpu_index, map_id }| match gpu_index {
-                Some(new_index) => {
-                    let new_index = new_index.get();
-                    let new_direct = DirectIndex::from_index(new_index, map_id.generation());
-                    local_map.slots_map_mut()[map_id.as_index()] = new_direct;
-                }
-                _ => {
-                    local_map.free(map_id);
-                }
-            },
-        );
+    pub fn sync(&self, section: StorageSection, local_map: &mut IndexArrayColumn<()>) {
+        self.sync
+            .drain(section.as_index(), ..)
+            .for_each(|op| match op {
+                CageSyncOp::Remap { map_id, gpu_index } => match gpu_index {
+                    Some(new_index) => {
+                        let new_index = new_index.get();
+                        let new_direct = DirectIndex::from_index(new_index, map_id.generation());
+                        local_map.slots_map_mut()[map_id.as_index()] = new_direct;
+                    }
+                    _ => {
+                        local_map.free(map_id);
+                    }
+                },
+                CageSyncOp::RemoveAttachment { map_id, node_id } => todo!(),
+            });
     }
 }
 impl<'buffers> CageSyncFrameOps<'buffers, CageSyncGpu> {
@@ -485,7 +495,7 @@ impl<'buffers> CageSyncFrameOps<'buffers, CageSyncGpu> {
             gpu_buf.blit_pod_attachments(&[attachments], offset);
 
             let gpu_index = NonZeroUsize::new(offset).expect("offset is never 0");
-            self.remap(section, Some(gpu_index), map_index);
+            self.sync_remap(section, Some(gpu_index), map_index);
 
             offset += 1;
         });
@@ -515,19 +525,31 @@ impl<'buffers> CageSyncFrameOps<'buffers, CageSyncGpu> {
                 let length = gpu_buf.length_pod_bindref();
                 let remap_id = Self::swap_remove_cage(gpu_buf.inner(), index, length);
 
-                self.remap(section, None, map_id);
+                self.sync_remap(section, None, map_id);
                 let old_direct = imap[remap_id.as_index()];
                 imap[remap_id.as_index()] = DirectIndex::from_index(index, old_direct.generation());
             });
     }
 
-    pub fn remap(
+    pub fn sync_remap(
         &self,
         section: StorageSection,
         gpu_index: Option<NonZeroUsize>,
         map_id: IndirectIndex,
     ) {
-        self.remap
-            .push(section.as_index(), CageRemapDelta { gpu_index, map_id });
+        self.sync
+            .push(section.as_index(), CageSyncOp::Remap { map_id, gpu_index });
+    }
+
+    pub fn sync_remove_attachment(
+        &self,
+        section: StorageSection,
+        node_id: IndirectIndex,
+        map_id: IndirectIndex,
+    ) {
+        self.sync.push(
+            section.as_index(),
+            CageSyncOp::RemoveAttachment { map_id, node_id },
+        );
     }
 }
