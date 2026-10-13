@@ -186,7 +186,7 @@ ethel::shader_glsl! {
                 }
             };
             uniform {
-                on 0, for 16 => texture_masks : uint from u32;
+                on 3, for 16 => texture_masks : uint from u32;
             };
             sampler {
                 on 0, for 16 => texture_map : sampler2D;

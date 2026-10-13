@@ -37,7 +37,10 @@ use crate::{
     assets::{self, MaterialStorage},
     data::FrameDataBuffers,
     render::{
-        geometry::{DebrisGeomCtx, FragmentsGeomCtx, PlaneGeomCtx},
+        geometry::{
+            ComputeShaderDebrisGeomSubmit, ComputeShaderFragmentsGeomSubmit,
+            ComputeShaderPlaneGeomSubmit, DebrisGeomCtx, FragmentsGeomCtx, PlaneGeomCtx,
+        },
         graphics::{Materials, RenderStats, materials},
         pass::{DebugCageDrawCtx, DebugLatticeDrawCtx, ShadeDebugAttribsCtx, ShadePbrCtx},
     },
@@ -728,14 +731,33 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 )
             };
 
+            let geom_fragments_shader = unsafe {
+                let name = ComputeShaderFragmentsGeomSubmit::HASHED_NAME;
+                let sourcepath = format!("target/shaders/spirv/{name:#x}-default.comp");
+                let source = std::fs::read(sourcepath).unwrap();
+                ComputeShaderFragmentsGeomSubmit::from_spirv(&source)
+            };
+            let geom_debris_shader = unsafe {
+                let name = ComputeShaderDebrisGeomSubmit::HASHED_NAME;
+                let sourcepath = format!("target/shaders/spirv/{name:#x}-default.comp");
+                let source = std::fs::read(sourcepath).unwrap();
+                ComputeShaderDebrisGeomSubmit::from_spirv(&source)
+            };
+            let geom_plane_shader = unsafe {
+                let name = ComputeShaderPlaneGeomSubmit::HASHED_NAME;
+                let sourcepath = format!("target/shaders/spirv/{name:#x}-default.comp");
+                let source = std::fs::read(sourcepath).unwrap();
+                ComputeShaderPlaneGeomSubmit::from_spirv(&source)
+            };
+
             self.pipeline = Some(RenderPipeline {
                 cage_deform_compute_pass: pass::cage_deform_compute::pass(
                     &self.shaders.cage_deform,
                 ),
 
-                geom_fragments: geometry::geom_fragments_pass(),
-                geom_debris: geometry::geom_debris_pass(),
-                geom_groundplane: geometry::geom_plane_pass(),
+                geom_fragments: geometry::geom_fragments_pass_with_shader(geom_fragments_shader),
+                geom_debris: geometry::geom_debris_pass_with_shader(geom_debris_shader),
+                geom_groundplane: geometry::geom_plane_pass_with_shader(geom_plane_shader),
 
                 geom_rasterize: rendrs::geometry::GeomRasterizePass::new(
                     ShaderGeomRasterizeVariants::Batched,
