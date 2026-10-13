@@ -1,7 +1,7 @@
 /target
 Cargo.lock
 *.bin
-*.sh
+plot_last.sh
 perf_graphs/*
 *.svg
 *.png
