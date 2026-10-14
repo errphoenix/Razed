@@ -1,4 +1,4 @@
-use super::{LIB_GBANK_BUFFERS_GETTERS, LIB_GBANK_BUFFERS_HEADER, LIB_GBANK_BUFFERS_SETTERS};
+use super::LIB_GBANK_BUFFERS_HEADER;
 use rendrs::geometry::DomainData;
 
 pub fn geom_plane_pass() -> PlaneGeomPass {

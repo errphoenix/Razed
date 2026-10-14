@@ -1,4 +1,4 @@
-use super::{LIB_GBANK_BUFFERS_GETTERS, LIB_GBANK_BUFFERS_HEADER, LIB_GBANK_BUFFERS_SETTERS};
+use super::LIB_GBANK_BUFFERS_HEADER;
 use ethel::{render::buffer::PartitionedTriBuffer, shader::GlslStorage};
 use rendrs::{geometry::DomainData, graphics::material::MaterialLocationRegistry};
 

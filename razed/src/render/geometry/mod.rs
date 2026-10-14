@@ -10,3 +10,6 @@ rendrs::geometry_buffers! {
     vertices = 1_048_560;
     triangles = 1_048_560;
 }
+
+pub const GBANK_VERTEX_CAP: u32 = 1_048_560;
+pub const GBANK_TRIANGLE_CAP: u32 = 1_048_560;

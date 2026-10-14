@@ -67,19 +67,8 @@ pub const fn shade_pbr_pass(
                 view_data,
             } = ctx;
 
-            gbank
-                .vertex_buffers()
-                .bind_ssbo_normals(Some(SSBO_BIND_GEOM_VERTEX_NORMALS));
-            gbank
-                .vertex_buffers()
-                .bind_ssbo_uvs(Some(SSBO_BIND_GEOM_VERTEX_UVS));
-            gbank
-                .triangle_buffers()
-                .bind_ssbo_indices(Some(SSBO_BIND_GEOM_TRIANGLE_INDICES));
-            gbank
-                .triangle_buffers()
-                .bind_ssbo_attribs(Some(SSBO_BIND_GEOM_TRIANGLE_ATTRIBS));
-
+            gbank.bind_vertex_buffers();
+            gbank.bind_triangle_buffers();
             irradiance_sh.bind_shader_storage(SSBO_BIND_PROBE_IRRADIANCE, 0);
             materials_buf.bind_shader_storage(SSBO_BIND_MATERIALS, 0);
 
@@ -122,18 +111,6 @@ pub const SAMPLER_UNIT_DEPTH_BUFFER: u32 = 7;
 pub const WORKGROUP_SIZE_XY: u32 = 8;
 
 macro_rules! ssbo_binding {
-    (Geometry_VertexNormals) => {
-        0
-    };
-    (Geometry_VertexUvs) => {
-        1
-    };
-    (Geometry_TriangleIndices) => {
-        2
-    };
-    (Geometry_TriangleAttribs) => {
-        3
-    };
     (Probe_Irradiance) => {
         4
     };
@@ -142,10 +119,6 @@ macro_rules! ssbo_binding {
     };
 }
 
-pub const SSBO_BIND_GEOM_VERTEX_NORMALS: u32 = ssbo_binding!(Geometry_VertexNormals);
-pub const SSBO_BIND_GEOM_VERTEX_UVS: u32 = ssbo_binding!(Geometry_VertexUvs);
-pub const SSBO_BIND_GEOM_TRIANGLE_INDICES: u32 = ssbo_binding!(Geometry_TriangleIndices);
-pub const SSBO_BIND_GEOM_TRIANGLE_ATTRIBS: u32 = ssbo_binding!(Geometry_TriangleAttribs);
 pub const SSBO_BIND_PROBE_IRRADIANCE: u32 = ssbo_binding!(Probe_Irradiance);
 pub const SSBO_BIND_MATERIALS: u32 = ssbo_binding!(Materials);
 
@@ -182,26 +155,8 @@ ethel::shader_glsl_compute! {
             rendrs::graphics::irradiance_harmonics::TYPE_SH_COEFFS
         };
         ssbo {
-            ethel::shader_glsl_ssbo! {
-                buf Geometry_VertexNormals => {
-                    [dyn_array float : geometry_vertex_normals => each 2]
-                }
-            }
-            ethel::shader_glsl_ssbo! {
-                buf Geometry_VertexUvs => {
-                    [dyn_array float : geometry_vertex_uvs => each 2]
-                }
-            }
-            ethel::shader_glsl_ssbo! {
-                buf Geometry_TriangleIndices => {
-                    [dyn_array uint : geometry_triangle_indices => each 3]
-                }
-            }
-            ethel::shader_glsl_ssbo! {
-                buf Geometry_TriangleAttribs => {
-                    [dyn_array TriangleAttribs : geometry_triangle_attribs]
-                }
-            }
+            rendrs::geometry::SSBO_GBANK_VERTEX_BUFFER
+            rendrs::geometry::SSBO_GBANK_TRIANGLE_BUFFER
             ethel::shader_glsl_ssbo! {
                 buf Probe_Irradiance => {
                     ShCoeffs : probe_irradiance;
@@ -222,6 +177,9 @@ ethel::shader_glsl_compute! {
             rendrs::geometry::rasterize::LIB_UTIL_DEPTH_WORLDPOS;
             rendrs::geometry::rasterize::LIB_UTIL_FRAMESPACE_GET_TANFRAME;
             rendrs::geometry::rasterize::LIB_UTIL_FRAMESPACE_GET_BWEIGHTS;
+
+            super::super::geometry::LIB_GBANK_BUFFERS_HEADER;
+            rendrs::geometry::LIB_GBANK_BUFFERS_GETTERS;
 
             rendrs::graphics::irradiance_harmonics::LIB_EVALUATE_SH_L2;
             rendrs::graphics::light::LIB_LIGHT_ATTENUATE_ISQ_WINDOWED_CURVE;
@@ -260,7 +218,7 @@ ethel::shader_glsl_compute! {
             const uint Mid = G.y & G_MASK_15B;
 
             const MaterialLocation maLocation = materials[Mid];
-            const uint[3] I = geometry_triangle_indices[Tid];
+            const uint[3] I = GetTriangleIndices(Tid);
 
             vec3 W = rendrs_FrameSpace_GetBWeights(F);
 
@@ -277,17 +235,15 @@ ethel::shader_glsl_compute! {
             const uint maC_ORMD_group = maC_ORMD.page16_group16 & 0xffffu;
             const uint maC_ORMD_page  = maC_ORMD.page16_group16 >> 16;
 
-            float[2] UV0 = geometry_vertex_uvs[I[0]];
-            float[2] UV1 = geometry_vertex_uvs[I[1]];
-            float[2] UV2 = geometry_vertex_uvs[I[2]];
+            const vec2 UV0 = GetVertexUv(I[0]);
+            const vec2 UV1 = GetVertexUv(I[1]);
+            const vec2 UV2 = GetVertexUv(I[2]);
 
-            float[2] NE0 = geometry_vertex_normals[I[0]];
-            float[2] NE1 = geometry_vertex_normals[I[1]];
-            float[2] NE2 = geometry_vertex_normals[I[2]];
+            const vec2 NE0 = GetVertexNormal(I[0]);
+            const vec2 NE1 = GetVertexNormal(I[1]);
+            const vec2 NE2 = GetVertexNormal(I[2]);
 
-            vec2 UV = vec2(UV0[0], UV0[1]) * W.x
-                    + vec2(UV1[0], UV1[1]) * W.y
-                    + vec2(UV2[0], UV2[1]) * W.z;
+            vec2 UV = UV0 * W.x + UV1 * W.y + UV2 * W.z;
             UV *= maUvScale;
 
             vec2 sUv = (vec2(id) + 0.5) / vec2(resolution);
@@ -309,9 +265,9 @@ ethel::shader_glsl_compute! {
                 vec2(d.x, d.y), vec2(d.z, d.w)
             );
 
-            vec3 N0 = rendrs_unpackOctahedron(vec2(NE0[0], NE0[1]));
-            vec3 N1 = rendrs_unpackOctahedron(vec2(NE1[0], NE1[1]));
-            vec3 N2 = rendrs_unpackOctahedron(vec2(NE2[0], NE2[1]));
+            vec3 N0 = rendrs_unpackOctahedron(NE0);
+            vec3 N1 = rendrs_unpackOctahedron(NE1);
+            vec3 N2 = rendrs_unpackOctahedron(NE2);
 
             //fix: N0 sign is often discontinuous in respect to the rest
             // of the triangle, a quick sign correction is applied here
