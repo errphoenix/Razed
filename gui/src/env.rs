@@ -41,6 +41,39 @@ impl UiEnv {
     pub fn get_mut(&mut self, id: &StringHash) -> Option<&mut EnvValue> {
         self.map.get_mut(id)
     }
+
+    pub fn get_float_or(&self, id: &StringHash, default: f32) -> f32 {
+        self.map
+            .get(id)
+            .map(|e| e.as_float())
+            .flatten()
+            .unwrap_or(default)
+    }
+    pub fn get_float(&self, id: &StringHash) -> f32 {
+        self.get_float_or(id, 0f32)
+    }
+
+    pub fn get_integer_or(&self, id: &StringHash, default: i32) -> i32 {
+        self.map
+            .get(id)
+            .map(|e| e.as_integer())
+            .flatten()
+            .unwrap_or(default)
+    }
+    pub fn get_integer(&self, id: &StringHash) -> i32 {
+        self.get_integer_or(id, 0i32)
+    }
+
+    pub fn get_boolean_or(&self, id: &StringHash, default: bool) -> bool {
+        self.map
+            .get(id)
+            .map(|e| e.as_boolean())
+            .flatten()
+            .unwrap_or(default)
+    }
+    pub fn get_boolean(&self, id: &StringHash) -> bool {
+        self.get_boolean_or(id, false)
+    }
 }
 
 #[derive(Default, Clone, Debug, PartialEq, PartialOrd)]
