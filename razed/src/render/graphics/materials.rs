@@ -15,23 +15,29 @@ pub struct Groups {
 
 #[derive(Debug, Default)]
 pub struct Materials {
-    list: Vec<MaterialLocation>,
-    map_registry: StringMap<usize>,
     location_registry: MaterialLocationRegistry,
-    pub groups: Option<Groups>,
     dirty: bool,
+
+    map_registry: StringMap<usize>,
+    list: Vec<MaterialLocation>,
+
+    pub groups: Option<Groups>,
+    global_default_group: u16,
 }
 #[allow(unused)]
 impl Materials {
-    pub fn empty() -> Self {
+    pub fn new() -> Self {
         Self {
             list: Vec::new(),
             map_registry: StringMap::default(),
             location_registry: MaterialLocationRegistry::new(),
             groups: None,
             dirty: false,
+            global_default_group: Self::GROUP_INDEX_DEV,
         }
     }
+
+    pub const GROUP_INDEX_DEV: u16 = 0;
 
     pub fn initialize(&mut self, texture_registry: &mut TextureRegistry) {
         self.dirty = true;
@@ -39,7 +45,11 @@ impl Materials {
         tracing::info!("[-] Initializing materials...");
 
         self.groups = Some(Groups {
-            dev: material_group_dev(0, texture_registry, &mut self.location_registry),
+            dev: material_group_dev(
+                Self::GROUP_INDEX_DEV,
+                texture_registry,
+                &mut self.location_registry,
+            ),
         });
         tracing::info!("[-] Created material group 'dev'.");
 
@@ -64,7 +74,14 @@ impl Materials {
     pub unsafe fn upload_to_buffer(&mut self, buffer: &MaterialStorage) {
         if self.dirty {
             self.dirty = false;
+
             unsafe {
+                buffer
+                    .view_mut()
+                    .as_mut_slice()
+                    .fill(MaterialLocation::fallback_defaults(
+                        self.global_default_group,
+                    ));
                 buffer.blit(self.list(), 0);
             }
         }
