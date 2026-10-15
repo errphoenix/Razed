@@ -3,7 +3,7 @@ use std::sync::{Arc, atomic::AtomicU32};
 use crate::{
     render::{
         self,
-        graphics::{RenderParams, RenderStats},
+        graphics::{DebugRenderOptions, Groundplane, RenderParams, RenderStats},
         pass::{CagePoints, ShadeDebugAttribsMode},
     },
     simulation::cage::{
@@ -169,61 +169,6 @@ layout_buffer! {
             bind 1;
             shader render::pass::debug_lines_draw::SSBO_INDEX_POD_COLORS;
         };
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct DebugRenderOptions {
-    pub draw_viz_lattice: bool,
-    pub draw_viz_cage: bool,
-}
-impl Default for DebugRenderOptions {
-    fn default() -> Self {
-        Self {
-            draw_viz_lattice: true,
-            draw_viz_cage: true,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
-pub struct Groundplane {
-    pub scale: f32,
-    pub uvscale: f32,
-    pub draw: bool,
-}
-impl Default for Groundplane {
-    fn default() -> Self {
-        Self {
-            scale: Self::DEFAULT_SCALE,
-            uvscale: Default::default(),
-            draw: true,
-        }
-    }
-}
-impl Groundplane {
-    pub const MAX_SCALE: f32 = 1024f32;
-    pub const DEFAULT_SCALE: f32 = 64f32;
-    pub const DEFAULT_SCALE_NORMALIZED: f32 = Self::DEFAULT_SCALE / Self::MAX_SCALE;
-    const INV_MAX_SCALE: f32 = 1f32 / Self::MAX_SCALE;
-
-    pub const MAX_UVSCALE: f32 = 64f32;
-    pub const DEFAULT_UVSCALE: f32 = 4f32;
-    pub const DEFAULT_UVSCALE_NORMALIZED: f32 = Self::DEFAULT_UVSCALE / Self::MAX_UVSCALE;
-    const INV_MAX_UVSCALE: f32 = 1f32 / Self::MAX_UVSCALE;
-
-    pub const fn scale_from_normalized(normalized: f32) -> f32 {
-        normalized * Self::MAX_SCALE
-    }
-    pub const fn normalize_scale(scale: f32) -> f32 {
-        scale * Self::INV_MAX_SCALE
-    }
-
-    pub const fn uvscale_from_normalized(normalized: f32) -> f32 {
-        normalized * Self::MAX_UVSCALE
-    }
-    pub const fn normalize_uvscale(uvscale: f32) -> f32 {
-        uvscale * Self::INV_MAX_UVSCALE
     }
 }
 

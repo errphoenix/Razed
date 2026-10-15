@@ -12,14 +12,11 @@ use std::{
 };
 
 use crate::{
-    data::{
-        DebugRenderOptions, FrameDataBuffers, Groundplane, LayoutDebrisData, LayoutFragmentData,
-        LayoutXpbdDebugData,
-    },
+    data::{FrameDataBuffers, LayoutDebrisData, LayoutFragmentData, LayoutXpbdDebugData},
     procedural::{VoxelGrid, VoxelGridOptions},
     render::{
         RenderGroup,
-        graphics::{Gamma, RenderStats},
+        graphics::{DebugRenderOptions, Gamma, Groundplane, RenderStats},
         pass::ShadeDebugAttribsMode,
     },
     simulation::{
@@ -315,23 +312,24 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                     render_params.gamma.set_and_advance(gamma).unwrap();
                 }
 
-                let draw_viz_lattice = self
+                let draw_viz_lattice = self.ui_system.env().get_boolean(&DEBUG_CTL_RENDER_LATTICE);
+                let draw_viz_cage = self.ui_system.env().get_boolean(&DEBUG_CTL_RENDER_CAGE);
+                let bias_roughness = self
                     .ui_system
                     .env()
-                    .get(&DEBUG_CTL_RENDER_LATTICE)
-                    .and_then(|v| v.as_boolean())
-                    .unwrap_or_default();
-                let draw_viz_cage = self
+                    .get_float(&DEBUG_CTL_SHADE_BIAS_ROUGHNESS);
+                let bias_metallic = self
                     .ui_system
                     .env()
-                    .get(&DEBUG_CTL_RENDER_CAGE)
-                    .and_then(|v| v.as_boolean())
-                    .unwrap_or_default();
+                    .get_float(&DEBUG_CTL_SHADE_BIAS_METALLIC);
+
                 let _ = storage
                     .debug_render_options
                     .set_and_advance(DebugRenderOptions {
                         draw_viz_lattice,
                         draw_viz_cage,
+                        bias_roughness,
+                        bias_metallic,
                     });
 
                 let groundplane = &storage.groundplane;

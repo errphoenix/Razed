@@ -65,6 +65,8 @@ pub const fn shade_pbr_pass(
                 materials_buf,
                 resolution,
                 view_data,
+                dparam_bias_rough,
+                dparam_bias_metal,
             } = ctx;
 
             gbank.bind_vertex_buffers();
@@ -77,6 +79,8 @@ pub const fn shade_pbr_pass(
             shader.uniform_resolution_uvec2([resolution.width(), resolution.height()]);
             shader.uniform_camera_position_vec3(view_data.view_pos);
             shader.uniform_camera_forward_vec3(view_data.view_dir);
+            shader.uniform_dparam_bias_rough_float(*dparam_bias_rough);
+            shader.uniform_dparam_bias_metal_float(*dparam_bias_metal);
 
             let wg_x = resolution.width().div_ceil(WORKGROUP_SIZE_XY);
             let wg_y = resolution.height().div_ceil(WORKGROUP_SIZE_XY);
@@ -95,6 +99,9 @@ pub struct ShadePbrCtx<'ctx> {
 
     pub resolution: PixelResolution,
     pub view_data: ViewData,
+
+    pub dparam_bias_rough: f32,
+    pub dparam_bias_metal: f32,
 }
 rendrs::context_wrapper!(for<'ctx> ShadePbrCtx);
 
@@ -131,6 +138,9 @@ ethel::shader_glsl_compute! {
             on 1 => inv_viewproj    : mat4  from glam::Mat4;
             on 2 => camera_forward  : vec3  from glam::Vec3;
             on 3 => camera_position : vec3  from glam::Vec3;
+
+            on 4 => dparam_bias_rough : float from f32;
+            on 5 => dparam_bias_metal : float from f32;
         };
         sampler {
             on SAMPLER_UNIT_TEXTURE_MAP, for 1     => texture_map          : sampler2DArray;
@@ -284,6 +294,10 @@ ethel::shader_glsl_compute! {
             float m_rough   = qOrmd.g*qOrmd.g;
             float m_metal   = qOrmd.b;
             //float displacement = qOrmd.a;
+
+            // apply debug bias values
+            m_rough = min(1.0, m_rough + dparam_bias_rough);
+            m_metal = min(1.0, m_metal + dparam_bias_metal);
 
             vec3 B = normalize(cross(T, N));
             mat3 TBN = mat3(T, B, N);

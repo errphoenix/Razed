@@ -161,6 +161,7 @@ pub fn root(
     map.insert(DEBUG_CTL_RENDER_LATTICE_BUTTON, dbg_button_lattice);
     map.insert(DEBUG_CTL_RENDER_CAGE_BUTTON, dbg_button_cage);
 
+    // gamma slider
     system
         .create_element(ElementParams::Slider(
             CoreElementParams {
@@ -206,6 +207,81 @@ pub fn root(
         .unwrap();
 
     shade_mode_selector(system, root);
+
+    // roughness bias
+    system
+        .create_element(ElementParams::Slider(
+            CoreElementParams {
+                parent: Some(root),
+                children: None,
+                layout_options: LayoutOptions {
+                    size: Some(Point::new(Value::Absolute(256.0), Value::Absolute(16.0))),
+                    padding: Some(Rectangle::new(
+                        Value::Absolute(0f32),
+                        Value::Absolute(8f32),
+                        Value::Absolute(0f32),
+                        Value::Absolute(8f32),
+                    )),
+                    ..Default::default()
+                },
+                layer: 5,
+            },
+            SliderParams {
+                text: Some(TextParams {
+                    contents: TextContents::from_nodes(&[
+                        TextNode::Static("shading.bias.roughness = "),
+                        TextNode::Variable(DEBUG_CTL_SHADE_BIAS_ROUGHNESS),
+                    ]),
+                    ..Default::default()
+                }),
+
+                scroll_step: 0.01,
+                value_init: 0f32,
+                value_sync_handle: Some(DEBUG_CTL_SHADE_BIAS_ROUGHNESS),
+                callback: InteractableCallback::Repeating(|env, v| {
+                    env.insert(DEBUG_CTL_SHADE_BIAS_ROUGHNESS, *v);
+                }),
+                ..Default::default()
+            },
+        ))
+        .unwrap();
+    // metallic bias
+    system
+        .create_element(ElementParams::Slider(
+            CoreElementParams {
+                parent: Some(root),
+                children: None,
+                layout_options: LayoutOptions {
+                    size: Some(Point::new(Value::Absolute(256.0), Value::Absolute(16.0))),
+                    padding: Some(Rectangle::new(
+                        Value::Absolute(0f32),
+                        Value::Absolute(8f32),
+                        Value::Absolute(0f32),
+                        Value::Absolute(8f32),
+                    )),
+                    ..Default::default()
+                },
+                layer: 5,
+            },
+            SliderParams {
+                text: Some(TextParams {
+                    contents: TextContents::from_nodes(&[
+                        TextNode::Static("shading.bias.metallic = "),
+                        TextNode::Variable(DEBUG_CTL_SHADE_BIAS_METALLIC),
+                    ]),
+                    ..Default::default()
+                }),
+
+                scroll_step: 0.01,
+                value_init: 0f32,
+                value_sync_handle: Some(DEBUG_CTL_SHADE_BIAS_METALLIC),
+                callback: InteractableCallback::Repeating(|env, v| {
+                    env.insert(DEBUG_CTL_SHADE_BIAS_METALLIC, *v);
+                }),
+                ..Default::default()
+            },
+        ))
+        .unwrap();
 
     root
 }

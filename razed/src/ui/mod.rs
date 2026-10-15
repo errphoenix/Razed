@@ -147,6 +147,11 @@ pub mod env_names {
 
     pub const DEBUG_CTL_SHADE_MODE: StringHash = janus::hash_string("__debug.control.shading.mode");
 
+    pub const DEBUG_CTL_SHADE_BIAS_ROUGHNESS: StringHash =
+        janus::hash_string("__debug.ctl.shading.bias.roughness");
+    pub const DEBUG_CTL_SHADE_BIAS_METALLIC: StringHash =
+        janus::hash_string("__debug.ctl.shading.bias.metallic");
+
     pub const DEBUG_CTL_GROUND_DRAW: StringHash = janus::hash_string("__debug.control.ground.draw");
     pub const DEBUG_CTL_GROUND_SCALE: StringHash =
         janus::hash_string("__debug.control.ground.scale");

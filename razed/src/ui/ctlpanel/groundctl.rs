@@ -8,7 +8,7 @@ use gui::{
 use janus::StringMap;
 
 use crate::{
-    data::Groundplane,
+    render::graphics::Groundplane,
     ui::{
         env_names::{self, DEBUG_CTL_GROUND_SCALE, DEBUG_CTL_GROUND_UVSCALE},
         widget_names::DEBUG_CTL_GROUND_DRAW_BUTTON,

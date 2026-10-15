@@ -544,6 +544,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             );
         }
 
+        let render_doptions = frame_data.debug_render_options.get();
+
         {
             let resolution = self.resolution;
             let view_data = self.view_data;
@@ -565,6 +567,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                             materials_buf,
                             resolution,
                             view_data,
+                            dparam_bias_rough: render_doptions.bias_roughness,
+                            dparam_bias_metal: render_doptions.bias_metallic,
                         },
                     );
                 }
@@ -608,9 +612,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         // lattice & cage optional viz. draw passes
         {
-            let opts = frame_data.debug_render_options.get();
-
-            if opts.draw_viz_lattice {
+            if render_doptions.draw_viz_lattice {
                 self.pipeline().debug_lattice_draw_pass.execute(
                     section,
                     render_pool,
@@ -623,7 +625,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     },
                 );
             }
-            if opts.draw_viz_cage {
+            if render_doptions.draw_viz_cage {
                 self.pipeline().debug_cage_draw_pass.execute(
                     section,
                     render_pool,
