@@ -24,7 +24,7 @@ use crate::render::pass::{
 };
 
 pub const ENVMAP_MIPS: i32 = FILTERING_MIP_COUNT as i32;
-pub const ENVMAP_RESOLUTION: i32 = 128;
+pub const ENVMAP_RESOLUTION: i32 = 256;
 pub const TRUENV_CUBEMAP_RES: i32 = 2048;
 
 type TextureRegistry = AssetRegistry<RawTexture, TextureMetadata>;
@@ -73,6 +73,7 @@ pub fn load_environment_map(texture_assets: &mut TextureRegistry) -> (TextureVie
         ImageType::Float16,
         ImageFormat::Rgba,
     );
+    cubemap_tex.set_filtering_minmag(janus::texture::TextureFiltering::Linear);
 
     {
         // equirectangular to cubemap conversion
@@ -103,28 +104,7 @@ pub fn load_environment_map(texture_assets: &mut TextureRegistry) -> (TextureVie
         ));
     }
     let fullres = texture_assets.get_gpu_view(DEV_ENV_ID).unwrap();
-
     tracing::info!("[+] Loaded & converted full-resolution environment map to cubemap.");
-
-    // downscale for reflection cubemap
-    {
-        let shader = &ComputeShaderBSplineDownscale::new_compiled();
-        let pass = rendrs::graphics::rf_bspline_downsample(&shader);
-
-        for i in 1..=mips_to_match {
-            pass.execute(
-                StorageSection::Back,
-                &RenderPool::dummy(),
-                &BSplineDownscaleCtx {
-                    target: fullres,
-                    mip_level: MipLevels::try_new(i).unwrap(),
-                },
-            );
-            janus::gl::barrier_shader_image();
-        }
-    }
-
-    tracing::info!("[+] Downscaled map to probe-resolution matching mip-levels.");
 
     let downscaled = Texture::new_cubemap(
         ENVMAP_RESOLUTION,
@@ -255,9 +235,7 @@ pub fn debug_probe_reflection(texture: TextureView) -> Texture {
     let shader = &ComputeShaderPrefilterCubemap::new_compiled();
     let pass = rendrs::graphics::rf_prefilter_cubemap(&shader, texture, prefiltered.view());
 
-    tracing::info!(
-        "[=] Running dev/debug probe reflection b-spline prefiltering as GPU-synchronous task."
-    );
+    tracing::info!("[=] Running dev/debug probe reflection prefiltering as GPU-synchronous task.");
     let elapsed_1 = janus::gl::synchronous(|| {
         pass.execute(
             StorageSection::Back,
@@ -265,9 +243,7 @@ pub fn debug_probe_reflection(texture: TextureView) -> Texture {
             &PrefilterCubemapCtx::new(ENVMAP_RESOLUTION as u32),
         );
     });
-    tracing::info!(
-        "[+] dev/debug probe reflection b-spline prefiltering complete, took {elapsed_1} nanos."
-    );
+    tracing::info!("[+] dev/debug probe reflection prefiltering complete, took {elapsed_1} nanos.");
 
     tracing::info!(
         "[-] dev/debug probe reflection processing task(s) complete, took {}.",

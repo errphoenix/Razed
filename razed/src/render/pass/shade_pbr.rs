@@ -145,7 +145,6 @@ ethel::shader_glsl_compute! {
             on IMAGE_BIND_ATTR_GRADS_IN => attr_grads_in : image2D as rgba16f readonly;
 
             on IMAGE_BIND_SHADE_OUT => shade_out : image2D as rgba16f writeonly;
-
         };
         type {
             rendrs::geometry::TYPE_TRIANGLE_ATTRIBS
