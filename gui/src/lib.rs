@@ -866,7 +866,8 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         let mut consumed = false;
 
         let count = self.commons.len();
-        for i in (1..count).rev() {
+        // start at 2 to skip null node at 0 and root node at 1
+        for i in (2..count).rev() {
             for event in events {
                 if let Some(event) = event.key() {
                     if self.process_key_input(i, event, delta) {
