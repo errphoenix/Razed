@@ -1,6 +1,11 @@
 use ethel::state::data::{Column, IndirectIndex};
 use janus::context::DeltaTime;
 
+pub const DEFAULT_SOLVE_ITERATIONS: u32 = 8;
+pub const DEFAULT_SUB_STEPS: u32 = 4;
+pub const DAMPING: f32 = 0.98;
+pub const DEFAULT_STEP_MULT: f32 = 1.0;
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct XpbdNodeOptions {
     pos: glam::Vec3,
@@ -339,10 +344,6 @@ pub struct RawXpbdLattice {
     pub constraints: RawConstraints,
 }
 
-pub const DEFAULT_SOLVE_ITERATIONS: u32 = 8;
-pub const DEFAULT_SUB_STEPS: u32 = 5;
-pub const DAMPING: f32 = 0.925;
-
 /// Indicates that a data table constrains node SoA data.
 pub trait HasNodes {
     fn nodes(&mut self) -> Nodes<'_>;
@@ -448,8 +449,6 @@ impl Default for XpbdSolver {
         }
     }
 }
-
-pub const DEFAULT_STEP_MULT: f32 = 1.2;
 
 #[derive(Clone, Copy, Debug)]
 pub struct XpbdOptions {
@@ -721,7 +720,7 @@ impl XpbdSolver {
                 .zip(compliances)
                 .skip(1)
             {
-                const BREAK_THRESHOLD: f32 = 500.0;
+                const BREAK_THRESHOLD: f32 = 314.0;
 
                 let force_strain = (*lambda / self.h2) * eff_mass;
                 let threshold = integrity * BREAK_THRESHOLD;

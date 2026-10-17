@@ -44,9 +44,9 @@ pub struct RigidBodyOptions {
 }
 
 pub const DEFAULT_GRAVITY: f32 = 9.807;
-pub const DEFAULT_DAMPING: f32 = 0.95;
-pub const DEFAULT_RESTITUTION: f32 = 0.01;
-pub const DEFAULT_FRICTION: f32 = 0.05;
+pub const DEFAULT_DAMPING: f32 = 0.92;
+pub const DEFAULT_RESTITUTION: f32 = 0.1;
+pub const DEFAULT_FRICTION: f32 = 0.06;
 pub const DEFAULT_STATIC_VOLUMES_HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(4.0);
 
 const INTERNAL_STEP_MULT: f32 = 1.0;
@@ -339,12 +339,12 @@ impl RigidBodySolver {
                 let j = -(1.0 - self.options.restitution) * d_v;
                 let impulse = collision.normal * j;
 
-                velocities[id0].linear += impulse * 0.5 * masses[id0];
-                velocities[id1].linear -= impulse * 0.5 * masses[id1];
+                velocities[id0].linear += impulse * masses[id0];
+                velocities[id1].linear -= impulse * masses[id1];
 
                 let t = collision.normal.any_orthonormal_vector();
-                velocities[id0].angular += t * rel_v * 0.5;
-                velocities[id1].angular -= t * rel_v * 0.5;
+                velocities[id0].angular += t * rel_v;
+                velocities[id1].angular -= t * rel_v;
             }
         });
     }
@@ -432,15 +432,14 @@ impl RigidBodySolver {
     }
 
     pub fn constrain_ground(&self, positions: &mut [glam::Vec3], velocities: &mut [RbVelocity]) {
+        let f2 = self.options.friction * self.options.friction;
         if let Some(ground_level) = self.options.ground_level {
             positions.iter_mut().zip(velocities).for_each(|(p, v)| {
                 if p.y < ground_level {
                     p.y = ground_level;
 
-                    v.linear.y *= -self.options.restitution;
-                    v.linear.x *= self.options.friction;
-                    v.linear.z *= self.options.friction;
-                    v.angular *= self.options.friction;
+                    v.linear = v.linear.any_orthogonal_vector() * v.linear.y * f2;
+                    v.angular *= f2;
                 }
             });
         }
