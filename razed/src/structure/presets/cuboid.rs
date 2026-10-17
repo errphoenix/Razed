@@ -43,12 +43,12 @@ pub fn lattice(
     const MASS: f32 = 100.0;
 
     const VERY_STIFF_COMPL: f32 = 0.1e-8;
-    const STIFF_COMPL: f32 = 0.15e-7;
-    const SOFT_COMPL: f32 = 0.2e-6;
+    //const STIFF_COMPL: f32 = 0.15e-7;
+    //const SOFT_COMPL: f32 = 0.2e-6;
 
     const STRONG_LINK: XpbdLinkOptions = XpbdLinkOptions::new(VERY_STIFF_COMPL);
-    const MID_LINK: XpbdLinkOptions = XpbdLinkOptions::new(STIFF_COMPL);
-    const WEAK_LINK: XpbdLinkOptions = XpbdLinkOptions::new(SOFT_COMPL);
+    const MID_LINK: XpbdLinkOptions = XpbdLinkOptions::new(VERY_STIFF_COMPL);
+    const WEAK_LINK: XpbdLinkOptions = XpbdLinkOptions::new(VERY_STIFF_COMPL);
 
     let mut lattice = XpbdLatticeBuilder::with_capacity(total_node_count);
     let w = width / 2.0;

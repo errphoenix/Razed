@@ -736,7 +736,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             self.save_profiler_report();
         }
         if input.keys().key_pressed(janus::input::KeyCode::KeyH) {
-            self.spawn_debug_structure(&view_point);
+            self.spawn_debug_cuboid(&view_point);
+            //self.spawn_debug_bridge(&view_point);
         }
 
         const CAMERA_KEY: janus::input::KeyCode = janus::input::KeyCode::Tab;
@@ -861,11 +862,15 @@ impl State {
                         gbank_tuse_perc,
                         tris_count,
                         gbank_mprint,
+                        instance_count,
+                        instancelist_count,
                     } = self.render_stats_cpy;
                     env.insert(DEBUG_RENDER_GBANK_VUSE_PERC, gbank_vuse_perc);
                     env.insert(DEBUG_RENDER_GBANK_TUSE_PERC, gbank_tuse_perc);
                     env.insert(DEBUG_RENDER_GBANK_TRIS_COUNT, tris_count);
                     env.insert(DEBUG_RENDER_GBANK_MEMPRINT, gbank_mprint);
+                    env.insert(DEBUG_RENDER_GBANK_INSTANCE_COUNT, instance_count);
+                    env.insert(DEBUG_RENDER_GBANK_INSTANCELIST_COUNT, instancelist_count);
                 }
             }
 
@@ -1112,7 +1117,7 @@ impl State {
         });
     }
 
-    fn spawn_debug_structure(&mut self, view_point: &ViewPoint) {
+    fn spawn_debug_cuboid(&mut self, view_point: &ViewPoint) {
         const WIDTH: f32 = 9.0;
         const HEIGHT: f32 = 3.0;
         const DEPTH: f32 = 9.0;
@@ -1138,6 +1143,35 @@ impl State {
         voxel_grid.repopulate_defaults();
 
         let center = center + glam::vec3(0.0, TOTAL_HEIGHT * 0.5, 0.0);
+        self.generate_structure(center, &mut voxel_grid, lattice);
+    }
+
+    fn spawn_debug_bridge(&mut self, view_point: &ViewPoint) {
+        const WIDTH: f32 = 6.0;
+        const HEIGHT: f32 = 6.0;
+        const DEPTH: f32 = 24.0;
+
+        let base = glam::vec3(view_point.position.x, GROUND_LEVEL, view_point.position.z);
+
+        let lattice = crate::structure::presets::bridge::lattice(base, WIDTH, HEIGHT, DEPTH);
+
+        let mut voxel_grid = VoxelGrid::new(
+            crate::structure::presets::bridge::BridgeVoxelFn {
+                width: WIDTH,
+                height: HEIGHT,
+                depth: DEPTH,
+                deck_thickness: 3,
+                pier_width: 2,
+                truss_depth: 2,
+            },
+            VoxelGridOptions::default()
+                .with_width(WIDTH)
+                .with_height(HEIGHT)
+                .with_depth(DEPTH),
+        );
+        voxel_grid.repopulate_defaults();
+
+        let center = base + glam::vec3(0.0, HEIGHT * 0.5, 0.0);
         self.generate_structure(center, &mut voxel_grid, lattice);
     }
 

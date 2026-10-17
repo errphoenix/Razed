@@ -126,5 +126,13 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId) -> WidgetId {
         },
         TextNode::Static(" KB"),
     ]));
+    debug_text(TextContents::from_nodes(&[
+        TextNode::Static("GeomBank::Instances = "),
+        TextNode::Variable(DEBUG_RENDER_GBANK_INSTANCE_COUNT),
+    ]));
+    debug_text(TextContents::from_nodes(&[
+        TextNode::Static("GeomBank::InstanceLists = "),
+        TextNode::Variable(DEBUG_RENDER_GBANK_INSTANCELIST_COUNT),
+    ]));
     root
 }

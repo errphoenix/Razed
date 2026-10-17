@@ -134,6 +134,10 @@ pub mod env_names {
         janus::hash_string("__debug.render.gbank.tris_count");
     pub const DEBUG_RENDER_GBANK_MEMPRINT: StringHash =
         janus::hash_string("__debug.render.gbank.mem_footprint");
+    pub const DEBUG_RENDER_GBANK_INSTANCE_COUNT: StringHash =
+        janus::hash_string("__debug.render.gbank.instance_count");
+    pub const DEBUG_RENDER_GBANK_INSTANCELIST_COUNT: StringHash =
+        janus::hash_string("__debug.render.gbank.instancelist_count");
 
     pub const DEBUG_CTL_DISPLAY_VSYNC: StringHash =
         janus::hash_string("__debug.control.display.vsync");

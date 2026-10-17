@@ -65,8 +65,4 @@ fn main() {
         razed::render::geometry::ComputeShaderPlaneGeomSubmit,
         razed::render::geometry::ComputeShaderPlaneGeomSubmitVariants::Default
     );
-    precompile_shader_compute!(
-        razed::render::pass::ComputeShaderTonemap,
-        razed::render::pass::ComputeShaderTonemapVariants::Default
-    );
 }

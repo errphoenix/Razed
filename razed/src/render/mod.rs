@@ -484,6 +484,9 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             let gcounters = self.geometry_bank.get_gcounters();
 
             render_stats.tris_count = gcounters.triangles();
+            render_stats.instance_count = gcounters.instances();
+            render_stats.instancelist_count = gcounters.instance_lists();
+
             render_stats.gbank_tuse_perc =
                 gcounters.triangles() as f32 / geometry::GEOM_ALLOC_TRIANGLE as f32;
             render_stats.gbank_vuse_perc =

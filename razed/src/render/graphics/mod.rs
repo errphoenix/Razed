@@ -52,6 +52,8 @@ pub struct RenderStats {
     pub gbank_tuse_perc: f32,
     pub gbank_mprint: usize,
     pub tris_count: u32,
+    pub instance_count: u32,
+    pub instancelist_count: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
