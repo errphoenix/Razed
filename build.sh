@@ -26,8 +26,8 @@ cp -rv ../../assets ./razed
 
 echo "[+] Copying intermediate shader binaries..."
 # only copy spir-v sources, glsl sources are not necessary
-mkdir razed/target/shaders/spirv
-cp -rv ../../target/shaders/spirv ./razed/target/shaders/spirv
+mkdir -p razed/target/shaders/spirv
+cp -rv ../../target/shaders/spirv/* ./razed/target/shaders/spirv
 
 echo "[+] Copying selected binary..."
 cp -v ../../target/$target_rust/release/$target_bin ./razed

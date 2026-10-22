@@ -1,6 +1,9 @@
+use ethel::{
+    data::hash::FxLsSpatialHash,
+    state::data::hash::{Cell, FxSpatialHash, SpatialResolution},
+};
+use polys::{TriFace, convex::Convex};
 use std::fmt::Debug;
-
-use ethel::state::data::hash::{Cell, FxSpatialHash, SpatialResolution};
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct VoxelGridOptions {
@@ -9,13 +12,11 @@ pub struct VoxelGridOptions {
     pub depth: f32,
     pub cell_size: f32,
 }
-
 impl Default for VoxelGridOptions {
     fn default() -> Self {
         Self::new(1f32, 1f32, 1f32, 1f32)
     }
 }
-
 impl VoxelGridOptions {
     pub fn new(width: f32, height: f32, depth: f32, cell_size: f32) -> Self {
         Self {
@@ -64,12 +65,12 @@ impl VoxelGridOptions {
     }
 }
 
-pub trait VoxelFn: Debug {
+pub trait VoxelFn {
     fn pass(&self, cell: Cell) -> bool;
 }
 impl<F> VoxelFn for F
 where
-    F: Fn(Cell) -> bool + Debug,
+    F: Fn(Cell) -> bool,
 {
     fn pass(&self, cell: Cell) -> bool {
         self(cell)
@@ -104,14 +105,21 @@ impl VoxelFn for AlternatingVoxelFn {
     }
 }
 
-#[derive(Debug)]
-pub struct VoxelGrid {
-    pub generator: Box<dyn VoxelFn>,
+pub struct VoxelGrid<'func> {
+    pub generator: Box<dyn VoxelFn + 'func>,
     options: VoxelGridOptions,
 
     voxels: FxSpatialHash<glam::Vec3>,
 }
-impl Default for VoxelGrid {
+impl<'func> std::fmt::Debug for VoxelGrid<'func> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VoxelGrid")
+            .field("options", &self.options)
+            .field("voxels", &self.voxels)
+            .finish_non_exhaustive()
+    }
+}
+impl<'func> Default for VoxelGrid<'func> {
     fn default() -> Self {
         let options = VoxelGridOptions::default();
         let voxels = FxSpatialHash::new(SpatialResolution::new(options.cell_size));
@@ -123,8 +131,8 @@ impl Default for VoxelGrid {
         }
     }
 }
-impl VoxelGrid {
-    pub fn new<F: VoxelFn + Debug + 'static>(generator: F, options: VoxelGridOptions) -> Self {
+impl<'func> VoxelGrid<'func> {
+    pub fn new<F: VoxelFn + 'func>(generator: F, options: VoxelGridOptions) -> Self {
         Self {
             generator: Box::new(generator),
             options,
@@ -237,5 +245,95 @@ impl VoxelGrid {
             (h / i as f32).round() as i32,
             (d / i as f32).round() as i32,
         )
+    }
+}
+
+#[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct MeshCell {
+    pub vertex: u32,
+    pub triangle: u32,
+}
+
+#[derive(Debug)]
+pub struct MeshVolumeHash {
+    mesh_hash: FxLsSpatialHash<MeshCell>,
+    voxels: FxSpatialHash<glam::Vec3>,
+    size: glam::Vec3,
+}
+impl MeshVolumeHash {
+    const SHASH: SpatialResolution = SpatialResolution::new(1.0);
+
+    pub fn new(mesh: &Convex<TriFace>) -> Self {
+        let mut mesh_hash = FxLsSpatialHash::new(Self::SHASH);
+        Self::hash_coarse(mesh, &mut mesh_hash);
+        let size = {
+            let min = mesh_hash.min();
+            let max = mesh_hash.max();
+            let dx = (max.x - min.x) as f32;
+            let dy = (max.y - min.y) as f32;
+            let dz = (max.z - min.z) as f32;
+            glam::vec3(dx, dy, dz)
+        };
+        let voxels = {
+            let options = VoxelGridOptions::new(size.x, size.y, size.z, 1.0);
+            let mut vg = VoxelGrid::new(|cell| Self::voxel_generator(cell, &mesh_hash), options);
+            vg.repopulate_defaults();
+            vg.voxels
+        };
+        Self {
+            mesh_hash,
+            voxels,
+            size,
+        }
+    }
+
+    fn voxel_generator(cell: Cell, hash: &FxLsSpatialHash<MeshCell>) -> bool {
+        hash.get(cell).is_some()
+    }
+
+    fn hash_coarse(mesh: &Convex<TriFace>, hash: &mut FxLsSpatialHash<MeshCell>) {
+        for (i, tri) in mesh.faces().iter().enumerate() {
+            let triangle = i as u32;
+            for j in 0..3 {
+                let vertex = tri[j];
+                let pos = mesh.vertices()[vertex as usize];
+                let cell = Self::SHASH.encode_point(pos);
+                hash.put(cell, MeshCell { vertex, triangle });
+            }
+        }
+    }
+
+    pub fn get_extents_on_axis(&self, axis: glam::Vec3) -> glam::Vec3 {
+        let unit = axis.normalize();
+        let max_extent = self.size.max_element();
+        let max_cells = max_extent as u32;
+        let mut last = glam::Vec3::ZERO;
+        for i in 0..max_cells {
+            let lookup = Self::SHASH.encode_point(unit * i as f32);
+            if let Some(&point) = self.voxels.get(lookup) {
+                last = point;
+            }
+        }
+        last
+    }
+
+    pub const fn coarse_extents(&self) -> glam::Vec3 {
+        self.size
+    }
+
+    pub const fn voxels(&self) -> &FxSpatialHash<glam::Vec3> {
+        &self.voxels
+    }
+
+    pub const fn voxels_mut(&mut self) -> &mut FxSpatialHash<glam::Vec3> {
+        &mut self.voxels
+    }
+
+    pub const fn hash_mesh(&self) -> &FxLsSpatialHash<MeshCell> {
+        &self.mesh_hash
+    }
+
+    pub const fn hash_mesh_mut(&mut self) -> &mut FxLsSpatialHash<MeshCell> {
+        &mut self.mesh_hash
     }
 }
