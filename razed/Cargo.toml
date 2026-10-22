@@ -33,3 +33,4 @@ image = "0.25.10"
 [features]
 default = []
 devmode = []
+log-debug = []

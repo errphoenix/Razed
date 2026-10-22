@@ -13,14 +13,43 @@ use razed::{
     procedural::{CubeVoronoi, voxel_grid},
     render::RenderGroup,
 };
+use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 const DISPLAY_PARAMS: DisplayParameters = DisplayParameters::fullscreen("Razed");
+const LOG_FILENAME: &str = "tracing.log";
 
 type State = ethel::state::State<FrameDataBuffers, razed::simulation::State, RenderGroup>;
 type Renderer = ethel::render::Renderer<FrameDataBuffers, razed::render::Renderer>;
 
 fn main() {
-    tracing_subscriber::FmtSubscriber::builder().init();
+    {
+        let l_file = tracing_subscriber::fmt::layer()
+            .with_ansi(true)
+            .with_writer(
+                std::fs::OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .open(LOG_FILENAME)
+                    .unwrap(),
+            );
+        let l_stdout = tracing_subscriber::fmt::layer().with_ansi(true);
+
+        let filter = tracing_subscriber::filter::filter_fn(|#[allow(unused)] meta| {
+            #[cfg(not(feature = "log-debug"))]
+            {
+                *meta.level() != tracing::Level::DEBUG && *meta.level() != tracing::Level::TRACE
+            }
+            #[cfg(feature = "log-debug")]
+            {
+                *meta.level() != tracing::Level::TRACE
+            }
+        });
+
+        tracing_subscriber::registry()
+            .with(l_file.with_filter(filter.clone()))
+            .with(l_stdout.with_filter(filter))
+            .init();
+    }
 
     let (input_system, input_dispatch) = janus::input::stream();
     input_system.surface_options().update(|mut flags| {
