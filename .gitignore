@@ -1,8 +1,11 @@
 /target
 Cargo.lock
 *.bin
+*.log
+massif*.out
+/distribute
 plot_last.sh
-perf_graphs/*
+/perf_graphs/*
 *.svg
 *.png
 *.data*
