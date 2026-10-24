@@ -1,12 +1,9 @@
 use std::num::NonZeroUsize;
 
 use ethel::{
-    data::{
-        Column, DirectIndex, IndexArrayColumn, IndirectIndex, SparseSlot,
-        hash::{Cell, FxSpatialHash},
-        table::TableView,
-    },
-    render::buffer::{StorageSection, partitioned::PartitionedBuffer},
+    Cell, Column, DirectIndex, FxSpatialHash, IndirectIndex, SparseSlot, SpatialHash,
+    StorageSection, render::buffer::partitioned::PartitionedBuffer, state::data::IndexArrayColumn,
+    state::data::table::TableView,
 };
 use janus::sync::TriVec;
 
@@ -396,7 +393,7 @@ impl<'buffers> CageSyncFrameOps<'buffers, CageSyncCpu> {
                         local_map.free(map_id);
                     }
                 },
-                CageSyncOp::RemoveAttachment { map_id, node_id } => todo!(),
+                CageSyncOp::RemoveAttachment { .. } => todo!(),
             });
     }
 }

@@ -1,10 +1,7 @@
 use super::LIB_GBANK_BUFFERS_HEADER;
-use ethel::{
-    data::DirectIndex,
-    render::buffer::{PartitionedTriBuffer, TriBuffer},
-    shader::GlslStorage,
-};
-use rendrs::{geometry::DomainData, graphics::material::MaterialLocationRegistry};
+use ethel::{DirectIndex, PartitionedTriBuffer, TriBuffer, shader::GlslStorage};
+use rendrs::geometry::DomainData;
+use rendrs::graphics::material::MaterialLocationRegistry;
 
 use crate::{
     data::{CagePartitionedBuffer, FRAGMENTS_STORAGE_PARTS},

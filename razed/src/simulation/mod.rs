@@ -3,6 +3,8 @@ pub mod debris;
 pub mod fragment;
 pub mod lattice;
 
+pub const HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(4.0);
+
 use std::{
     io::BufWriter,
     path::PathBuf,
@@ -20,7 +22,7 @@ use crate::{
         pass::ShadeDebugAttribsMode,
     },
     simulation::{
-        cage::{CageSystem, OffsetRotation},
+        cage::CageSystem,
         debris::{DebrisSystem, MotionAccumulator},
         fragment::{FragmentSystem, FragmentsRowTableView},
         lattice::{LatticeSystem, NodesRowTableView},
@@ -28,30 +30,20 @@ use crate::{
 };
 use ::physics::xpbd::{RawXpbdLattice, XpbdOptions, XpbdSolver};
 use ethel::{
-    assets::{AssetMetadataRegistry, TextureMetadata, pipe::RegistryPipe},
-    data::SparseSlot,
-    profile::Profiler,
-    render::{
-        Resolution, ScreenSpace,
-        command::{DrawGroups, GpuCommandQueue},
-    },
-    state::{
-        InputEvent,
-        camera::{self, ViewPoint},
-        cross::{Cross, Producer},
-        data::{
-            Column, IndirectIndex,
-            hash::{FxSpatialHash, SpatialResolution},
-        },
-        time::AccumulationWindow,
-    },
+    AssetMetadataRegistry, Column, FxSpatialHash, GpuCommandQueue, IndirectIndex, InputEvent,
+    Profiler, Resolution, ScreenSpace, SparseSlot, SpatialResolution, TextureMetadata, ViewPoint,
+    assets::pipe::RegistryPipe,
+    render::command::DrawGroups,
+    state::camera,
+    state::cross::{Cross, Producer},
+    state::time::AccumulationWindow,
 };
 use glam::Vec4Swizzles;
 use gui::{
     InterfaceSystem, WidgetId,
     text::{GlyphAtlas, GlyphRaster},
 };
-use janus::{StringMap, context::DeltaTime, input::Cursor, sync::TriCell};
+use janus::{Cursor, DeltaTime, StringMap, sync::TriCell};
 use physics::rigid::RbVelocity;
 use tracing::{Level, event};
 
@@ -649,13 +641,13 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         {
             // simulation control keys
             const SIM_SPEED_STEP: f32 = 0.01;
-            if input.keys().key_pressed(janus::input::KeyCode::Home) {
+            if input.keys().key_pressed(crate::input::SIM_TOGGLE) {
                 self.sim_control.running = !self.sim_control.running;
             }
-            if input.keys().key_down(janus::input::KeyCode::PageUp) {
+            if input.keys().key_down(crate::input::SIM_SPEED_UP) {
                 self.sim_control.speed += SIM_SPEED_STEP;
             }
-            if input.keys().key_down(janus::input::KeyCode::PageDown) {
+            if input.keys().key_down(crate::input::SIM_SPEED_DOWN) {
                 self.sim_control.speed -= SIM_SPEED_STEP;
                 self.sim_control.speed = self.sim_control.speed.max(0.01);
             }
@@ -701,13 +693,13 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                     let anchor = self.camera.anchor();
 
                     let mut d = ANCHOR_Y_MOVE * delta.as_f32();
-                    if input.keys().key_down(janus::input::KeyCode::ShiftLeft) {
+                    if input.keys().key_down(crate::input::CAMERA_MOVE_SPEEDUP) {
                         d *= ANCHOR_Y_MOVE_SPRINT;
                     }
 
-                    if input.keys().key_down(janus::input::KeyCode::ArrowUp) {
+                    if input.keys().key_down(crate::input::CAMERA_MOVE_Y_UP) {
                         self.camera.set_anchor(anchor + d);
-                    } else if input.keys().key_down(janus::input::KeyCode::ArrowDown) {
+                    } else if input.keys().key_down(crate::input::CAMERA_MOVE_Y_DOWN) {
                         self.camera.set_anchor(anchor - d);
                     }
                 }
@@ -728,21 +720,28 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         // operation
         let view_point = vp_prev;
 
-        if input.keys().key_pressed(janus::input::KeyCode::KeyB) {
+
+        if input.keys().key_pressed(crate::input::MISC_CLEAR_RUBBER) {
             self.debris.data_mut().clear();
             self.debris.clear_rubber();
         }
-        if input.keys().key_pressed(janus::input::KeyCode::KeyP) {
+        if input
+            .keys()
+            .key_pressed(crate::input::MISC_SAVE_PERF_REPORT)
+        {
             self.save_profiler_report();
         }
-        if input.keys().key_pressed(janus::input::KeyCode::KeyH) {
+        if input
+            .keys()
+            .key_pressed(crate::input::MISC_SPAWN_DEBUG_STRUCT)
+        {
             self.spawn_debug_cuboid(&view_point);
             //self.spawn_debug_bridge(&view_point);
         }
 
         const CAMERA_KEY: janus::input::KeyCode = janus::input::KeyCode::Tab;
         {
-            let grabbed = input.keys().key_down(CAMERA_KEY);
+            let grabbed = input.keys().key_down(crate::input::CAMERA_ORBIT);
             let vsync = self
                 .ui_system()
                 .env()
@@ -798,7 +797,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         });
     }
 }
-
 impl State {
     pub fn update_environment(&mut self) {
         use crate::ui::env_names::*;
@@ -1027,15 +1025,10 @@ impl State {
 
                 let data = self.fragments.data();
 
-                let cage_id = data.deformation_cage[frag_index.as_index()];
-                let cage_did = self.cage.gpu_index_of(cage_id).unwrap();
-                let OffsetRotation { offset, rotation } =
-                    self.cage.deformation_feedback()[cage_did as usize];
-
                 //self.cage.delete_cage(cage_id);
 
                 let mesh_id = data.mesh_id[frag_index.as_index()];
-                let position = data.bind_position[frag_index.as_index()].xyz();
+                let b_position = data.bind_position[frag_index.as_index()].xyz();
                 let mass_coeff = data.mass_coeff[frag_index.as_index()];
                 let integrity = data.integrity[frag_index.as_index()];
                 let mass = integrity * mass_coeff;
@@ -1054,7 +1047,7 @@ impl State {
                         inherit_a += forces * w;
 
                         let p = lattice.current_pos(*id);
-                        let contact = p.midpoint(position);
+                        let contact = p.midpoint(b_position);
                         inherit_av += contact.cross(*velocity) * w;
                     });
                 }
@@ -1062,7 +1055,8 @@ impl State {
                 inherit_v *= 0.035;
                 inherit_av *= 0.01;
 
-                let position = position + offset.xyz();
+                let position = data.real_position[frag_index.as_index()];
+                let rotation = data.sync_rotation[frag_index.as_index()];
 
                 buffer.push(DebrisData {
                     position,
@@ -1242,7 +1236,9 @@ impl State {
         view_point: &ViewPoint,
     ) {
         if let Some(selected) = self.selection.take()
-            && input.keys().key_pressed(janus::input::KeyCode::Delete)
+            && input
+                .keys()
+                .key_pressed(crate::input::MISC_DELETE_CONSTRAINT)
         {
             self.lattice.break_constraint(selected);
         }
@@ -1251,7 +1247,7 @@ impl State {
         let inverse_view = view_point.into_mat4();
 
         let mouse_world_dir = screen.to_world_space(cursor, inverse_view);
-        if input.keys().key_pressed(janus::input::KeyCode::Space) {
+        if input.keys().key_pressed(crate::input::CAMERA_SET_ANCHOR) {
             let dy = mouse_world_dir.y;
             if dy.abs() > 0.001 {
                 let t = -view_point.position.y / dy;

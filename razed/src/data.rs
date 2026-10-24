@@ -11,12 +11,10 @@ use crate::{
     },
 };
 use ethel::{
-    layout_buffer, layout_mesh_buffer,
-    render::buffer::{PartitionedTriBuffer, TriBuffer},
-    state::data::{DirectIndex, IndirectIndex},
+    DirectIndex, IndirectIndex, PartitionedTriBuffer, TriBuffer, layout_buffer, layout_mesh_buffer,
 };
 use gui::render::{UiCommandsBuffer, UiDataBuffer};
-use janus::{context::DeltaTime, sync::TriCell};
+use janus::{DeltaTime, sync::TriCell};
 
 use crate::simulation::fragment::ANCHORS_COUNT as FRAGMENT_ANCHORS_COUNT;
 

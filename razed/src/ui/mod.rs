@@ -1,7 +1,4 @@
-use ethel::{
-    data::{Column, IndirectIndex},
-    render::Resolution,
-};
+use ethel::{Column, IndirectIndex, Resolution};
 use gui::{
     ButtonParams, ContainerLayout, ContentAlignment, CoreElementParams, ElementParams,
     InteractableCallback, InterfaceButtonRowTable, InterfaceSystem, ItemAlignment, LayoutOptions,

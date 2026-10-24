@@ -5,30 +5,19 @@ pub mod shader_commons;
 
 use std::{sync::atomic::Ordering, time::Instant};
 
-use ethel::{
-    render::{
-        Resolution,
-        buffer::{SingleBuffer, StorageSection},
-        command::DrawGroups,
-    },
-    state::camera::ViewPoint,
-};
+use ethel::{Resolution, SingleBuffer, StorageSection, ViewPoint, render::command::DrawGroups};
 use gui::{
     render::UiDrawPassCtx,
     text::{GlyphAtlasTexture, GlyphRaster},
 };
 use janus::{
-    context::DeltaTime,
-    sync::TriCell,
-    texture::{ImageFormat, ImageType, MipLevels, Texture, TextureFiltering},
+    DeltaTime, ImageFormat, ImageType, MipLevels, Texture, sync::TriCell, texture::TextureFiltering,
 };
 use rendrs::{
+    ImageObject, OutputObject, Pass, RenderPool, RenderTarget, RenderTargetDescriptor,
+    RenderTargetId, SamplerObject,
     geometry::{TriangleAttribs, rasterize::ShaderGeomRasterizeVariants},
     graphics::{PixelResolution, ShCoeffsBuffer},
-    pipeline::{
-        ImageObject, OutputObject, Pass, RenderPool, RenderTarget, RenderTargetDescriptor,
-        RenderTargetId, SamplerObject,
-    },
 };
 
 #[cfg(feature = "devmode")]
@@ -995,7 +984,7 @@ impl Renderer {
             const RANGE: f32 = 20.0;
             const RANGE_CELLS: i32 = (RANGE / RESOLUTION.get()) as i32;
 
-            const RESOLUTION: SpatialResolution = crate::simulation::debris::HASH_RESOLUTION;
+            const RESOLUTION: SpatialResolution = crate::simulation::HASH_RESOLUTION;
 
             let camera = RESOLUTION.encode_point(view.position);
             let f_camera = RESOLUTION.approx_point(camera);

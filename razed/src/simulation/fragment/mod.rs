@@ -1,10 +1,10 @@
 pub mod mesh;
 
-use ethel::state::data::{
-    Column, DirectIndex, IndirectIndex,
-    hash::{Cell, FxSpatialHash},
-    table::TableView,
+use ethel::{
+    Cell, Column, DirectIndex, FxLsSpatialHash, FxSpatialHash, IndirectIndex, SpatialHash,
+    state::data::table::TableView,
 };
+use glam::Vec4Swizzles;
 use rustc_hash::FxHashSet;
 
 use crate::{
@@ -30,6 +30,8 @@ ethel::table_spec! {
         // bind position at fragment creation
         // vec4 due to SSBO alignment requirements
         bind_position: glam::Vec4;
+        real_position: glam::Vec3;
+        sync_rotation: glam::Quat; // from cage
 
         // lattice contribution coefficient
         health_coeff: f32;
@@ -58,7 +60,6 @@ pub struct UninitFragment {
     pub mesh_id: ethel::mesh::Id,
     //todo:  structure id?
 }
-
 impl UninitFragment {
     fn new(position: glam::Vec3, mesh_id: ethel::mesh::Id) -> Self {
         Self {
@@ -74,6 +75,8 @@ pub struct FragmentSystem {
     fragments: FragmentsRowTable,
     uninitialised: Vec<UninitFragment>,
 
+    hashed: FxLsSpatialHash<IndirectIndex>,
+
     /// sparse map of node ID to sequence of fragment IDs
     node_map: Vec<Vec<IndirectIndex>>,
 
@@ -83,37 +86,21 @@ pub struct FragmentSystem {
 
     disabled_frags_frame: FxHashSet<DirectIndex>,
 }
-
 impl Default for FragmentSystem {
     fn default() -> Self {
         Self::new()
     }
 }
-
 impl FragmentSystem {
     pub fn new() -> Self {
         Self {
             fragments: FragmentsRowTable::new(),
             uninitialised: Vec::new(),
+            hashed: FxLsSpatialHash::new(super::HASH_RESOLUTION),
             fragment_damage_frame: Vec::new(),
             disabled_frags_frame: FxHashSet::default(),
             // account for degenerate
             node_map: vec![Vec::new()],
-        }
-    }
-
-    #[allow(unused)]
-    pub fn with_capacity(capacity: usize) -> Self {
-        // account for degenerate
-        let mut node_map = Vec::with_capacity(capacity + 1);
-        node_map.push(Vec::new());
-
-        Self {
-            fragments: FragmentsRowTable::with_capacity(capacity),
-            uninitialised: Vec::with_capacity(capacity),
-            fragment_damage_frame: Vec::new(),
-            disabled_frags_frame: FxHashSet::default(),
-            node_map,
         }
     }
 
@@ -214,6 +201,37 @@ impl FragmentSystem {
         );
     }
 
+    pub fn sync_cage_feedback(&mut self, cage: &CageSystem) {
+        let count = self.fragments.len();
+        for i in 1..count {
+            let cage_id = self.fragments.deformation_cage[i];
+            let cage_did = cage.gpu_index_of(cage_id).unwrap();
+
+            let feedback = cage.deformation_feedback()[cage_did as usize];
+            let offset = feedback.offset;
+            let c_rot = feedback.rotation;
+
+            let b_pos = self.fragments.bind_position[i];
+            let r_pos = glam::vec3(b_pos.x + offset.x, b_pos.y + offset.y, b_pos.z + offset.z);
+
+            self.fragments.real_position[i] = r_pos;
+            self.fragments.sync_rotation[i] = c_rot;
+        }
+    }
+
+    pub fn hash_fragments(&mut self) {
+        self.hashed.clear();
+
+        let pos = self.fragments.real_position_view();
+        let handles = self.fragments.handles_view();
+        let frags = pos.join(handles);
+
+        for (&pos, &handle) in frags.into_iter() {
+            let cell = self.hashed.cell_at(pos);
+            self.hashed.put_element(cell, handle);
+        }
+    }
+
     /// Return a slice containing the *direct indices* of all fragments
     /// damaged in the last frame.
     ///
@@ -226,7 +244,6 @@ impl FragmentSystem {
     /// These are unstable and may be invalidated on the next frame; they are
     /// intended for use only during the same frame this was populated in and
     /// before any operation that might add/remove elements to the table.
-    #[allow(unused)]
     pub fn frame_damaged_fragments(&self) -> &[(DirectIndex, DamagedNode)] {
         &self.fragment_damage_frame
     }
@@ -336,6 +353,8 @@ impl FragmentSystem {
                 weights,
                 IndirectIndex::default(),
                 position,
+                position.xyz(),
+                glam::Quat::IDENTITY,
                 mass_contrib,
                 1.0, // todo: debris rigid body
                 1.0, // todo: damage and integrity

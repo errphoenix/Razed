@@ -1,8 +1,5 @@
-use ethel::state::data::{
-    Column, DirectIndex, IndirectIndex,
-    hash::{FxLsSpatialHash, SpatialResolution},
-};
-use janus::context::DeltaTime;
+use ethel::{Column, DirectIndex, FxLsSpatialHash, IndirectIndex, SpatialHash, SpatialResolution};
+use janus::DeltaTime;
 
 use crate::collision::{self, LightCollision, Sphere};
 
@@ -11,26 +8,33 @@ pub struct RbVelocity {
     pub linear: glam::Vec3,
     pub angular: glam::Vec3,
 }
-
 impl RbVelocity {
-    pub fn new(linear: glam::Vec3, angular: glam::Vec3) -> Self {
+    pub const fn new(linear: glam::Vec3, angular: glam::Vec3) -> Self {
         Self { linear, angular }
     }
 
-    pub fn linear(linear: glam::Vec3) -> Self {
+    pub const fn linear(linear: glam::Vec3) -> Self {
         Self {
             linear,
-            angular: glam::Vec3::default(),
+            angular: glam::Vec3::ZERO,
         }
     }
 
-    pub fn angular(angular: glam::Vec3) -> Self {
+    pub const fn angular(angular: glam::Vec3) -> Self {
         Self {
-            linear: glam::Vec3::default(),
+            linear: glam::Vec3::ZERO,
             angular,
         }
     }
 }
+
+pub const DEFAULT_GRAVITY: f32 = 9.807;
+pub const DEFAULT_DAMPING: f32 = 0.92;
+pub const DEFAULT_RESTITUTION: f32 = 0.1;
+pub const DEFAULT_FRICTION: f32 = 0.06;
+pub const DEFAULT_STATIC_VOLUMES_HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(4.0);
+
+const INTERNAL_STEP_MULT: f32 = 1.0;
 
 #[derive(Clone, Copy, Debug)]
 pub struct RigidBodyOptions {
@@ -42,15 +46,6 @@ pub struct RigidBodyOptions {
     friction: f32,
     static_volumes_hash_resolution: SpatialResolution,
 }
-
-pub const DEFAULT_GRAVITY: f32 = 9.807;
-pub const DEFAULT_DAMPING: f32 = 0.92;
-pub const DEFAULT_RESTITUTION: f32 = 0.1;
-pub const DEFAULT_FRICTION: f32 = 0.06;
-pub const DEFAULT_STATIC_VOLUMES_HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(4.0);
-
-const INTERNAL_STEP_MULT: f32 = 1.0;
-
 impl Default for RigidBodyOptions {
     fn default() -> Self {
         Self {
@@ -64,9 +59,8 @@ impl Default for RigidBodyOptions {
         }
     }
 }
-
 impl RigidBodyOptions {
-    pub fn new(
+    pub const fn new(
         gravity: f32,
         ground_level: Option<f32>,
         step_multiplier: f32,
@@ -86,7 +80,7 @@ impl RigidBodyOptions {
         }
     }
 
-    pub fn with_gravity(self, gravity: f32) -> Self {
+    pub const fn with_gravity(self, gravity: f32) -> Self {
         Self {
             gravity,
             ground_level: self.ground_level,
@@ -98,7 +92,7 @@ impl RigidBodyOptions {
         }
     }
 
-    pub fn with_ground_level(self, ground_level: Option<f32>) -> Self {
+    pub const fn with_ground_level(self, ground_level: Option<f32>) -> Self {
         Self {
             ground_level,
             gravity: self.gravity,
@@ -110,7 +104,7 @@ impl RigidBodyOptions {
         }
     }
 
-    pub fn with_step_multiplier(self, step_multiplier: f32) -> Self {
+    pub const fn with_step_multiplier(self, step_multiplier: f32) -> Self {
         Self {
             step_multiplier,
             gravity: self.gravity,
@@ -122,7 +116,7 @@ impl RigidBodyOptions {
         }
     }
 
-    pub fn with_damping(self, damping: f32) -> Self {
+    pub const fn with_damping(self, damping: f32) -> Self {
         Self {
             damping,
             gravity: self.gravity,
@@ -134,7 +128,7 @@ impl RigidBodyOptions {
         }
     }
 
-    pub fn with_restitution(self, restitution: f32) -> Self {
+    pub const fn with_restitution(self, restitution: f32) -> Self {
         Self {
             restitution,
             gravity: self.gravity,
@@ -146,7 +140,7 @@ impl RigidBodyOptions {
         }
     }
 
-    pub fn with_friction(self, friction: f32) -> Self {
+    pub const fn with_friction(self, friction: f32) -> Self {
         Self {
             friction,
             gravity: self.gravity,
@@ -158,7 +152,7 @@ impl RigidBodyOptions {
         }
     }
 
-    pub fn with_static_volumes_hash_resolution(
+    pub const fn with_static_volumes_hash_resolution(
         self,
         static_volumes_hash_resolution: SpatialResolution,
     ) -> Self {
@@ -194,7 +188,6 @@ pub struct RigidBodySolver {
     static_volumes: StaticVolumeRowTable,
     static_volumes_hash: FxLsSpatialHash<IndirectIndex>,
 }
-
 impl Default for RigidBodySolver {
     fn default() -> Self {
         Self {
@@ -205,7 +198,6 @@ impl Default for RigidBodySolver {
         }
     }
 }
-
 impl RigidBodySolver {
     pub fn new(options: RigidBodyOptions) -> Self {
         Self {
@@ -220,7 +212,7 @@ impl RigidBodySolver {
         &self.collision_buffer
     }
 
-    pub fn collision_buffer_mut(&mut self) -> &mut Vec<LightCollision> {
+    pub const fn collision_buffer_mut(&mut self) -> &mut Vec<LightCollision> {
         &mut self.collision_buffer
     }
 
@@ -229,18 +221,18 @@ impl RigidBodySolver {
         self.static_volumes_hash.clear();
     }
 
-    pub fn static_volumes_hash(&self) -> &FxLsSpatialHash<IndirectIndex> {
+    pub const fn static_volumes_hash(&self) -> &FxLsSpatialHash<IndirectIndex> {
         &self.static_volumes_hash
     }
 
-    pub fn static_volumes_data(&self) -> &StaticVolumeRowTable {
+    pub const fn static_volumes_data(&self) -> &StaticVolumeRowTable {
         &self.static_volumes
     }
 
     pub fn add_static_volume(&mut self, position: glam::Vec3, volume: Sphere) -> IndirectIndex {
         let id = self.static_volumes.insert((position, volume));
         let cell = self.static_volumes_hash.cell_at(position);
-        self.static_volumes_hash.put(cell, id);
+        self.static_volumes_hash.put_element(cell, id);
         id
     }
 

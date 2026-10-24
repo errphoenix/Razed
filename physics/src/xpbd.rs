@@ -12,7 +12,6 @@ pub struct XpbdNodeOptions {
     mass: f32,
     fixed: bool,
 }
-
 impl XpbdNodeOptions {
     pub const fn new(pos: glam::Vec3, mass: f32) -> Self {
         Self {
@@ -30,7 +29,6 @@ impl XpbdNodeOptions {
         }
     }
 }
-
 impl XpbdLinkOptions {
     pub const fn new(compliance: f32) -> Self {
         Self {
@@ -73,7 +71,6 @@ pub struct XpbdLatticeBuilder {
     links: Vec<XpbdLink>,
     stack: Vec<u32>,
 }
-
 impl XpbdLatticeBuilder {
     pub fn new() -> Self {
         Self::default()
@@ -265,7 +262,6 @@ pub struct RawNodes {
     pub masses: Vec<f32>,
     pub inv_masses: Vec<f32>,
 }
-
 impl RawNodes {
     pub fn new() -> Self {
         Self::default()
@@ -307,7 +303,6 @@ pub struct RawConstraints {
     pub compliances: Vec<f32>,
     pub rest_lengths: Vec<f32>,
 }
-
 impl RawConstraints {
     pub fn new() -> Self {
         Self::default()
@@ -356,7 +351,6 @@ pub trait HasNodes {
 ///
 /// Direct access to the underlying SoA data is allowed by [`HasNodes::nodes`].
 pub trait NodeColumn<Def: Default>: Column<Def> + HasNodes {}
-
 impl<Def: Default, T: Column<Def> + HasNodes> NodeColumn<Def> for T {}
 
 /// Indicates that a data table constrains constraint SoA data.
@@ -372,7 +366,6 @@ pub trait HasConstraints {
 ///
 /// Direct access to the underlying SoA data is allowed by [`HasConstraints::constraints`].
 pub trait ConstraintColumn<Def: Default>: Column<Def> + HasConstraints {}
-
 impl<Def: Default, T: Column<Def> + HasConstraints> ConstraintColumn<Def> for T {}
 
 /// Compatibility data structure for raw node data.
@@ -385,7 +378,6 @@ pub struct Nodes<'a> {
     pub velocities: &'a mut [glam::Vec3],
     pub handles: &'a [IndirectIndex],
 }
-
 impl Nodes<'_> {
     pub fn len(&self) -> usize {
         self.handles.len()
@@ -403,50 +395,9 @@ pub struct Constraints<'a> {
     pub lambdas: &'a mut [f32],
     pub handles: &'a [IndirectIndex],
 }
-
 impl Constraints<'_> {
     pub fn len(&self) -> usize {
         self.handles.len()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct XpbdSolver {
-    iterations: u32,
-    substeps: u32,
-    h: f32,
-    h2: f32,
-    step_multiplier: f32,
-
-    allow_breaking: bool,
-    clear_degenerate_nodes: bool,
-    ground_level: Option<f32>,
-
-    broken_links: Vec<IndirectIndex>,
-    degenerate_nodes: Vec<IndirectIndex>,
-
-    /// Maps a node indirect index (stable) to number of active constraints
-    frame_constraint_map: Vec<u32>,
-}
-
-impl Default for XpbdSolver {
-    fn default() -> Self {
-        Self {
-            h: 0.0,
-            h2: 0.0,
-            iterations: DEFAULT_SOLVE_ITERATIONS,
-            substeps: DEFAULT_SUB_STEPS,
-            step_multiplier: DEFAULT_STEP_MULT,
-
-            allow_breaking: true,
-            clear_degenerate_nodes: true,
-            ground_level: None,
-
-            broken_links: Vec::with_capacity(32),
-            degenerate_nodes: Vec::with_capacity(32),
-
-            frame_constraint_map: Vec::new(),
-        }
     }
 }
 
@@ -459,7 +410,6 @@ pub struct XpbdOptions {
     pub clear_degenerate_nodes: bool,
     pub ground_level: Option<f32>,
 }
-
 impl XpbdOptions {
     pub const fn new(
         iterations: u32,
@@ -534,7 +484,6 @@ impl XpbdOptions {
         }
     }
 }
-
 impl Default for XpbdOptions {
     fn default() -> Self {
         Self {
@@ -548,6 +497,44 @@ impl Default for XpbdOptions {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct XpbdSolver {
+    iterations: u32,
+    substeps: u32,
+    h: f32,
+    h2: f32,
+    step_multiplier: f32,
+
+    allow_breaking: bool,
+    clear_degenerate_nodes: bool,
+    ground_level: Option<f32>,
+
+    broken_links: Vec<IndirectIndex>,
+    degenerate_nodes: Vec<IndirectIndex>,
+
+    /// Maps a node indirect index (stable) to number of active constraints
+    frame_constraint_map: Vec<u32>,
+}
+impl Default for XpbdSolver {
+    fn default() -> Self {
+        Self {
+            h: 0.0,
+            h2: 0.0,
+            iterations: DEFAULT_SOLVE_ITERATIONS,
+            substeps: DEFAULT_SUB_STEPS,
+            step_multiplier: DEFAULT_STEP_MULT,
+
+            allow_breaking: true,
+            clear_degenerate_nodes: true,
+            ground_level: None,
+
+            broken_links: Vec::with_capacity(32),
+            degenerate_nodes: Vec::with_capacity(32),
+
+            frame_constraint_map: Vec::new(),
+        }
+    }
+}
 impl XpbdSolver {
     #[inline]
     pub fn new(options: XpbdOptions) -> Self {

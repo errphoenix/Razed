@@ -1,12 +1,9 @@
 use ethel::{
-    StartupHandler,
-    assets::Handle,
-    mesh::MeshStaging,
-    state::data::hash::{FxSpatialHash, SpatialResolution},
+    AssetHandle, FxSpatialHash, MeshStaging, SpatialHash, SpatialResolution, StartupHandler,
 };
 use gui::text::{GlyphAtlas, GlyphAtlasTexture};
-use janus::{context::Setup, window::DisplayParameters};
-use rendrs::geometry::GeometryBank;
+use janus::{DisplayParameters, Setup};
+use rendrs::GeometryBank;
 
 use razed::{
     data::FrameDataBuffers,
@@ -105,7 +102,7 @@ fn main() {
                     .glyph_atlas_texture
                     .create_atlas_texture(GLYPH_ATLAS_SIZE as i32);
                 // special gpu-only asset which must never be touched
-                let glyph_asset_handle = Handle::from_gpu_resource(
+                let glyph_asset_handle = AssetHandle::from_gpu_resource(
                     GlyphAtlasTexture::resource_id(),
                     texture,
                     &handle.textures_master_registry,

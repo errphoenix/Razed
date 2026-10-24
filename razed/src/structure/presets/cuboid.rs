@@ -1,4 +1,4 @@
-use ethel::data::hash::Cell;
+use ethel::Cell;
 use physics::xpbd::{RawXpbdLattice, XpbdLatticeBuilder, XpbdLinkOptions, XpbdNodeOptions as Node};
 
 use crate::procedural::voxel::VoxelFn;

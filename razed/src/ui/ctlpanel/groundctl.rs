@@ -1,4 +1,4 @@
-use ethel::data::IndirectIndex;
+use ethel::IndirectIndex;
 use gui::{
     ContainerLayout, ContentAlignment, CoreElementParams, ElementParams, FloatGrabArea,
     FloatParams, InteractableCallback, InterfaceSystem, ItemAlignment, LayoutOptions,

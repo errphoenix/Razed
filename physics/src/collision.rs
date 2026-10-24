@@ -1,4 +1,4 @@
-use ethel::state::data::DirectIndex;
+use ethel::DirectIndex;
 
 pub fn intersect_aabb_sphere(aabb: &Aabb, sphere: Sphere, sphere_center: glam::Vec3) -> bool {
     let e = (aabb.min - sphere_center).max(glam::Vec3::ZERO)
@@ -12,33 +12,37 @@ pub struct Aabb {
     pub min: glam::Vec3,
     pub max: glam::Vec3,
 }
-
 impl Aabb {
-    pub fn unit(center: glam::Vec3) -> Self {
+    pub const fn unit(center: glam::Vec3) -> Self {
         Self {
-            min: center - 0.5,
-            max: center + 0.5,
+            min: glam::vec3(center.x - 0.5, center.y - 0.5, center.z - 0.5),
+            max: glam::vec3(center.x + 0.5, center.y + 0.5, center.z + 0.5),
         }
     }
 
-    pub fn new(extents: glam::Vec3, center: glam::Vec3) -> Self {
+    pub const fn new(extents: glam::Vec3, center: glam::Vec3) -> Self {
         Self {
-            min: center - extents * 0.5,
-            max: center + extents * 0.5,
+            min: glam::vec3(
+                center.x - extents.x * 0.5,
+                center.y - extents.y * 0.5,
+                center.z - extents.z * 0.5,
+            ),
+            max: glam::vec3(
+                center.x + extents.x * 0.5,
+                center.y + extents.y * 0.5,
+                center.z + extents.z * 0.5,
+            ),
         }
     }
 
-    pub fn from_cell(
-        cell: ethel::state::data::hash::Cell,
-        resolution: ethel::state::data::hash::SpatialResolution,
-    ) -> Self {
+    pub const fn from_cell(cell: ethel::Cell, resolution: ethel::SpatialResolution) -> Self {
         Self::new(
             glam::Vec3::splat(resolution.get()),
             resolution.approx_point(cell),
         )
     }
 
-    pub fn with_center(self, new_center: glam::Vec3) -> Self {
+    pub const fn with_center(self, new_center: glam::Vec3) -> Self {
         let extents = self.extents();
         Self::new(extents, new_center)
     }
@@ -56,12 +60,20 @@ impl Aabb {
         intersect_aabb_sphere(self, sphere, sphere_center)
     }
 
-    pub fn extents(&self) -> glam::Vec3 {
-        (self.max - self.min).abs()
+    pub const fn extents(&self) -> glam::Vec3 {
+        glam::vec3(
+            (self.max.x - self.min.x).abs(),
+            (self.max.y - self.min.y).abs(),
+            (self.max.z - self.min.z).abs(),
+        )
     }
 
-    pub fn center(&self) -> glam::Vec3 {
-        (self.min + self.max) * 0.5
+    pub const fn center(&self) -> glam::Vec3 {
+        glam::vec3(
+            (self.max.x + self.min.x) * 0.5,
+            (self.max.y + self.min.y) * 0.5,
+            (self.max.z + self.min.z) * 0.5,
+        )
     }
 }
 
@@ -69,7 +81,6 @@ impl Aabb {
 pub struct Sphere {
     pub radius: f32,
 }
-
 impl Sphere {
     pub const UNIT: Self = Self::new(1.0);
     pub const HALF_UNIT: Self = Self::new(0.5);

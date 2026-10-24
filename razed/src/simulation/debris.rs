@@ -3,12 +3,12 @@ use std::{
     time::{Duration, Instant},
 };
 
-use ethel::state::data::{
-    Column, DirectIndex, IndirectIndex,
-    hash::{FxLsSpatialHash, SpatialResolution},
+use ethel::{
+    Column, DirectIndex, FxLsSpatialHash, IndirectIndex, SpatialHash,
+    state::data::hash::ParIterSpatialHash,
 };
 use janus::{
-    context::DeltaTime,
+    DeltaTime,
     jobs::buffered::{BufferedRoutine, WorkBuffers},
 };
 use physics::{
@@ -172,7 +172,6 @@ impl RubberVolumeStage {
 
 const DEBRIS_FREEZE_TIME_THRESHOLD: f32 = 4.0;
 const DEBRIS_FREEZE_MOVE_THRESHOLD: f32 = 0.75;
-pub const HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(4.0);
 
 #[derive(Debug)]
 pub struct DebrisSystem {
@@ -193,7 +192,7 @@ impl Default for DebrisSystem {
         Self {
             debris: DebrisRowTable::default(),
             debris_phys: RigidBodySolver::default(),
-            debris_hash: FxLsSpatialHash::new(HASH_RESOLUTION),
+            debris_hash: FxLsSpatialHash::new(super::HASH_RESOLUTION),
 
             debris_trash_buffer: Vec::new(),
             rubber_volume_stage: RubberVolumeStage::default(),
@@ -204,17 +203,15 @@ impl Default for DebrisSystem {
     }
 }
 impl DebrisSystem {
-    #[allow(unused)]
     pub fn new() -> Self {
         Self::default()
     }
 
-    #[allow(unused)]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             debris: DebrisRowTable::with_capacity(capacity),
             debris_phys: RigidBodySolver::default(),
-            debris_hash: FxLsSpatialHash::with_capacity(HASH_RESOLUTION, capacity),
+            debris_hash: FxLsSpatialHash::with_capacity(super::HASH_RESOLUTION, capacity),
 
             debris_trash_buffer: Vec::with_capacity(capacity / 2),
             rubber_volume_stage: RubberVolumeStage::new(),
@@ -254,7 +251,6 @@ impl DebrisSystem {
         }
     }
 
-    #[allow(unused, reason = "wip?")]
     pub fn delete_rubber(&mut self, handle: IndirectIndex) {
         let direct = self.rubber.solve_indirect(handle);
 
@@ -292,7 +288,7 @@ impl DebrisSystem {
 
         for (&pos, &_bounds, &handle) in debris.into_iter() {
             let cell = self.debris_hash.cell_at(pos);
-            self.debris_hash.put(cell, handle);
+            self.debris_hash.put_element(cell, handle);
         }
     }
 

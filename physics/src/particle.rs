@@ -1,4 +1,10 @@
-use janus::context::DeltaTime;
+use janus::DeltaTime;
+
+pub const DEFAULT_GRAVITY: f32 = 9.807;
+pub const DEFAULT_DAMPING: f32 = 0.85;
+pub const DEFAULT_RESTITUTION: f32 = 0.225;
+
+const INTERNAL_STEP_MULT: f32 = 3.2;
 
 #[derive(Clone, Copy, Debug)]
 pub struct ParticleOptions {
@@ -8,13 +14,6 @@ pub struct ParticleOptions {
     damping: f32,
     restitution: f32,
 }
-
-pub const DEFAULT_GRAVITY: f32 = 9.807;
-pub const DEFAULT_DAMPING: f32 = 0.85;
-pub const DEFAULT_RESTITUTION: f32 = 0.225;
-
-const INTERNAL_STEP_MULT: f32 = 3.2;
-
 impl Default for ParticleOptions {
     fn default() -> Self {
         Self {
@@ -26,9 +25,8 @@ impl Default for ParticleOptions {
         }
     }
 }
-
 impl ParticleOptions {
-    pub fn new(
+    pub const fn new(
         gravity: f32,
         ground_level: Option<f32>,
         step_multiplier: f32,
@@ -44,7 +42,7 @@ impl ParticleOptions {
         }
     }
 
-    pub fn with_gravity(self, gravity: f32) -> Self {
+    pub const fn with_gravity(self, gravity: f32) -> Self {
         Self {
             gravity,
             ground_level: self.ground_level,
@@ -54,7 +52,7 @@ impl ParticleOptions {
         }
     }
 
-    pub fn with_ground_level(self, ground_level: Option<f32>) -> Self {
+    pub const fn with_ground_level(self, ground_level: Option<f32>) -> Self {
         Self {
             ground_level,
             gravity: self.gravity,
@@ -64,7 +62,7 @@ impl ParticleOptions {
         }
     }
 
-    pub fn with_step_multiplier(self, step_multiplier: f32) -> Self {
+    pub const fn with_step_multiplier(self, step_multiplier: f32) -> Self {
         Self {
             step_multiplier,
             gravity: self.gravity,
@@ -74,7 +72,7 @@ impl ParticleOptions {
         }
     }
 
-    pub fn with_damping(self, damping: f32) -> Self {
+    pub const fn with_damping(self, damping: f32) -> Self {
         Self {
             damping,
             gravity: self.gravity,
@@ -84,7 +82,7 @@ impl ParticleOptions {
         }
     }
 
-    pub fn with_restitution(self, restitution: f32) -> Self {
+    pub const fn with_restitution(self, restitution: f32) -> Self {
         Self {
             restitution,
             gravity: self.gravity,
@@ -99,7 +97,6 @@ impl ParticleOptions {
 pub struct ParticleSolver {
     options: ParticleOptions,
 }
-
 impl Default for ParticleSolver {
     fn default() -> Self {
         Self {
@@ -107,7 +104,6 @@ impl Default for ParticleSolver {
         }
     }
 }
-
 impl ParticleSolver {
     pub const fn new(options: ParticleOptions) -> Self {
         Self { options }

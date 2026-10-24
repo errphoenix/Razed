@@ -1,6 +1,6 @@
 #![allow(unused, reason = "wip feature")]
 
-use ethel::state::data::hash::{Cell, FxSpatialHash};
+use ethel::{Cell, FxSpatialHash, SpatialHash};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct CellularForm {

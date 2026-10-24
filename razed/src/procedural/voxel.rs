@@ -1,9 +1,5 @@
-use ethel::{
-    data::hash::FxLsSpatialHash,
-    state::data::hash::{Cell, FxSpatialHash, SpatialResolution},
-};
+use ethel::{Cell, FxLsSpatialHash, FxSpatialHash, SpatialHash, SpatialResolution};
 use polys::{TriFace, convex::Convex};
-use std::fmt::Debug;
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct VoxelGridOptions {
@@ -298,7 +294,7 @@ impl MeshVolumeHash {
                 let vertex = tri[j];
                 let pos = mesh.vertices()[vertex as usize];
                 let cell = Self::SHASH.encode_point(pos);
-                hash.put(cell, MeshCell { vertex, triangle });
+                hash.put_element(cell, MeshCell { vertex, triangle });
             }
         }
     }

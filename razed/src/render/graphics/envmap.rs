@@ -246,7 +246,7 @@ pub fn debug_probe_reflection(texture: TextureView) -> Texture {
     tracing::info!("[+] dev/debug probe reflection prefiltering complete, took {elapsed_1} nanos.");
 
     tracing::info!(
-        "[-] dev/debug probe reflection processing task(s) complete, took {}.",
+        "[-] dev/debug probe reflection processing task(s) complete, took {} nanos.",
         elapsed_0 + elapsed_1
     );
 

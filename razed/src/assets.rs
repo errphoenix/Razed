@@ -1,6 +1,6 @@
-use ethel::assets::TextureMetadata;
+use ethel::TextureMetadata;
 
-pub type Texture = ethel::assets::RawTexture;
+pub type Texture = ethel::RawTexture;
 
 pub use crate::render::graphics::materials::*;
 

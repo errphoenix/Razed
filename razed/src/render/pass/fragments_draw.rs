@@ -1,10 +1,7 @@
 use ethel::shader::Constant;
 use ethel::{
-    data::DirectIndex,
-    render::{
-        buffer::{PartitionedTriBuffer, TriBuffer},
-        command::{DrawArraysIndirectCommand, GpuCommandDispatch},
-    },
+    DirectIndex, PartitionedTriBuffer, TriBuffer,
+    render::command::{DrawArraysIndirectCommand, GpuCommandDispatch},
     shader::ShaderKind,
 };
 use rendrs::graphics::ShCoeffsBuffer;
