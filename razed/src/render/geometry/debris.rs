@@ -49,6 +49,7 @@ pub fn geom_debris_pass_with_shader(shader: ComputeShaderDebrisGeomSubmit) -> De
             domains.write(DomainData::new(0, i, 64));
             i += 1;
         }
+        domains.upload();
     })
 }
 

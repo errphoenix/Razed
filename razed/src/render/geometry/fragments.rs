@@ -43,6 +43,7 @@ pub fn geom_fragments_pass_with_shader(
             out.write(DomainData::new(0, i, 64));
             i += 1;
         }
+        out.upload();
     })
 }
 

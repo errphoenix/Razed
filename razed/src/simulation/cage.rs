@@ -1,4 +1,7 @@
-use std::num::NonZeroUsize;
+use std::{
+    num::NonZeroUsize,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 use ethel::{
     Cell, Column, DirectIndex, FxSpatialHash, IndirectIndex, SparseSlot, SpatialHash,
@@ -52,23 +55,27 @@ pub struct CageDeleteOp {
     pub map_id: IndirectIndex,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 pub struct CageSyncFrameBuffers {
     upload: TriVec<CageUploadItem>,
     sync: TriVec<CageSyncOp>,
     delete: TriVec<CageDeleteOp>,
+    buffer_size: AtomicUsize,
 }
 impl CageSyncFrameBuffers {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            buffer_size: AtomicUsize::new(1),
+            ..Default::default()
+        }
     }
 
     pub fn cpu(&self) -> CageSyncFrameOps<'_, CageSyncCpu> {
-        CageSyncFrameOps::from_buffers(self)
+        CageSyncFrameOps::from_buffers(self, &self.buffer_size)
     }
 
     pub fn gpu(&self) -> CageSyncFrameOps<'_, CageSyncGpu> {
-        CageSyncFrameOps::from_buffers(self)
+        CageSyncFrameOps::from_buffers(self, &self.buffer_size)
     }
 }
 
@@ -354,20 +361,25 @@ pub struct CageSyncFrameOps<'buffers, Op> {
     upload: &'buffers TriVec<CageUploadItem>,
     sync: &'buffers TriVec<CageSyncOp>,
     delete: &'buffers TriVec<CageDeleteOp>,
+    buffer_size: &'buffers AtomicUsize,
 }
 impl<'buffers, Op> CageSyncFrameOps<'buffers, Op> {
-    pub const fn from_buffers(buffers: &'buffers CageSyncFrameBuffers) -> Self {
+    pub const fn from_buffers(
+        buffers: &'buffers CageSyncFrameBuffers,
+        buffer_size: &'buffers AtomicUsize,
+    ) -> Self {
         Self {
             _op: std::marker::PhantomData,
             upload: &buffers.upload,
             sync: &buffers.sync,
             delete: &buffers.delete,
+            buffer_size,
         }
     }
 }
 impl<'buffers, Op> From<&'buffers CageSyncFrameBuffers> for CageSyncFrameOps<'buffers, Op> {
     fn from(value: &'buffers CageSyncFrameBuffers) -> Self {
-        Self::from_buffers(value)
+        Self::from_buffers(value, &value.buffer_size)
     }
 }
 impl<'buffers> CageSyncFrameOps<'buffers, CageSyncCpu> {
@@ -400,102 +412,116 @@ impl<'buffers> CageSyncFrameOps<'buffers, CageSyncCpu> {
 impl<'buffers> CageSyncFrameOps<'buffers, CageSyncGpu> {
     fn swap_remove_element<const PARTS: usize, T: Sized + Default>(
         buf: &PartitionedBuffer<PARTS>,
+        buf_size: &AtomicUsize,
         partition: usize,
         to_remove: usize,
         length: usize,
     ) {
-        unsafe {
-            let mut view = buf.view_part_mut::<T>(partition);
-            view.swap(to_remove, length - 1);
-            buf.set_length(partition, (length - 1) as u32);
-        }
+        todo!()
+        // unsafe {
+        //     let mut view = buf.view_part_mut::<T>(partition);
+        //     view.swap(to_remove, length - 1);
+        //     buf.set_length(partition, (length - 1) as u32);
+        // }
     }
 
     fn swap_remove_cage<const PARTS: usize>(
         buf: &PartitionedBuffer<PARTS>,
+        buf_size: &AtomicUsize,
         to_remove: usize,
         length: usize,
     ) -> IndirectIndex {
         Self::swap_remove_element::<PARTS, glam::Vec4>(
             buf,
+            buf_size,
             LayoutCage::PodBindRef as usize,
             to_remove,
             length,
         );
         Self::swap_remove_element::<PARTS, CagePoints>(
             buf,
+            buf_size,
             LayoutCage::PodPoints as usize,
             to_remove,
             length,
         );
         Self::swap_remove_element::<PARTS, CagePoints>(
             buf,
+            buf_size,
             LayoutCage::PodPointsBind as usize,
             to_remove,
             length,
         );
         Self::swap_remove_element::<PARTS, [glam::Vec4; PER_CAGE_POINTS]>(
             buf,
+            buf_size,
             LayoutCage::PodBarycenterBind as usize,
             to_remove,
             length,
         );
         Self::swap_remove_element::<PARTS, [LatticeAttachments; PER_CAGE_POINTS]>(
             buf,
+            buf_size,
             LayoutCage::PodAttachments as usize,
             to_remove,
             length,
         );
         Self::swap_remove_element::<PARTS, [glam::Vec4; PER_CAGE_MAX_LATTICE_ATTACHMENTS]>(
             buf,
+            buf_size,
             LayoutCage::PodBindLattice as usize,
             to_remove,
             length,
         );
         Self::swap_remove_element::<PARTS, [IndirectIndex; PER_CAGE_MAX_LATTICE_ATTACHMENTS]>(
             buf,
+            buf_size,
             LayoutCage::PodLutLattice as usize,
             to_remove,
             length,
         );
 
-        const RMAP_PART_INDEX: usize = LayoutCage::Rmap as usize;
-        unsafe {
-            let mut view = buf.view_part_mut::<IndirectIndex>(RMAP_PART_INDEX);
-            view.swap(to_remove, length - 1);
-            buf.set_length(RMAP_PART_INDEX, (length - 1) as u32);
-            view[to_remove]
-        }
+        todo!();
+        // const RMAP_PART_INDEX: usize = LayoutCage::Rmap as usize;
+        // unsafe {
+        //     let mut view = buf.view_part_mut::<IndirectIndex>(RMAP_PART_INDEX);
+        //     view.swap(to_remove, length - 1);
+        //     buf.set_length(RMAP_PART_INDEX, (length - 1) as u32);
+        //     view[to_remove]
+        // }
     }
 
     pub fn upload(&self, section: StorageSection, gpu_buf: &CagePartitionedBuffer) {
-        let mut offset = gpu_buf.length_pod_bindref().max(1);
-        self.upload.drain(section.as_index(), ..).for_each(|data| {
-            let CageUploadItem {
-                map_index,
-                bindref,
-                lattice_binds,
-                points_bind,
-                lattice_lut,
-                points_barycenter_bind,
-                attachments,
-            } = data;
+        let upload_count = self.upload.len(section.as_index());
+        let base = self.buffer_size.fetch_add(upload_count, Ordering::Release);
+        self.upload
+            .drain(section.as_index(), ..)
+            .enumerate()
+            .for_each(|(i, data)| {
+                let CageUploadItem {
+                    map_index,
+                    bindref,
+                    lattice_binds,
+                    points_bind,
+                    lattice_lut,
+                    points_barycenter_bind,
+                    attachments,
+                } = data;
 
-            let bindref = glam::vec4(bindref.x, bindref.y, bindref.z, 1.0);
-            let points_bind = CagePoints(points_bind);
-            gpu_buf.blit_rmap(&[map_index], offset);
-            gpu_buf.blit_pod_bindref(&[bindref], offset);
-            gpu_buf.blit_pod_bind_lattice(&[lattice_binds], offset);
-            gpu_buf.blit_pod_lut_lattice(&[lattice_lut], offset);
-            gpu_buf.blit_pod_points_bind(&[points_bind], offset);
-            gpu_buf.blit_pod_barycenter_bind(&[points_barycenter_bind], offset);
-            gpu_buf.blit_pod_attachments(&[attachments], offset);
+                let offset = base + i;
+                let bindref = glam::vec4(bindref.x, bindref.y, bindref.z, 1.0);
+                let points_bind = CagePoints(points_bind);
+                gpu_buf.blit_rmap(&[map_index], offset);
+                gpu_buf.blit_pod_bindref(&[bindref], offset);
+                gpu_buf.blit_pod_bind_lattice(&[lattice_binds], offset);
+                gpu_buf.blit_pod_lut_lattice(&[lattice_lut], offset);
+                gpu_buf.blit_pod_points_bind(&[points_bind], offset);
+                gpu_buf.blit_pod_barycenter_bind(&[points_barycenter_bind], offset);
+                gpu_buf.blit_pod_attachments(&[attachments], offset);
 
-            let gpu_index = NonZeroUsize::new(offset).expect("offset is never 0");
-            self.sync_remap(section, Some(gpu_index), map_index);
-
-            offset += 1;
-        });
+                let gpu_index = NonZeroUsize::new(offset).expect("offset is never 0");
+                self.sync_remap(section, Some(gpu_index), map_index);
+            });
     }
 
     pub fn delete(
@@ -519,8 +545,8 @@ impl<'buffers> CageSyncFrameOps<'buffers, CageSyncGpu> {
                 }
 
                 let index = direct.as_index();
-                let length = gpu_buf.length_pod_bindref();
-                let remap_id = Self::swap_remove_cage(gpu_buf.inner(), index, length);
+                let length = self.buffer_size.load(Ordering::Relaxed);
+                let remap_id = Self::swap_remove_cage(gpu_buf.inner(), self.buffer_size, index, length);
 
                 self.sync_remap(section, None, map_id);
                 let old_direct = imap[remap_id.as_index()];

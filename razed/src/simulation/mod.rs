@@ -720,7 +720,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         // operation
         let view_point = vp_prev;
 
-
         if input.keys().key_pressed(crate::input::MISC_CLEAR_RUBBER) {
             self.debris.data_mut().clear();
             self.debris.clear_rubber();
@@ -739,7 +738,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             //self.spawn_debug_bridge(&view_point);
         }
 
-        const CAMERA_KEY: janus::input::KeyCode = janus::input::KeyCode::Tab;
         {
             let grabbed = input.keys().key_down(crate::input::CAMERA_ORBIT);
             let vsync = self

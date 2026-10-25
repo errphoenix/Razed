@@ -17,6 +17,7 @@ pub fn geom_plane_pass_with_shader(shader: ComputeShaderPlaneGeomSubmit) -> Plan
         shader.uniform_uv_scaling_float(*uv_scaling);
 
         out.write(DomainData::new(0, 0, 1));
+        out.upload();
     })
 }
 

@@ -74,16 +74,12 @@ impl Materials {
     pub unsafe fn upload_to_buffer(&mut self, buffer: &MaterialStorage) {
         if self.dirty {
             self.dirty = false;
-
-            unsafe {
-                buffer
-                    .view_mut()
-                    .as_mut_slice()
-                    .fill(MaterialLocation::fallback_defaults(
-                        self.global_default_group,
-                    ));
-                buffer.blit(self.list(), 0);
-            }
+            let mut defaults = vec![
+                MaterialLocation::fallback_defaults(self.global_default_group);
+                buffer.capacity()
+            ];
+            buffer.write(&defaults, 0);
+            buffer.write(self.list(), 0);
         }
     }
 

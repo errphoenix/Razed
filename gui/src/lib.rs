@@ -961,7 +961,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 available,
                 |known_size, available, _id, ctx, _style| {
                     let id = ctx.expect("node has no associated widget with it");
-                    let did = unsafe { self.commons.solve_indirect_unchecked(id.0) };
+                    let did = self.commons.solve_indirect(id.0).unwrap();
                     let archetype = self.commons.archetype[did.as_index()];
                     if let ComponentKind::Text(text_id) = archetype {
                         let width = known_size.width.or(available.width.into_option());
