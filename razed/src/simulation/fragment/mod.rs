@@ -125,11 +125,11 @@ impl FragmentSystem {
         &mut self.node_map[node.as_index()]
     }
 
-    pub fn data(&self) -> &FragmentsRowTable {
+    pub const fn data(&self) -> &FragmentsRowTable {
         &self.fragments
     }
 
-    pub fn data_mut(&mut self) -> &mut FragmentsRowTable {
+    pub const fn data_mut(&mut self) -> &mut FragmentsRowTable {
         &mut self.fragments
     }
 

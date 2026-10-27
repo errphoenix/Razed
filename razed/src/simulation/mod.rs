@@ -1243,7 +1243,6 @@ impl State {
 
         let cursor = input.cursor().current_f32();
         let inverse_view = view_point.into_mat4();
-
         let mouse_world_dir = screen.to_world_space(cursor, inverse_view);
         if input.keys().key_pressed(crate::input::CAMERA_SET_ANCHOR) {
             let dy = mouse_world_dir.y;
