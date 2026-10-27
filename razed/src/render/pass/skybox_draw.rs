@@ -20,7 +20,7 @@ pub const fn pass(
         |_, _| unsafe {
             janus::gl::DepthFunc(janus::gl::GEQUAL);
             janus::gl::DepthMask(janus::gl::FALSE);
-            janus::gl::DrawArrays(janus::gl::TRIANGLE_STRIP, 0, 24);
+            janus::gl::DrawArrays(janus::gl::TRIANGLES, 0, 36);
             janus::gl::DepthMask(janus::gl::TRUE);
             janus::gl::DepthFunc(crate::render::DEFAULT_DEPTH_FUNC);
         },
@@ -65,13 +65,13 @@ ethel::shader_glsl! {
             };
 
             const {
-                CUBE_VERTICES_TRISTRIP
+                CUBE_VERTICES
             };
 
             src() {
                 "
                 uint index = gl_VertexID;
-                vec3 vertex = CUBE_VERTICES_TRISTRIP[index];
+                vec3 vertex = CUBE_VERTICES[index];
 
                 mat3 view_rotation_3x3 = mat3(
                     view[0].xyz,
@@ -95,32 +95,50 @@ ethel::shader_glsl! {
     }
 }
 
-const CUBE_VERTICES_TRISTRIP: Constant<[glam::Vec3; 24]> = Constant::new(
-    "CUBE_VERTICES_TRISTRIP[24]",
+const CUBE_VERTICES: Constant<[glam::Vec3; 36]> = Constant::new(
+    "CUBE_VERTICES[36]",
     [
+        // +x
         glam::vec3(1.0, -1.0, -1.0),
         glam::vec3(1.0, -1.0, 1.0),
-        glam::vec3(1.0, 1.0, -1.0),
         glam::vec3(1.0, 1.0, 1.0),
+        glam::vec3(1.0, -1.0, -1.0),
+        glam::vec3(1.0, 1.0, 1.0),
+        glam::vec3(1.0, 1.0, -1.0),
+        // -x
         glam::vec3(-1.0, -1.0, 1.0),
         glam::vec3(-1.0, -1.0, -1.0),
-        glam::vec3(-1.0, 1.0, 1.0),
         glam::vec3(-1.0, 1.0, -1.0),
+        glam::vec3(-1.0, -1.0, 1.0),
+        glam::vec3(-1.0, 1.0, -1.0),
+        glam::vec3(-1.0, 1.0, 1.0),
+        // +y
         glam::vec3(-1.0, 1.0, -1.0),
         glam::vec3(1.0, 1.0, -1.0),
-        glam::vec3(-1.0, 1.0, 1.0),
         glam::vec3(1.0, 1.0, 1.0),
+        glam::vec3(-1.0, 1.0, -1.0),
+        glam::vec3(1.0, 1.0, 1.0),
+        glam::vec3(-1.0, 1.0, 1.0),
+        // -y
         glam::vec3(-1.0, -1.0, 1.0),
         glam::vec3(1.0, -1.0, 1.0),
-        glam::vec3(-1.0, -1.0, -1.0),
         glam::vec3(1.0, -1.0, -1.0),
-        glam::vec3(1.0, -1.0, 1.0),
+        glam::vec3(-1.0, -1.0, 1.0),
+        glam::vec3(1.0, -1.0, -1.0),
+        glam::vec3(-1.0, -1.0, -1.0),
+        // +z
+        glam::vec3(-1.0, -1.0, 1.0),
+        glam::vec3(-1.0, 1.0, 1.0),
+        glam::vec3(1.0, 1.0, 1.0),
         glam::vec3(-1.0, -1.0, 1.0),
         glam::vec3(1.0, 1.0, 1.0),
-        glam::vec3(-1.0, 1.0, 1.0),
-        glam::vec3(-1.0, -1.0, -1.0),
+        glam::vec3(1.0, -1.0, 1.0),
+        // -z
+        glam::vec3(1.0, -1.0, -1.0),
+        glam::vec3(1.0, 1.0, -1.0),
+        glam::vec3(-1.0, 1.0, -1.0),
         glam::vec3(1.0, -1.0, -1.0),
         glam::vec3(-1.0, 1.0, -1.0),
-        glam::vec3(1.0, 1.0, -1.0),
+        glam::vec3(-1.0, -1.0, -1.0),
     ],
 );
