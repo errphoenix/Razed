@@ -18,12 +18,31 @@ echo "$mark_info Selected target platform: $target; will compile with: $target_r
 echo "$mark_rust Compiling intermediate SPIR-V shader binaries..."
 cargo run --bin shader_compiler --release 2>/dev/null
 
+rm -r build
 mkdir build
 
-bin_build "sse2", "x86-64"
-bin_build "sse4", "x86-64-v2"
-bin_build "avx2", "x86-64-v3"
-bin_build "avx512", "x86-64-v4"
+# todo: info in bin dir
+# todo: select executable
+
+bin_build() {
+    local name=$1
+    local cpu=$2
+    mkdir "build/$name"
+    echo "$mark_rust Compiling application binary for feature target $cpu ($name)"
+    RUSTFLAGS="-C target-cpu=$cpu"
+    cargo build --bin razed --release --target $target_rust -F default,$BUILD_FEATURES --target-dir "build/$name" 2>/dev/null
+}
+
+bin_cpy() {
+    local name=$1
+    cp "../../build/$name/$target_rust/release/razed$target_ext" ./razed
+    mv razed/razed$target_ext razed/bin/razed-$name$target_ext
+}
+
+bin_build "sse2" "x86-64"
+bin_build "sse4" "x86-64-v2"
+bin_build "avx2" "x86-64-v3"
+bin_build "avx512" "x86-64-v4"
 
 mkdir -p distribute/$target
 cd distribute/$target
@@ -53,18 +72,3 @@ echo "$mark_info Clearing..."
 rm -r razed
 
 echo "$mark_end_success Package ready at: distribute/$target/$OUT_PACKAGE_NAME-$target.tar.gz"
-
-bin_build() {
-    local name = $1
-    local cpu = $2
-    mkdir "build/$name"
-    echo "$mark_rust Compiling application binary for feature target $cpu ($name)"
-    RUSTFLAGS="-C target-cpu=$cpu"
-    cargo build --bin razed --release --target $target_rust -F default,$BUILD_FEATURES --target-dir "build/$name" 2>/dev/null
-}
-
-bin_cpy() {
-    local name = $1
-    cp "build/$name/target/$target_rust/release/razed.$target_ext" ./razed
-    mv razed/razed$target_ext razed/bin/razed-$name$target_ext
-}
