@@ -18,16 +18,10 @@ echo "$mark_info Selected target platform: $target; will compile with: $target_r
 echo "$mark_rust Compiling intermediate SPIR-V shader binaries..."
 cargo run --bin shader_compiler --release 2>/dev/null
 
-rm -r build
-mkdir build
-
-# todo: info in bin dir
-# todo: select executable
-
 bin_build() {
     local name=$1
     local cpu=$2
-    mkdir "build/$name"
+    mkdir -p "build/$name"
     echo "$mark_rust Compiling application binary for feature target $cpu ($name)"
     RUSTFLAGS="-C target-cpu=$cpu"
     cargo build --bin razed --release --target $target_rust -F default,$BUILD_FEATURES --target-dir "build/$name" 2>/dev/null
@@ -38,6 +32,13 @@ bin_cpy() {
     cp "../../build/$name/$target_rust/release/razed$target_ext" ./razed
     mv razed/razed$target_ext razed/bin/razed-$name$target_ext
 }
+
+rm -r build
+mkdir -p build
+
+mkdir -p build/entry
+echo "$mark_rust Compiling application wrapper binary ('select')"
+cargo build --bin select --release --target $target_rust --target-dir "build/entry" 2>/dev/null
 
 bin_build "sse2" "x86-64"
 bin_build "sse4" "x86-64-v2"
@@ -50,7 +51,7 @@ cd distribute/$target
 echo "$mark_pkg Creating package..."
 
 echo "$mark_pkg $style_minor Copying assets..."
-mkdir razed
+mkdir -p razed
 cp -r ../../assets ./razed
 
 echo "$mark_pkg $style_minor Copying intermediate shader binaries..."
@@ -59,11 +60,14 @@ mkdir -p razed/target/shaders/spirv
 cp -r ../../target/shaders/spirv/* ./razed/target/shaders/spirv
 
 echo "$mark_pkg $style_minor Copying binaries..."
-mkdir razed/bin
+mkdir -p razed/bin
 bin_cpy "sse2"
 bin_cpy "sse4"
 bin_cpy "avx2"
 bin_cpy "avx512"
+
+# copy select
+cp "../../build/entry/$target_rust/release/select$target_ext" ./razed
 
 echo "$mark_pkg Compressing package..."
 tar -czf $OUT_PACKAGE_NAME-$target.tar.gz razed
