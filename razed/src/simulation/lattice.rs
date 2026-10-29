@@ -277,7 +277,6 @@ impl LatticeSystem {
     }
 
     #[inline]
-    #[allow(unused, reason = "wip feature")]
     pub fn apply_forces(&mut self, index: IndirectIndex, force: glam::Vec3) {
         if let Some(node) = self.nodes.solve_indirect(index) {
             let mass = *unsafe { self.nodes.mass_slice().get_unchecked(node.as_index()) };
@@ -291,7 +290,6 @@ impl LatticeSystem {
     }
 
     #[inline]
-    #[allow(unused, reason = "wip feature")]
     pub fn apply_forces_multi(&mut self, indices: &[IndirectIndex], force: glam::Vec3) {
         for &index in indices {
             self.apply_forces(index, force);
