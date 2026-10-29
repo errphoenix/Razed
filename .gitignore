@@ -9,3 +9,4 @@ plot_last.sh
 *.svg
 *.png
 *.data*
+/build
