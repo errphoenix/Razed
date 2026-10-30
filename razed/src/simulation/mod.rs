@@ -3,7 +3,7 @@ pub mod debris;
 pub mod fragment;
 pub mod lattice;
 
-pub const HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(4.0);
+pub const HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(2.0);
 
 use std::{
     io::BufWriter,
@@ -14,7 +14,7 @@ use std::{
 };
 
 use crate::{
-    data::{FrameDataBuffers, LayoutDebrisData, LayoutFragmentData, LayoutXpbdDebugData},
+    data::{FrameDataBuffers, LayoutDebrisData, LayoutFragmentData, LayoutXpbdDebugData, Overlays},
     procedural::{VoxelGrid, VoxelGridOptions},
     render::{
         RenderGroup,
@@ -27,16 +27,20 @@ use crate::{
         fragment::{FragmentSystem, FragmentsRowTableView},
         lattice::{LatticeSystem, NodesRowTableView},
     },
+    structure::{DamageCloud, DamageFalloffModel, DamageSystem, DamageVolume},
 };
 use ::physics::xpbd::{RawXpbdLattice, XpbdOptions, XpbdSolver};
 use ethel::{
-    AssetMetadataRegistry, Column, FxSpatialHash, GpuCommandQueue, IndirectIndex, InputEvent,
-    Profiler, Resolution, ScreenSpace, SparseSlot, SpatialResolution, TextureMetadata, ViewPoint,
+    AssetMetadataRegistry, Column, FxLsSpatialHash, FxSpatialHash, GpuCommandQueue, IndirectIndex,
+    InputEvent, Profiler, Resolution, ScreenSpace, SparseSlot, SpatialHash, SpatialResolution,
+    TextureMetadata, ViewPoint,
     assets::pipe::RegistryPipe,
     render::command::DrawGroups,
-    state::camera,
-    state::cross::{Cross, Producer},
-    state::time::AccumulationWindow,
+    state::{
+        camera,
+        cross::{Cross, Producer},
+        time::AccumulationWindow,
+    },
 };
 use glam::Vec4Swizzles;
 use gui::{
@@ -47,14 +51,13 @@ use janus::{Cursor, DeltaTime, StringMap, sync::TriCell};
 use physics::rigid::RbVelocity;
 use tracing::{Level, event};
 
-ethel::table_spec! {
-    struct Renderable {
-        mesh_id: ethel::mesh::Id;
-        position: glam::Vec4;
-        rotation: glam::Quat;
-        scale: glam::Vec4;
-    }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum StructurePartIndex {
+    Lattice(IndirectIndex),
+    Fragment(IndirectIndex),
 }
+
+pub type StructureSpatialHash = FxLsSpatialHash<StructurePartIndex>;
 
 const GROUND_LEVEL: f32 = 0.0;
 
@@ -130,12 +133,13 @@ pub struct State {
     #[allow(unused, reason = "currently unused, might be discarded")]
     mesh_ids: Vec<ethel::mesh::Id>, // generic objects mesh ids imap
 
-    pub generic_objects: RenderableRowTable,
-
     lattice: LatticeSystem,
     cage: CageSystem,
     fragments: FragmentSystem,
     debris: DebrisSystem,
+    structure_hashed: StructureSpatialHash,
+    damage_sys: DamageSystem,
+    damage_mode: bool,
 
     /// Parallel to NodesRowTable of LatticeSystem
     lattice_bind_pose: Vec<glam::Vec3>,
@@ -181,7 +185,6 @@ impl Default for State {
             fragments: Default::default(),
             debris: Default::default(),
             mesh_ids: Default::default(),
-            generic_objects: Default::default(),
             frag_map: Default::default(),
             selection: Default::default(),
             dead_fragments: Default::default(),
@@ -196,6 +199,9 @@ impl Default for State {
             selected_material: 1,
             debug_shading_mode: None,
             render_stats_cpy: RenderStats::default(),
+            damage_sys: DamageSystem::new(),
+            damage_mode: false,
+            structure_hashed: FxLsSpatialHash::new(HASH_RESOLUTION),
         }
     }
 }
@@ -759,6 +765,65 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             });
         }
 
+        self.profiler
+            .capture_duration("structure_sync_and_hash", || {
+                self.structure_hashed.clear_buckets();
+                self.fragments.sync_cage_feedback(&self.cage);
+                self.fragments.hash_fragments(&mut self.structure_hashed);
+                self.lattice.hash_nodes(&mut self.structure_hashed);
+            });
+
+        if input.keys().key_pressed(crate::input::MISC_DAMAGE_TOGGLE) {
+            self.damage_mode = !self.damage_mode;
+        }
+        if self.damage_mode {
+            const RAY_RANGE: f32 = 128f32;
+            let vp = view_point.position;
+            let dir = view_point.forward();
+            let hashed = &self.structure_hashed;
+
+            let hit = hashed.raycast(vp, dir, RAY_RANGE).or_else(|| {
+                let cursor = input.cursor().current_f32();
+                let inverse_view = view_point.into_mat4();
+                let mouse_world_dir = screen.to_world_space(cursor, inverse_view);
+                if input.keys().key_pressed(crate::input::CAMERA_SET_ANCHOR) {
+                    let dy = mouse_world_dir.y;
+                    if dy.abs() > 0.001 {
+                        let t = -view_point.position.y / dy;
+                        let point = view_point.position + mouse_world_dir * t;
+                        return Some(hashed.cell_at(point));
+                    }
+                }
+                None
+            });
+
+            const CLOUD_RADIUS: f32 = 7f32;
+            const CLOUD_DAMAGE: f32 = 0.1f32;
+
+            if let Some(hit) = hit {
+                let position = hashed.approx_point_at(hit);
+                let volume = DamageVolume::Spherical {
+                    radius: CLOUD_RADIUS,
+                };
+                if input.keys().key_pressed(crate::input::MISC_DAMAGE_SPAWN) {
+                    tracing::info!("Spawn damage cloud at {position:?}");
+                    self.damage_sys.queue_damage(DamageCloud::new(
+                        position,
+                        CLOUD_DAMAGE,
+                        volume,
+                        DamageFalloffModel::Linear,
+                        0.5,
+                    ));
+                }
+            }
+        }
+
+        self.damage_sys.propagate_damage(
+            &self.structure_hashed,
+            &mut self.fragments,
+            &mut self.lattice,
+        );
+
         self.local_keyev_buf.clear();
         self.lattice.clear_damage_buffers();
         let t1 = Instant::now();
@@ -1113,7 +1178,7 @@ impl State {
         const WIDTH: f32 = 18.0;
         const HEIGHT: f32 = 6.0;
         const DEPTH: f32 = 12.0;
-        const FLOORS: u32 = 3;
+        const FLOORS: u32 = 6;
         const TOTAL_HEIGHT: f32 = HEIGHT * FLOORS as f32;
 
         let center = glam::vec3(view_point.position.x, GROUND_LEVEL, view_point.position.z);

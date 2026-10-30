@@ -1,7 +1,7 @@
 pub mod mesh;
 
 use ethel::{
-    Cell, Column, DirectIndex, FxLsSpatialHash, FxSpatialHash, IndirectIndex, SpatialHash,
+    Cell, Column, DirectIndex, FxSpatialHash, IndirectIndex, SpatialHash,
     state::data::table::TableView,
 };
 use glam::Vec4Swizzles;
@@ -10,6 +10,7 @@ use rustc_hash::FxHashSet;
 use crate::{
     procedural::VoxelGrid,
     simulation::{
+        StructurePartIndex, StructureSpatialHash,
         cage::CageSystem,
         lattice::{DamagedNode, NodesRowTableView},
     },
@@ -72,10 +73,9 @@ impl UninitFragment {
 
 #[derive(Debug)]
 pub struct FragmentSystem {
-    fragments: FragmentsRowTable,
-    uninitialised: Vec<UninitFragment>,
+    pub(crate) fragments: FragmentsRowTable,
 
-    hashed: FxLsSpatialHash<IndirectIndex>,
+    uninitialised: Vec<UninitFragment>,
 
     /// sparse map of node ID to sequence of fragment IDs
     node_map: Vec<Vec<IndirectIndex>>,
@@ -96,7 +96,6 @@ impl FragmentSystem {
         Self {
             fragments: FragmentsRowTable::new(),
             uninitialised: Vec::new(),
-            hashed: FxLsSpatialHash::new(super::HASH_RESOLUTION),
             fragment_damage_frame: Vec::new(),
             disabled_frags_frame: FxHashSet::default(),
             // account for degenerate
@@ -219,16 +218,12 @@ impl FragmentSystem {
         }
     }
 
-    pub fn hash_fragments(&mut self) {
-        self.hashed.clear();
-
+    pub fn hash_fragments(&self, hashed: &mut StructureSpatialHash) {
         let pos = self.fragments.real_position_view();
         let handles = self.fragments.handles_view();
-        let frags = pos.join(handles);
-
-        for (&pos, &handle) in frags.into_iter() {
-            let cell = self.hashed.cell_at(pos);
-            self.hashed.put_element(cell, handle);
+        for (&pos, &handle) in pos.join(handles) {
+            let cell = hashed.cell_at(pos);
+            hashed.put_element(cell, StructurePartIndex::Fragment(handle));
         }
     }
 

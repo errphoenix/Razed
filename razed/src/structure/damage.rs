@@ -21,30 +21,24 @@ impl DamageVolume {
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Eq, Ord, Hash, Default)]
 pub enum DamageFalloffModel {
-    /// `1.0-x`
     Linear,
-    /// `exp(-x)*(1.0-x)`
     Exponential,
     #[default]
-    /// `1.0-x*x`
     Quadratic,
-    /// `1.0-x*x*x`
     Cubic,
 }
 impl DamageFalloffModel {
     /// Applies the corresponding damage falloff curve.
     ///
-    /// The `value` parameter must be the distance from the center from
-    /// `0.0` to `1.0`, representing the center and the bounds of the damage
-    /// volume, respectively.
+    /// The `value` parameter must correspond to the vicinity to the center,
+    /// i.e. the inverse distance.
     pub fn apply(&self, value: f32) -> f32 {
         match self {
-            DamageFalloffModel::Linear => 1.0 - value,
-            DamageFalloffModel::Exponential => (-value).exp() * (1.0 - value),
-            DamageFalloffModel::Quadratic => 1.0 - (value * value),
-            DamageFalloffModel::Cubic => 1.0 - (value * value),
+            DamageFalloffModel::Linear => value,
+            DamageFalloffModel::Exponential => (value).exp() - 1.0,
+            DamageFalloffModel::Quadratic => value * value,
+            DamageFalloffModel::Cubic => value * value * value,
         }
-        .clamp(0.0, 1.0)
     }
 }
 impl std::ops::Mul<f32> for DamageFalloffModel {
@@ -61,6 +55,7 @@ pub struct DamageCloud {
     pub amount: f32,
     pub volume: DamageVolume,
     pub falloff: DamageFalloffModel,
+    pub strength: f32,
 }
 impl DamageCloud {
     pub const fn new(
@@ -68,12 +63,14 @@ impl DamageCloud {
         amount: f32,
         volume: DamageVolume,
         falloff: DamageFalloffModel,
+        strength: f32,
     ) -> Self {
         Self {
             position,
             amount,
             volume,
             falloff,
+            strength,
         }
     }
 
@@ -125,7 +122,8 @@ impl<T: Clone + Copy> DamageSpatialLookupExt<Vec<T>> for FxLsSpatialHash<T> {}
 
 #[derive(Clone, Debug, Default)]
 pub struct DamageSystem {
-    damage_queue: Vec<DamageCloud>,
+    queue: Vec<DamageCloud>,
+    lookup_buffer: Vec<Cell>,
 }
 impl DamageSystem {
     pub fn new() -> Self {
@@ -133,14 +131,60 @@ impl DamageSystem {
     }
 
     pub fn queue_damage(&mut self, damage_cloud: DamageCloud) {
-        self.damage_queue.push(damage_cloud);
+        self.queue.push(damage_cloud);
+    }
+
+    pub fn propagate_damage(
+        &mut self,
+        hashed: &StructureSpatialHash,
+        fragment_sys: &mut FragmentSystem,
+        lattice_sys: &mut LatticeSystem,
+    ) {
+        let fragments = &mut fragment_sys.fragments;
+        self.queue.drain(..).for_each(|cloud| {
+            hashed.get_damage_area(&cloud, &mut self.lookup_buffer);
+            let origin = cloud.position;
+            let falloff = cloud.falloff;
+            let dmg_amount = cloud.amount;
+            let strength = cloud.strength;
+            self.lookup_buffer.drain(..).for_each(|cell| {
+                if let Some(affected) = hashed.get(cell) {
+                    if !affected.is_empty() {
+                        let point = hashed.approx_point_at(cell);
+                        let to_origin = origin - point;
+                        let vicinity = to_origin.length();
+
+                        let coefficient = falloff * vicinity;
+                        let damage = coefficient * dmg_amount;
+                        let impulse_dir = -to_origin;
+                        let impulse = coefficient * impulse_dir * strength;
+
+                        for &id in affected {
+                            match id {
+                                StructurePartIndex::Lattice(id) => {
+                                    // todo: persistent impulse
+                                    lattice_sys.apply_forces(id, impulse);
+                                }
+                                StructurePartIndex::Fragment(id) => {
+                                    let did = fragments.solve_indirect(id).unwrap();
+                                    let index = did.as_index();
+                                    let mut integrity = fragments.integrity[index];
+                                    integrity -= damage;
+                                    fragments.integrity[index] = integrity.saturate();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        });
     }
 
     pub fn damage_queue(&self) -> &[DamageCloud] {
-        &self.damage_queue
+        &self.queue
     }
 
     pub const fn damage_queue_mut(&mut self) -> &Vec<DamageCloud> {
-        &mut self.damage_queue
+        &mut self.queue
     }
 }

@@ -12,3 +12,5 @@ pub const MISC_DELETE_CONSTRAINT: janus::KeyCode = janus::KeyCode::Delete;
 pub const MISC_CLEAR_RUBBER: janus::KeyCode = janus::KeyCode::KeyB;
 pub const MISC_SAVE_PERF_REPORT: janus::KeyCode = janus::KeyCode::KeyP;
 pub const MISC_SPAWN_DEBUG_STRUCT: janus::KeyCode = janus::KeyCode::KeyH;
+pub const MISC_DAMAGE_SPAWN: janus::KeyCode = janus::KeyCode::KeyX;
+pub const MISC_DAMAGE_TOGGLE: janus::KeyCode = janus::KeyCode::KeyZ;

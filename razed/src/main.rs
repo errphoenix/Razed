@@ -13,7 +13,7 @@ use razed::{
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 const DISPLAY_PARAMS: DisplayParameters = DisplayParameters::fullscreen("Razed");
-const LOG_FILENAME: &str = "tracing.log";
+const LOG_FILENAME: &str = "../tracing.log";
 
 type State = ethel::state::State<FrameDataBuffers, razed::simulation::State, RenderGroup>;
 type Renderer = ethel::render::Renderer<FrameDataBuffers, razed::render::Renderer>;

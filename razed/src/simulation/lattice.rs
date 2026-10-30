@@ -1,9 +1,14 @@
-use ethel::state::data::{Column, IndirectIndex};
+use ethel::{
+    FxLsSpatialHash, SpatialHash,
+    state::data::{Column, IndirectIndex},
+};
 use janus::context::DeltaTime;
 use physics::xpbd::{Constraints, HasConstraints, HasNodes, Nodes, RawXpbdLattice, XpbdSolver};
 use rustc_hash::FxHashMap;
 
-use crate::simulation::fragment::FragmentsRowTableView;
+use crate::simulation::{
+    StructurePartIndex, StructureSpatialHash, fragment::FragmentsRowTableView,
+};
 
 ethel::table_spec! {
     struct Nodes {
@@ -71,9 +76,11 @@ pub struct LatticeSystem {
     // temporary mapping for lattice import
     node_id_buffer: Vec<IndirectIndex>,
 
-    nodes: NodesRowTable,
-    links: LinksRowTable,
-    solver: XpbdSolver,
+    pub nodes: NodesRowTable,
+    pub links: LinksRowTable,
+    pub solver: XpbdSolver,
+
+    pub hashed: FxLsSpatialHash<IndirectIndex>,
 
     /// transient frame data for damaged nodes that lost
     /// any constraint
@@ -124,6 +131,15 @@ impl LatticeSystem {
     pub fn clear_damage_buffers(&mut self) {
         self.damaged_nodes_data.clear();
         self.damaged_nodes_hash.clear();
+    }
+
+    pub fn hash_nodes(&self, hashed: &mut StructureSpatialHash) {
+        let pos = self.nodes.current_pos_view();
+        let handles = self.nodes.handles_view();
+        for (&pos, &handle) in pos.join(handles) {
+            let cell = hashed.cell_at(pos);
+            hashed.put_element(cell, StructurePartIndex::Lattice(handle));
+        }
     }
 
     fn register_node_damage(
