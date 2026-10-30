@@ -8,8 +8,6 @@ pub struct DebugLinesData {
     pub positions: Vec<glam::Vec3>,
     pub colors: Vec<glam::Vec4>,
 }
-
-#[allow(unused)]
 impl DebugLinesData {
     pub fn new() -> Self {
         Self::default()
@@ -51,19 +49,18 @@ impl DebugLinesData {
     }
 }
 
-pub type DebugLinesDrawPass = DrawPass<DebugLinesDrawCtxWrapper, 0, 0>;
+pub type DebugDrawLinesPass = DrawPass<DebugDrawLinesCtxWrapper, 0, 0>;
 
 #[derive(Debug)]
-pub struct DebugLinesDrawCtx<'data> {
+pub struct DebugDrawLinesCtx<'data> {
     pub lines_data: &'data PartitionedTriBuffer<2>,
     pub lines_buffer: &'data DebugLinesData,
 }
+rendrs::context_wrapper!(for<'ctx> DebugDrawLinesCtx);
 
-rendrs::context_wrapper!(for<'ctx> DebugLinesDrawCtx);
-
-pub const fn pass(shader: &ShaderDebugLines) -> DebugLinesDrawPass {
+pub const fn draw_lines_pass(shader: &ShaderDebugDrawLines) -> DebugDrawLinesPass {
     let handle_view = shader.handle().view();
-    DebugLinesDrawPass::new(handle_view, [], [], |section, ctx| {
+    DebugDrawLinesPass::new(handle_view, [], [], |section, ctx| {
         let section = section.as_index();
         unsafe {
             ctx.lines_data.blit_part_padded(
@@ -102,7 +99,7 @@ pub const SSBO_INDEX_POD_POINTS: u32 = ssbo_binding!(POD_Points);
 pub const SSBO_INDEX_POD_COLORS: u32 = ssbo_binding!(POD_Colors);
 
 ethel::shader_glsl! {
-    struct DebugLines > [460] {
+    struct DebugDrawLines > [460] {
         common {};
 
         unit ShaderKind::Vertex => [

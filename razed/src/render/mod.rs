@@ -1,7 +1,11 @@
+pub mod debug;
 pub mod geometry;
 pub mod graphics;
-pub mod pass;
+pub mod post;
 pub mod shader_commons;
+pub mod shading;
+pub mod task;
+pub mod util;
 
 use std::{sync::atomic::Ordering, time::Instant};
 
@@ -21,17 +25,34 @@ use rendrs::{
 };
 
 #[cfg(feature = "devmode")]
-use crate::render::pass::debug_lines_draw::DebugLinesData;
+use crate::render::debug::draw_lines::{DebugDrawLinesPass, DebugLinesData, ShaderDebugDrawLines};
 use crate::{
     assets::{self, MaterialStorage},
     data::FrameDataBuffers,
     render::{
+        debug::{
+            draw_cages::{DebugDrawCagesCtx, DebugDrawCagesPass, ShaderDebugDrawCages},
+            draw_lattices::{DebugDrawLatticesCtx, DebugDrawLatticesPass, ShaderDebugDrawLattices},
+        },
         geometry::{
             ComputeShaderDebrisGeomSubmit, ComputeShaderFragmentsGeomSubmit,
             ComputeShaderPlaneGeomSubmit, DebrisGeomCtx, FragmentsGeomCtx, PlaneGeomCtx,
         },
         graphics::{Materials, RenderStats, materials},
-        pass::{DebugCageDrawCtx, DebugLatticeDrawCtx, ShadeDebugAttribsCtx, ShadePbrCtx},
+        post::{
+            draw_skybox::{PostDrawSkyboxPass, ShaderPostSkybox},
+            tonemap::{ComputeShaderPostTonemap, PostTonemapCtx, PostTonemapPass},
+        },
+        shading::{
+            attributes::{
+                ComputeShaderShadingAttributes, ShadingAttributesCtx, ShadingAttributesPass,
+            },
+            pbr::{ComputeShaderShadingPbr, ShadingPbrCtx, ShadingPbrPass},
+        },
+        task::deform_cages::{
+            ComputeShaderTaskDeformCages, TaskDeformCagesCtx, TaskDeformCagesPass,
+        },
+        util::equirect_decode::ComputeShaderUtilEquirectDecode,
     },
 };
 
@@ -120,7 +141,7 @@ impl PersistentSamplers {
 #[derive(Debug)]
 pub struct RenderPipeline {
     // prelude compute
-    cage_deform_compute_pass: pass::CageDeformComputePass,
+    task_deform_cages: TaskDeformCagesPass,
 
     // geometry composition
     geom_fragments: geometry::FragmentsGeomPass,
@@ -133,25 +154,25 @@ pub struct RenderPipeline {
     attr_interp: geometry::AttribInterpolationPass,
 
     // shading
-    shade_pbr: pass::ShadePbrPass,
-    shade_debug_attrib: pass::ShadeDebugAttribsPass,
-    skybox_draw_pass: pass::SkyboxDrawPass,
+    shading_pbr: ShadingPbrPass,
+    shading_attributes: ShadingAttributesPass,
 
     // post vfx
-    tonemap_vfx_pass: pass::TonemapVfxPass,
+    post_draw_skybox: PostDrawSkyboxPass,
+    post_tonemap: PostTonemapPass,
 
     // debug visuals
-    debug_lattice_draw_pass: pass::DebugLatticeDrawPass,
-    debug_cage_draw_pass: pass::DebugCageDrawPass,
+    debug_draw_lattice: DebugDrawLatticesPass,
+    debug_draw_cages: DebugDrawCagesPass,
     #[cfg(feature = "devmode")]
-    debug_lines_draw_pass: pass::DebugLinesDrawPass,
+    debug_draw_lines: DebugDrawLinesPass,
 
     // interface
-    interface_draw_pass: gui::render::UiDrawPass,
+    draw_interface: gui::render::UiDrawPass,
 
     // utilities
-    clear_pass: rendrs::ClearPass<3>,
-    blit_pass: rendrs::BlitPass,
+    clear: rendrs::ClearPass<3>,
+    blit: rendrs::BlitPass,
 }
 impl RenderPipeline {
     fn revalidate(&mut self, render_pool: &RenderPool) {
@@ -166,25 +187,25 @@ impl RenderPipeline {
         self.attr_interp.revalidate(render_pool);
 
         // shading
-        self.shade_pbr.revalidate(render_pool);
-        self.shade_debug_attrib.revalidate(render_pool);
-        self.skybox_draw_pass.revalidate(render_pool);
+        self.shading_pbr.revalidate(render_pool);
+        self.shading_attributes.revalidate(render_pool);
 
         // post vfx
-        self.tonemap_vfx_pass.revalidate(render_pool);
+        self.post_draw_skybox.revalidate(render_pool);
+        self.post_tonemap.revalidate(render_pool);
 
         // debug visuals
-        self.debug_lattice_draw_pass.revalidate(render_pool);
-        self.debug_cage_draw_pass.revalidate(render_pool);
+        self.debug_draw_lattice.revalidate(render_pool);
+        self.debug_draw_cages.revalidate(render_pool);
         #[cfg(feature = "devmode")]
-        self.debug_lines_draw_pass.revalidate(render_pool);
+        self.debug_draw_lines.revalidate(render_pool);
 
         // interface
-        self.interface_draw_pass.revalidate(render_pool);
+        self.draw_interface.revalidate(render_pool);
 
         // utilities
-        self.blit_pass.revalidate(render_pool);
-        self.clear_pass.revalidate(render_pool);
+        self.blit.revalidate(render_pool);
+        self.clear.revalidate(render_pool);
     }
 }
 
@@ -204,23 +225,22 @@ impl Default for PersistentShaderBuffers {
 
 #[derive(Debug, Default)]
 pub struct RenderShaders {
-    shade_pbr: pass::ComputeShaderShadePbr,
-    shade_debug_attrib: pass::ComputeShaderShadeDebugAttribs,
+    shading_pbr: ComputeShaderShadingPbr,
+    shading_attributes: ComputeShaderShadingAttributes,
 
-    skybox: pass::ShaderSkybox,
+    post_skybox: ShaderPostSkybox,
+    post_tonemap: ComputeShaderPostTonemap,
 
-    lattice: pass::ShaderDebugLattice,
-    cage_visual: pass::debug_cage_draw::ShaderDebugCage,
-
-    interface: gui::render::ShaderUiBasic,
-
-    cage_deform: pass::ComputeShaderCageDeform,
-    util_equirect_decode: pass::ComputeShaderEquirectDecode,
-
-    vfx_tonemap: pass::ComputeShaderTonemap,
+    debug_draw_lattices: ShaderDebugDrawLattices,
+    debug_draw_cages: ShaderDebugDrawCages,
 
     #[cfg(feature = "devmode")]
-    lines: pass::ShaderDebugLines,
+    debug_draw_lines: ShaderDebugDrawLines,
+
+    draw_interface: gui::render::ShaderUiBasic,
+
+    task_deform_cages: ComputeShaderTaskDeformCages,
+    util_equirect_decode: ComputeShaderUtilEquirectDecode,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -304,33 +324,30 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         self.setup_debug_lines(view);
 
         let RenderShaders {
-            lattice,
-            // fragments: frags,
-            // debris,
-            skybox,
-            cage_visual,
-            interface,
-            #[cfg(feature = "devmode")]
-            lines,
+            post_skybox,
+            debug_draw_lattices,
+            debug_draw_cages,
+            debug_draw_lines,
+            draw_interface,
             ..
         } = &self.shaders;
 
-        interface.uniform_projection_mat4(self.view_data.ortho_proj_mat);
+        draw_interface.uniform_projection_mat4(self.view_data.ortho_proj_mat);
 
-        lattice.uniform_projection_mat4(proj_mat);
-        lattice.uniform_view_mat4(view_mat);
+        debug_draw_lattices.uniform_projection_mat4(proj_mat);
+        debug_draw_lattices.uniform_view_mat4(view_mat);
 
-        cage_visual.uniform_projection_mat4(proj_mat);
-        cage_visual.uniform_view_mat4(view_mat);
+        debug_draw_cages.uniform_projection_mat4(proj_mat);
+        debug_draw_cages.uniform_view_mat4(view_mat);
 
         #[cfg(feature = "devmode")]
         {
-            lines.uniform_projection_mat4(proj_mat);
-            lines.uniform_view_mat4(view_mat);
+            debug_draw_lines.uniform_projection_mat4(proj_mat);
+            debug_draw_lines.uniform_view_mat4(view_mat);
         }
 
-        skybox.uniform_projection_mat4(proj_mat);
-        skybox.uniform_view_mat4(view_mat);
+        post_skybox.uniform_projection_mat4(proj_mat);
+        post_skybox.uniform_view_mat4(view_mat);
 
         // copy requested glyphs to atlas
         {
@@ -368,22 +385,20 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         // cage deformation (derive cov. + svd) compute pass
         {
-            use pass::cage_deform_compute::CageDeformComputeCtx;
-
-            let ctx = CageDeformComputeCtx {
+            let ctx = TaskDeformCagesCtx {
                 total_cage_count: cage_count,
                 cage_data: &frame_data.cages,
                 lattice_data: &frame_data.lattice_debug,
                 cage_feedback: &frame_data.cage_feedback,
             };
 
-            self.shaders.cage_deform.bind();
+            self.shaders.task_deform_cages.bind();
             self.shaders
-                .cage_deform
+                .task_deform_cages
                 .uniform_total_cage_count_uint(cage_count);
 
             self.pipeline()
-                .cage_deform_compute_pass
+                .task_deform_cages
                 .execute(section, render_pool, &ctx);
         }
         janus::gl::barrier_shader_storage();
@@ -494,9 +509,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         }
 
         // clear all render-targets once
-        self.pipeline()
-            .clear_pass
-            .execute(section, render_pool, &());
+        self.pipeline().clear.execute(section, render_pool, &());
 
         // rasterization
         {
@@ -545,14 +558,14 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             let irradiance_sh = &self.shader_buffers().irradiance_sh_coeffs;
             let materials_buf = &self.shader_buffers().materials;
 
-            let render_mode = frame_data.debug_shading_mode.get();
+            let render_mode = frame_data.shading_attributes_mode.get();
             match render_mode {
                 None => {
-                    let shader = &self.shaders.shade_pbr;
-                    self.pipeline().shade_pbr.execute(
+                    let shader = &self.shaders.shading_pbr;
+                    self.pipeline().shading_pbr.execute(
                         section,
                         render_pool,
-                        &ShadePbrCtx {
+                        &ShadingPbrCtx {
                             shader,
                             gbank,
                             irradiance_sh,
@@ -565,11 +578,11 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     );
                 }
                 Some(mode) => {
-                    let shader = &self.shaders.shade_debug_attrib;
-                    self.pipeline().shade_debug_attrib.execute(
+                    let shader = &self.shaders.shading_attributes;
+                    self.pipeline().shading_attributes.execute(
                         section,
                         render_pool,
-                        &ShadeDebugAttribsCtx {
+                        &ShadingAttributesCtx {
                             shader,
                             resolution,
                             view_data,
@@ -583,7 +596,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         // skybox draw pass
         {
             self.pipeline()
-                .skybox_draw_pass
+                .post_draw_skybox
                 .execute(section, render_pool, &());
         }
 
@@ -592,23 +605,23 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
         // tonemapping + gamma correction vfx pass
         {
             let render_params = &frame_data.render_params;
-            let ctx = pass::TonemapVfxCtx {
-                shader: &self.shaders.vfx_tonemap,
+            let ctx = PostTonemapCtx {
+                shader: &self.shaders.post_tonemap,
                 resolution: self.resolution,
                 render_params,
             };
             self.pipeline()
-                .tonemap_vfx_pass
+                .post_tonemap
                 .execute(section, render_pool, &ctx);
         }
 
         // lattice & cage optional viz. draw passes
         {
             if render_doptions.draw_viz_lattice {
-                self.pipeline().debug_lattice_draw_pass.execute(
+                self.pipeline().debug_draw_lattice.execute(
                     section,
                     render_pool,
-                    &DebugLatticeDrawCtx {
+                    &DebugDrawLatticesCtx {
                         lattice_data: &frame_data.lattice_debug,
                         constraints_count: frame_data
                             .lattice_constraint_count
@@ -618,10 +631,10 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 );
             }
             if render_doptions.draw_viz_cage {
-                self.pipeline().debug_cage_draw_pass.execute(
+                self.pipeline().debug_draw_cages.execute(
                     section,
                     render_pool,
-                    &DebugCageDrawCtx {
+                    &DebugDrawCagesCtx {
                         cage_data: &frame_data.cages,
                         point_size: 8.0,
                         cage_total_count: frame_data.cage_points_count.load(Ordering::Acquire),
@@ -630,30 +643,31 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             }
         }
 
-        self.pipeline().blit_pass.execute(section, render_pool, &());
+        self.pipeline().blit.execute(section, render_pool, &());
 
         // interface draw pass
         {
             let ctx = UiDrawPassCtx {
-                ui_shader: &self.shaders.interface,
+                ui_shader: &self.shaders.draw_interface,
                 data: &frame_data.interface_storage,
                 commands: &frame_data.interface_commands,
             };
             self.pipeline()
-                .interface_draw_pass
+                .draw_interface
                 .execute(section, render_pool, &ctx);
         }
 
         // debug lines draw pass
         #[cfg(feature = "devmode")]
         {
-            use crate::render::pass::debug_lines_draw::DebugLinesDrawCtx;
-            let ctx = DebugLinesDrawCtx {
+            use crate::render::debug::draw_lines::DebugDrawLinesCtx;
+
+            let ctx = DebugDrawLinesCtx {
                 lines_data: &frame_data.lines_debug,
                 lines_buffer: &self.lines_debug_buffer,
             };
             self.pipeline()
-                .debug_lines_draw_pass
+                .debug_draw_lines
                 .execute(section, render_pool, &ctx);
         }
     }
@@ -745,9 +759,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             };
 
             self.pipeline = Some(RenderPipeline {
-                cage_deform_compute_pass: pass::cage_deform_compute::pass(
-                    &self.shaders.cage_deform,
-                ),
+                task_deform_cages: task::deform_cages_pass(&self.shaders.task_deform_cages),
 
                 geom_fragments: geometry::geom_fragments_pass_with_shader(geom_fragments_shader),
                 geom_debris: geometry::geom_debris_pass_with_shader(geom_debris_shader),
@@ -769,8 +781,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     ImageObject::PoolTarget(attr_gradients),
                 ),
 
-                shade_pbr: pass::shade_pbr_pass(
-                    &self.shaders.shade_pbr,
+                shading_pbr: shading::pbr_pass(
+                    &self.shaders.shading_pbr,
                     dev_materials.sampler(),
                     baked_brdf_spec,
                     debug_env_refprobe,
@@ -780,43 +792,39 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     ImageObject::PoolTarget(attr_spaceframe),
                     ImageObject::PoolTarget(attr_gradients),
                 ),
-                shade_debug_attrib: pass::shade_debug_attribs_pass(
-                    &self.shaders.shade_debug_attrib,
+                shading_attributes: shading::attributes_pass(
+                    &self.shaders.shading_attributes,
                     ImageObject::PoolTarget(geom_raster),
                     ImageObject::PoolTarget(base_hdr),
                     ImageObject::PoolTarget(attr_spaceframe),
                     ImageObject::PoolTarget(attr_gradients),
                 ),
-                skybox_draw_pass: pass::skybox_draw::pass(
-                    &self.shaders.skybox,
+
+                post_draw_skybox: post::draw_skybox_pass(
+                    &self.shaders.post_skybox,
                     skybox_sampler,
                     base_hdr,
                     base_depth,
                 ),
+                post_tonemap: post::tonemap_pass(&self.shaders.post_tonemap, base_hdr, mapped_ldr),
 
-                tonemap_vfx_pass: pass::tonemap_compute::pass(
-                    &self.shaders.vfx_tonemap,
-                    base_hdr,
-                    mapped_ldr,
-                ),
-
-                debug_cage_draw_pass: pass::debug_cage_draw::pass(
-                    &self.shaders.cage_visual,
+                debug_draw_cages: debug::draw_cages_pass(
+                    &self.shaders.debug_draw_cages,
                     mapped_ldr,
                     base_depth,
                 ),
-                debug_lattice_draw_pass: pass::debug_lattice_draw::pass(
-                    &self.shaders.lattice,
+                debug_draw_lattice: debug::draw_lattices_pass(
+                    &self.shaders.debug_draw_lattices,
                     mapped_ldr,
                     base_depth,
                 ),
                 #[cfg(feature = "devmode")]
-                debug_lines_draw_pass: pass::debug_lines_draw::pass(&self.shaders.lines),
+                debug_draw_lines: debug::draw_lines_pass(&self.shaders.debug_draw_lines),
 
-                interface_draw_pass: gui::render::pass(&self.shaders.interface),
+                draw_interface: gui::render::pass(&self.shaders.draw_interface),
 
-                blit_pass: rendrs::BlitPass::new(mapped_ldr),
-                clear_pass: rendrs::ClearPass::new([
+                blit: rendrs::BlitPass::new(mapped_ldr),
+                clear: rendrs::ClearPass::new([
                     OutputObject::Color(base_hdr),
                     OutputObject::Color(mapped_ldr),
                     OutputObject::Depth(base_depth),
@@ -858,23 +866,24 @@ impl Renderer {
 
     fn initialize_shaders(&mut self) {
         tracing::info!("[shaders] init");
-        self.shaders.shade_pbr = pass::ComputeShaderShadePbr::new_compiled();
-        self.shaders.shade_debug_attrib = pass::ComputeShaderShadeDebugAttribs::new_compiled();
-        self.shaders.skybox = pass::ShaderSkybox::new_compiled();
+        self.shaders.task_deform_cages = ComputeShaderTaskDeformCages::new_compiled();
 
-        self.shaders.vfx_tonemap = pass::ComputeShaderTonemap::new_compiled();
+        self.shaders.shading_pbr = ComputeShaderShadingPbr::new_compiled();
+        self.shaders.shading_attributes = ComputeShaderShadingAttributes::new_compiled();
 
-        self.shaders.lattice = pass::ShaderDebugLattice::new_compiled();
-        self.shaders.cage_deform = pass::ComputeShaderCageDeform::new_compiled();
-        self.shaders.cage_visual = pass::ShaderDebugCage::new_compiled();
+        self.shaders.post_skybox = ShaderPostSkybox::new_compiled();
+        self.shaders.post_tonemap = ComputeShaderPostTonemap::new_compiled();
+
+        self.shaders.debug_draw_lattices = ShaderDebugDrawLattices::new_compiled();
+        self.shaders.debug_draw_cages = ShaderDebugDrawCages::new_compiled();
         #[cfg(feature = "devmode")]
         {
-            self.shaders.lines = pass::ShaderDebugLines::new_compiled();
+            self.shaders.debug_draw_lines = ShaderDebugDrawLines::new_compiled();
         }
 
-        self.shaders.interface = gui::render::ShaderUiBasic::new_compiled();
+        self.shaders.draw_interface = gui::render::ShaderUiBasic::new_compiled();
 
-        self.shaders.util_equirect_decode = pass::ComputeShaderEquirectDecode::new_compiled();
+        self.shaders.util_equirect_decode = ComputeShaderUtilEquirectDecode::new_compiled();
     }
 
     fn initialize_render_targets(&mut self, resolution: Resolution) {

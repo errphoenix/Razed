@@ -19,7 +19,7 @@ use crate::{
     render::{
         RenderGroup,
         graphics::{DebugRenderOptions, Gamma, Groundplane, RenderStats},
-        pass::ShadeDebugAttribsMode,
+        shading::attributes::ShadingAttributesMode,
     },
     simulation::{
         cage::CageSystem,
@@ -27,7 +27,7 @@ use crate::{
         fragment::{FragmentSystem, FragmentsRowTableView},
         lattice::{LatticeSystem, NodesRowTableView},
     },
-    structure::{DamageCloud, DamageFalloffModel, DamageSystem, DamageVolume},
+    structure::{DamageCloud, DamageFalloffModel, DamageOverlay, DamageSystem, DamageVolume},
 };
 use ::physics::xpbd::{RawXpbdLattice, XpbdOptions, XpbdSolver};
 use ethel::{
@@ -154,7 +154,7 @@ pub struct State {
     pub frag_meshmap: FxSpatialHash<ethel::mesh::Id>,
 
     selected_material: u32,
-    debug_shading_mode: Option<ShadeDebugAttribsMode>,
+    attributes_shading_mode: Option<ShadingAttributesMode>,
     // render stats copy from render thread
     render_stats_cpy: RenderStats,
 }
@@ -197,7 +197,7 @@ impl Default for State {
             perf_avg: Default::default(),
             glyph_pipe: None,
             selected_material: 1,
-            debug_shading_mode: None,
+            attributes_shading_mode: None,
             render_stats_cpy: RenderStats::default(),
             damage_sys: DamageSystem::new(),
             damage_mode: false,
@@ -294,8 +294,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             // upload render params, other opts
             {
                 let _ = storage
-                    .debug_shading_mode
-                    .set_and_advance(self.debug_shading_mode);
+                    .shading_attributes_mode
+                    .set_and_advance(self.attributes_shading_mode);
 
                 let render_params = &storage.render_params;
 
@@ -889,9 +889,10 @@ impl State {
                     .unwrap_or_default();
 
                 match shade_mode {
-                    0 => self.debug_shading_mode = None,
+                    0 => self.attributes_shading_mode = None,
                     set => {
-                        self.debug_shading_mode = ShadeDebugAttribsMode::try_from_id(set as u32 - 1)
+                        self.attributes_shading_mode =
+                            ShadingAttributesMode::try_from_id(set as u32 - 1)
                     }
                 }
             }

@@ -3,23 +3,24 @@ use rendrs::pipeline::{ComputePass, ImageObjectTarget};
 
 /// Assumes input equirectangular (aka lat-long map) and output cubemap to be
 /// in rgba16f format.
-pub type EquirectDecodePass = ComputePass<EquirectDecodeCtxWrapper, 0, 0>;
+pub type UtilEquirectDecodePass = ComputePass<UtilEquirectDecodeCtxWrapper, 0, 0>;
 
 /// Images are passed in ctx to allow for the pass to be reused for different
 /// conversions.
 #[derive(Debug)]
-pub struct EquirectDecodeCtx<'ctx> {
-    pub shader: &'ctx ComputeShaderEquirectDecode,
+pub struct UtilEquirectDecodeCtx<'ctx> {
+    pub shader: &'ctx ComputeShaderUtilEquirectDecode,
     pub src_equirect: ImageObjectTarget,
     pub dst_cubemap: ImageObjectTarget,
 }
+rendrs::context_wrapper!(for<'ctx> UtilEquirectDecodeCtx);
 
-rendrs::context_wrapper!(for<'ctx> EquirectDecodeCtx);
-
-pub const fn pass(shader: &ComputeShaderEquirectDecode) -> EquirectDecodePass {
+pub const fn equirect_decode_pass(
+    shader: &ComputeShaderUtilEquirectDecode,
+) -> UtilEquirectDecodePass {
     let handle_view = shader.compute_handle().view();
-    EquirectDecodePass::new(handle_view, [], [], |_, ctx| {
-        let EquirectDecodeCtx {
+    UtilEquirectDecodePass::new(handle_view, [], [], |_, ctx| {
+        let UtilEquirectDecodeCtx {
             shader,
             src_equirect,
             dst_cubemap,
@@ -51,7 +52,7 @@ pub const IMAGE_BINDING_SRC_EQUIRECT: u32 = 0;
 pub const IMAGE_BINDING_DST_CUBEMAP: u32 = 1;
 
 ethel::shader_glsl_compute! {
-    struct EquirectDecode > [460] {
+    struct UtilEquirectDecode > [460] {
         workgroup [8, 8, 1];
 
         uniform {

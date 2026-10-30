@@ -5,23 +5,22 @@ use rendrs::pipeline::{DrawPass, OutputObject, RenderTargetAccessor};
 
 use crate::render::shader_commons;
 
-pub type DebugLatticeDrawPass = DrawPass<DebugLatticeDrawCtxWrapper, 0, 2>;
+pub type DebugDrawLatticesPass = DrawPass<DebugDrawLatticesCtxWrapper, 0, 2>;
 
 #[derive(Debug)]
-pub struct DebugLatticeDrawCtx<'data> {
+pub struct DebugDrawLatticesCtx<'data> {
     pub lattice_data: &'data PartitionedTriBuffer<4>,
     pub constraints_count: i32,
 }
+rendrs::context_wrapper!(for<'ctx> DebugDrawLatticesCtx);
 
-rendrs::context_wrapper!(for<'ctx> DebugLatticeDrawCtx);
-
-pub const fn pass(
-    shader: &ShaderDebugLattice,
+pub const fn draw_lattices_pass(
+    shader: &ShaderDebugDrawLattices,
     ldr_output: RenderTargetAccessor,
     depth_output: RenderTargetAccessor,
-) -> DebugLatticeDrawPass {
+) -> DebugDrawLatticesPass {
     let handle_view = shader.handle().view();
-    DebugLatticeDrawPass::new(
+    DebugDrawLatticesPass::new(
         handle_view,
         [],
         [
@@ -69,7 +68,7 @@ pub const SSBO_INDEX_I_SELECTED: u32 = ssbo_binding!(I_Selected);
 pub const SSBO_INDEX_IMAP_NODES: u32 = ssbo_binding!(IMap_Nodes);
 
 ethel::shader_glsl! {
-    struct DebugLattice > [460] {
+    struct DebugDrawLattices > [460] {
         common {};
 
         unit ShaderKind::Vertex => [

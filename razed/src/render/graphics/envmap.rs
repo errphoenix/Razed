@@ -19,8 +19,10 @@ use rendrs::{
     pipeline::{ImageAccessKind, ImageObject, ImageObjectTarget, Pass, RenderPool, SamplerObject},
 };
 
-use crate::render::pass::{
-    ComputeShaderEquirectDecode, EquirectDecodeCtx, equirect_decode_compute,
+use crate::render::util::{
+    self,
+    equirect_decode::{ComputeShaderUtilEquirectDecode, UtilEquirectDecodeCtx},
+    equirect_decode_pass,
 };
 
 pub const ENVMAP_MIPS: i32 = FILTERING_MIP_COUNT as i32;
@@ -77,20 +79,20 @@ pub fn load_environment_map(texture_assets: &mut TextureRegistry) -> (TextureVie
 
     {
         // equirectangular to cubemap conversion
-        let shader = ComputeShaderEquirectDecode::new_compiled();
-        let decode_pass = equirect_decode_compute::pass(&shader);
-        let decode_ctx = EquirectDecodeCtx {
+        let shader = ComputeShaderUtilEquirectDecode::new_compiled();
+        let decode_pass = equirect_decode_pass(&shader);
+        let decode_ctx = UtilEquirectDecodeCtx {
             shader: &shader,
             src_equirect: ImageObjectTarget::new(
                 ImageObject::from_direct_texture(equirect_tex.view()),
                 ImageAccessKind::ReadOnly,
-                equirect_decode_compute::IMAGE_BINDING_SRC_EQUIRECT,
+                util::equirect_decode::IMAGE_BINDING_SRC_EQUIRECT,
                 None,
             ),
             dst_cubemap: ImageObjectTarget::new(
                 ImageObject::from_direct_texture(cubemap_tex.view()),
                 ImageAccessKind::WriteOnly,
-                equirect_decode_compute::IMAGE_BINDING_DST_CUBEMAP,
+                util::equirect_decode::IMAGE_BINDING_DST_CUBEMAP,
                 None,
             ),
         };

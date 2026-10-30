@@ -9,21 +9,20 @@ use crate::{
     simulation::cage::{self, OffsetRotation},
 };
 
-pub type CageDeformComputePass = ComputePass<CageDeformComputeCtxWrapper, 0, 0>;
+pub type TaskDeformCagesPass = ComputePass<TaskDeformCagesCtxWrapper, 0, 0>;
 
 #[derive(Debug)]
-pub struct CageDeformComputeCtx<'data> {
+pub struct TaskDeformCagesCtx<'data> {
     pub total_cage_count: u32,
     pub cage_data: &'data CagePartitionedBuffer,
     pub cage_feedback: &'data TriBuffer<OffsetRotation>,
     pub lattice_data: &'data PartitionedTriBuffer<4>,
 }
+rendrs::context_wrapper!(for<'ctx> TaskDeformCagesCtx);
 
-rendrs::context_wrapper!(for<'ctx> CageDeformComputeCtx);
-
-pub const fn pass(shader: &ComputeShaderCageDeform) -> CageDeformComputePass {
+pub const fn deform_cages_pass(shader: &ComputeShaderTaskDeformCages) -> TaskDeformCagesPass {
     let handle_view = shader.compute_handle().view();
-    CageDeformComputePass::new(handle_view, [], [], |section, ctx| {
+    TaskDeformCagesPass::new(handle_view, [], [], |section, ctx| {
         let section = section.as_index();
 
         ctx.lattice_data.bind_shader_storage_single(
@@ -143,7 +142,7 @@ ethel::shader_glsl_struct! {
 }
 
 ethel::shader_glsl_compute! {
-    struct CageDeform > [460] {
+    struct TaskDeformCages > [460] {
         workgroup [64, 1, 1];
 
         uniform {

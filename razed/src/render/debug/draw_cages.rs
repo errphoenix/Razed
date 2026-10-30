@@ -3,24 +3,23 @@ use rendrs::pipeline::{DrawPass, OutputObject, RenderTargetAccessor};
 
 use crate::{data::CagePartitionedBuffer, simulation::cage};
 
-pub type DebugCageDrawPass = DrawPass<DebugCageDrawCtxWrapper, 0, 2>;
+pub type DebugDrawCagesPass = DrawPass<DebugDrawCagesCtxWrapper, 0, 2>;
 
 #[derive(Debug)]
-pub struct DebugCageDrawCtx<'data> {
+pub struct DebugDrawCagesCtx<'data> {
     pub cage_data: &'data CagePartitionedBuffer,
     pub point_size: f32,
     pub cage_total_count: u32,
 }
+rendrs::context_wrapper!(for<'ctx> DebugDrawCagesCtx);
 
-rendrs::context_wrapper!(for<'ctx> DebugCageDrawCtx);
-
-pub const fn pass(
-    shader: &ShaderDebugCage,
+pub const fn draw_cages_pass(
+    shader: &ShaderDebugDrawCages,
     ldr_output: RenderTargetAccessor,
     depth_output: RenderTargetAccessor,
-) -> DebugCageDrawPass {
+) -> DebugDrawCagesPass {
     let handle_view = shader.handle().view();
-    DebugCageDrawPass::new(
+    DebugDrawCagesPass::new(
         handle_view,
         [],
         [
@@ -56,7 +55,7 @@ pub const SSBO_INDEX_POD_CAGE_REFERENCE: u32 = ssbo_binding!(POD_Cage_Reference)
 pub const SSBO_INDEX_POD_CAGE_POINTS: u32 = ssbo_binding!(POD_Cage_Points);
 
 ethel::shader_glsl! {
-    struct DebugCage > [460] {
+    struct DebugDrawCages > [460] {
         common {};
 
         unit ShaderKind::Vertex => [

@@ -7,24 +7,23 @@ use rendrs::{
 
 use crate::render::graphics::RenderParams;
 
-pub type TonemapVfxPass = ComputePass<TonemapVfxCtxWrapper, 0, 2>;
+pub type PostTonemapPass = ComputePass<PostTonemapCtxWrapper, 0, 2>;
 
 #[derive(Debug)]
-pub struct TonemapVfxCtx<'ctx> {
-    pub shader: &'ctx ComputeShaderTonemap,
+pub struct PostTonemapCtx<'ctx> {
+    pub shader: &'ctx ComputeShaderPostTonemap,
     pub resolution: PixelResolution,
     pub render_params: &'ctx RenderParams,
 }
+rendrs::context_wrapper!(for<'ctx> PostTonemapCtx);
 
-rendrs::context_wrapper!(for<'ctx> TonemapVfxCtx);
-
-pub const fn pass(
-    shader: &ComputeShaderTonemap,
+pub const fn tonemap_pass(
+    shader: &ComputeShaderPostTonemap,
     src_hdr: RenderTargetAccessor,
     dst_ldr: RenderTargetAccessor,
-) -> TonemapVfxPass {
+) -> PostTonemapPass {
     let handle_view = shader.compute_handle().view();
-    TonemapVfxPass::new(
+    PostTonemapPass::new(
         handle_view,
         [],
         [
@@ -63,7 +62,7 @@ pub const IMAGE_BINDING_DST: u32 = 7;
 pub const WORKGROUP_SIZE_XY: u32 = 8;
 
 ethel::shader_glsl_compute! {
-    struct Tonemap > [460] {
+    struct PostTonemap > [460] {
         workgroup [8, 8, 1];
 
         uniform {

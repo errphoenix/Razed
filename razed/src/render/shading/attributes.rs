@@ -6,15 +6,15 @@ use rendrs::{
 
 use crate::render::ViewData;
 
-pub type ShadeDebugAttribsPass = ComputePass<ShadeDebugAttribsCtxWrapper, 0, 4>;
+pub type ShadingAttributesPass = ComputePass<ShadingAttributesCtxWrapper, 0, 4>;
 
-pub const fn shade_debug_attribs_pass(
-    shader: &ComputeShaderShadeDebugAttribs,
+pub const fn attributes_pass(
+    shader: &ComputeShaderShadingAttributes,
     raster_in: ImageObject,
     shade_out: ImageObject,
     attr_frame_in: ImageObject,
     attr_grads_in: ImageObject,
-) -> ShadeDebugAttribsPass {
+) -> ShadingAttributesPass {
     let handle_view = shader.compute_handle().view();
     let raster_in = ImageObjectTarget::new(
         raster_in,
@@ -40,12 +40,12 @@ pub const fn shade_debug_attribs_pass(
         IMAGE_BIND_ATTR_GRADS_IN,
         None,
     );
-    ShadeDebugAttribsPass::new(
+    ShadingAttributesPass::new(
         handle_view,
         [],
         [raster_in, shade_out, attr_frame_in, attr_grads_in],
         |_, ctx| {
-            let ShadeDebugAttribsCtx {
+            let ShadingAttributesCtx {
                 shader,
                 resolution,
                 view_data,
@@ -66,13 +66,13 @@ pub const fn shade_debug_attribs_pass(
 
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ShadeDebugAttribsMode {
+pub enum ShadingAttributesMode {
     BarycentricWeights = 0,
     TangentFrame = 1,
     UvScreenDerivatives = 2,
     VisibilityBuffer = 3,
 }
-impl ShadeDebugAttribsMode {
+impl ShadingAttributesMode {
     pub const fn try_from_id(id: u32) -> Option<Self> {
         match id {
             0 => Some(Self::BarycentricWeights),
@@ -85,15 +85,15 @@ impl ShadeDebugAttribsMode {
 }
 
 #[derive(Debug)]
-pub struct ShadeDebugAttribsCtx<'ctx> {
-    pub shader: &'ctx ComputeShaderShadeDebugAttribs,
+pub struct ShadingAttributesCtx<'ctx> {
+    pub shader: &'ctx ComputeShaderShadingAttributes,
 
     pub resolution: PixelResolution,
     pub view_data: ViewData,
 
-    pub mode: ShadeDebugAttribsMode,
+    pub mode: ShadingAttributesMode,
 }
-rendrs::context_wrapper!(for<'ctx> ShadeDebugAttribsCtx);
+rendrs::context_wrapper!(for<'ctx> ShadingAttributesCtx);
 
 pub const IMAGE_BIND_RASTER_IN: u32 = 4;
 pub const IMAGE_BIND_SHADE_OUT: u32 = 5;
@@ -103,7 +103,7 @@ pub const IMAGE_BIND_ATTR_GRADS_IN: u32 = 7;
 pub const WORKGROUP_SIZE_XY: u32 = 8;
 
 ethel::shader_glsl_compute! {
-    struct ShadeDebugAttribs > [460] {
+    struct ShadingAttributes > [460] {
         workgroup [8, 8, 1];
 
         uniform {

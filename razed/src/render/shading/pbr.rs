@@ -9,10 +9,10 @@ use crate::{
     render::{ViewData, geometry::GeometryBank},
 };
 
-pub type ShadePbrPass = ComputePass<ShadePbrCtxWrapper, 4, 4>;
+pub type ShadingPbrPass = ComputePass<ShadingPbrCtxWrapper, 4, 4>;
 
-pub const fn shade_pbr_pass(
-    shader: &ComputeShaderShadePbr,
+pub const fn pbr_pass(
+    shader: &ComputeShaderShadingPbr,
     texmap: SamplerObject,
     env_brdf: SamplerObject,
     env_dbgmap: SamplerObject,
@@ -21,7 +21,7 @@ pub const fn shade_pbr_pass(
     shade_out: ImageObject,
     attr_frame_in: ImageObject,
     attr_grads_in: ImageObject,
-) -> ShadePbrPass {
+) -> ShadingPbrPass {
     let handle_view = shader.compute_handle().view();
 
     let texmap = Sampler::wrap(texmap, SAMPLER_UNIT_TEXTURE_MAP);
@@ -53,12 +53,12 @@ pub const fn shade_pbr_pass(
         IMAGE_BIND_ATTR_GRADS_IN,
         None,
     );
-    ShadePbrPass::new(
+    ShadingPbrPass::new(
         handle_view,
         [texmap, env_brdf, env_dbgmap, depth_buffer],
         [raster_in, shade_out, attr_frame_in, attr_grads_in],
         |_, ctx| {
-            let ShadePbrCtx {
+            let ShadingPbrCtx {
                 shader,
                 gbank,
                 irradiance_sh,
@@ -90,8 +90,8 @@ pub const fn shade_pbr_pass(
 }
 
 #[derive(Debug)]
-pub struct ShadePbrCtx<'ctx> {
-    pub shader: &'ctx ComputeShaderShadePbr,
+pub struct ShadingPbrCtx<'ctx> {
+    pub shader: &'ctx ComputeShaderShadingPbr,
 
     pub gbank: &'ctx GeometryBank,
     pub irradiance_sh: &'ctx ShCoeffsBuffer,
@@ -103,7 +103,7 @@ pub struct ShadePbrCtx<'ctx> {
     pub dparam_bias_rough: f32,
     pub dparam_bias_metal: f32,
 }
-rendrs::context_wrapper!(for<'ctx> ShadePbrCtx);
+rendrs::context_wrapper!(for<'ctx> ShadingPbrCtx);
 
 pub const IMAGE_BIND_RASTER_IN: u32 = 4;
 pub const IMAGE_BIND_SHADE_OUT: u32 = 5;
@@ -130,7 +130,7 @@ pub const SSBO_BIND_PROBE_IRRADIANCE: u32 = ssbo_binding!(Probe_Irradiance);
 pub const SSBO_BIND_MATERIALS: u32 = ssbo_binding!(Materials);
 
 ethel::shader_glsl_compute! {
-    struct ShadePbr > [460] {
+    struct ShadingPbr > [460] {
         workgroup [8, 8, 1];
 
         uniform {

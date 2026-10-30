@@ -12,7 +12,7 @@ use janus::sync::TriVec;
 
 use crate::{
     data::{CagePartitionedBuffer, LayoutCage},
-    render::pass::{CagePoints, LatticeAttachments, NodeAttachment},
+    render::task::deform_cages::{CagePoints, LatticeAttachments, NodeAttachment},
     simulation::lattice::NodesRowTableView,
 };
 

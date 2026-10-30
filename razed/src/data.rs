@@ -4,11 +4,13 @@ use crate::{
     render::{
         self,
         graphics::{DebugRenderOptions, Groundplane, RenderParams, RenderStats},
-        pass::{CagePoints, ShadeDebugAttribsMode},
+        shading::attributes::ShadingAttributesMode,
+        task::deform_cages::{CagePoints, LatticeAttachments},
     },
     simulation::cage::{
         CageSyncFrameBuffers, OffsetRotation, PER_CAGE_MAX_LATTICE_ATTACHMENTS, PER_CAGE_POINTS,
     },
+    structure::DamageOverlay,
 };
 use ethel::{
     DirectIndex, IndirectIndex, PartitionedTriBuffer, TriBuffer, layout_buffer, layout_mesh_buffer,
@@ -47,24 +49,24 @@ layout_buffer! {
         enum Constraints: LATTICE_CONSTRAINT_ALLOC => {
             type [IndirectIndex; 2];
             bind 0;
-            shader render::pass::debug_lattice_draw::SSBO_INDEX_POD_CONSTRAINTS;
+            shader render::debug::draw_lattices::SSBO_INDEX_POD_CONSTRAINTS;
         };
 
         enum IMapNodes: LATTICE_NODE_ALLOC => {
             type IndirectIndex;
             bind 1;
-            shader render::pass::debug_lattice_draw::SSBO_INDEX_IMAP_NODES;
+            shader render::debug::draw_lattices::SSBO_INDEX_IMAP_NODES;
         };
         enum PodNodes: LATTICE_CONSTRAINT_ALLOC => {
             type [f32; 4];
             bind 2;
-            shader render::pass::debug_lattice_draw::SSBO_INDEX_POD_NODES;
+            shader render::debug::draw_lattices::SSBO_INDEX_POD_NODES;
         };
 
         enum I_Selected: 1 => {
             type DirectIndex;
             bind 3;
-            shader render::pass::debug_lattice_draw::SSBO_INDEX_I_SELECTED;
+            shader render::debug::draw_lattices::SSBO_INDEX_I_SELECTED;
         };
     }
 }
@@ -99,37 +101,37 @@ ethel::typed_part_buffer! {
         enum Pod_BindRef: CAGES_ALLOC => {
             type glam::Vec4;
             bind 1;
-            shader render::pass::cage_deform_compute::SSBO_INDEX_POD_BIND_REF;
+            shader render::task::deform_cages::SSBO_INDEX_POD_BIND_REF;
         };
         enum Pod_Points: CAGES_ALLOC => {
             type CagePoints;
             bind 2;
-            shader render::pass::cage_deform_compute::SSBO_INDEX_POD_POINTS;
+            shader render::task::deform_cages::SSBO_INDEX_POD_POINTS;
         };
         enum Pod_Points_Bind: CAGES_ALLOC => {
             type CagePoints;
             bind 3;
-            shader render::pass::cage_deform_compute::SSBO_INDEX_POD_POINTS_BIND;
+            shader render::task::deform_cages::SSBO_INDEX_POD_POINTS_BIND;
         };
         enum Pod_Barycenter_Bind: CAGES_ALLOC => {
             type [glam::Vec4; PER_CAGE_POINTS];
             bind 4;
-            shader render::pass::cage_deform_compute::SSBO_INDEX_POD_BARYCENTER_BIND;
+            shader render::task::deform_cages::SSBO_INDEX_POD_BARYCENTER_BIND;
         };
         enum Pod_Attachments: CAGES_ALLOC => {
-            type [render::pass::LatticeAttachments; PER_CAGE_POINTS];
+            type [LatticeAttachments; PER_CAGE_POINTS];
             bind 5;
-            shader render::pass::cage_deform_compute::SSBO_INDEX_POD_ATTACHMENTS;
+            shader render::task::deform_cages::SSBO_INDEX_POD_ATTACHMENTS;
         };
         enum Pod_Lut_Lattice: CAGES_ALLOC => {
             type [IndirectIndex; PER_CAGE_MAX_LATTICE_ATTACHMENTS];
             bind 6;
-            shader render::pass::cage_deform_compute::SSBO_INDEX_POD_LUT_LATTICE;
+            shader render::task::deform_cages::SSBO_INDEX_POD_LUT_LATTICE;
         };
         enum Pod_Bind_Lattice: CAGES_ALLOC => {
             type [glam::Vec4; PER_CAGE_MAX_LATTICE_ATTACHMENTS];
             bind 7;
-            shader render::pass::cage_deform_compute::SSBO_INDEX_POD_BIND_LATTICE;
+            shader render::task::deform_cages::SSBO_INDEX_POD_BIND_LATTICE;
         };
     }
 }
@@ -139,17 +141,14 @@ layout_buffer! {
         enum PodPositions: DEBRIS_ALLOC => {
             type [f32; 4];
             bind 0;
-            shader render::pass::debris_draw::SSBO_INDEX_POD_POSITIONS;
         };
         enum PodRotations: DEBRIS_ALLOC => {
             type [f32; 4];
             bind 1;
-            shader render::pass::debris_draw::SSBO_INDEX_POD_ROTATIONS;
         };
         enum PodMeshId: DEBRIS_ALLOC => {
             type ethel::mesh::Id;
             bind 2;
-            shader render::pass::debris_draw::SSBO_INDEX_POD_MESHID;
         };
     }
 }
@@ -160,14 +159,19 @@ layout_buffer! {
         enum PodPoints: DEBUG_LINES_ALLOC => {
             type [f32; 4];
             bind 0;
-            shader render::pass::debug_lines_draw::SSBO_INDEX_POD_POINTS;
+            shader render::debug::draw_lines::SSBO_INDEX_POD_POINTS;
         };
         enum PodColors: DEBUG_LINES_ALLOC => {
             type [f32; 4];
             bind 1;
-            shader render::pass::debug_lines_draw::SSBO_INDEX_POD_COLORS;
+            shader render::debug::draw_lines::SSBO_INDEX_POD_COLORS;
         };
     }
+}
+
+#[derive(Debug, Copy, Clone, Default)]
+pub struct Overlays {
+    pub damage: DamageOverlay,
 }
 
 #[derive(Debug, Default)]
@@ -198,12 +202,14 @@ pub struct FrameDataBuffers {
 
     pub debug_material_index: TriCell<u32>,
 
-    pub debug_shading_mode: TriCell<Option<ShadeDebugAttribsMode>>,
+    pub shading_attributes_mode: TriCell<Option<ShadingAttributesMode>>,
     pub render_params: RenderParams,
     pub render_stats: TriCell<RenderStats>,
     pub debug_render_options: TriCell<DebugRenderOptions>,
 
     pub groundplane: TriCell<Groundplane>,
+
+    pub overlays: TriCell<Overlays>,
 }
 impl FrameDataBuffers {
     pub fn new() -> Self {
@@ -245,11 +251,12 @@ impl FrameDataBuffers {
             render_frame_last_duration: TriCell::new(DeltaTime::default()),
 
             debug_material_index: TriCell::new(0),
-            debug_shading_mode: TriCell::new(None),
+            shading_attributes_mode: TriCell::new(None),
             render_params: RenderParams::default(),
             render_stats: TriCell::new(RenderStats::default()),
             debug_render_options: Default::default(),
             groundplane: Default::default(),
+            overlays: Default::default(),
         }
     }
 }
