@@ -13,7 +13,7 @@ janus = { path = "../../janus", features = ["expose_gl", "render", "input", "job
 ethel = { path = "../../ethel", features = ["profile", "rayon", "assets"] }
 rendrs = { path = "../../rendrs", features = ["pack", "glam"] }
 physics = { path = "../physics" }
-polys = { path = "../polys" }
+polys = { path = "../polys", features = ["ethel"] }
 glam = "=0.31.0"
 log = "0.4.29"
 paste = "1.0.15"

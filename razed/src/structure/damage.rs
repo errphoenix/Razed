@@ -1,4 +1,25 @@
-use ethel::{Cell, FxLsSpatialHash, FxSpatialHash, SpatialHash};
+use ethel::{Cell, Column, FxLsSpatialHash, FxSpatialHash, SpatialHash};
+use glam::FloatExt;
+
+use crate::simulation::{
+    StructurePartIndex, StructureSpatialHash, fragment::FragmentSystem, lattice::LatticeSystem,
+};
+
+#[derive(Clone, Copy, Debug)]
+pub struct DamageOverlay {
+    pub visible: bool,
+    pub position: glam::Vec3,
+    pub volume: DamageVolume,
+}
+impl Default for DamageOverlay {
+    fn default() -> Self {
+        Self {
+            volume: DamageVolume::Spherical { radius: 0f32 },
+            visible: false,
+            position: glam::Vec3::ZERO,
+        }
+    }
+}
 
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]

@@ -157,6 +157,8 @@ pub struct State {
     attributes_shading_mode: Option<ShadingAttributesMode>,
     // render stats copy from render thread
     render_stats_cpy: RenderStats,
+
+    local_overlays: Overlays,
 }
 
 const CAMERA_YAW_CLAMP: std::ops::Range<f32> = f32::NEG_INFINITY..f32::INFINITY;
@@ -201,6 +203,7 @@ impl Default for State {
             render_stats_cpy: RenderStats::default(),
             damage_sys: DamageSystem::new(),
             damage_mode: false,
+            local_overlays: Overlays::default(),
             structure_hashed: FxLsSpatialHash::new(HASH_RESOLUTION),
         }
     }
@@ -354,6 +357,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                     uvscale: Groundplane::uvscale_from_normalized(groundplane_uvscale),
                     draw: groundplane_draw,
                 });
+
+                let _ = storage.overlays.set_and_advance(self.local_overlays);
             }
 
             // setup geometry data
@@ -773,26 +778,26 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 self.lattice.hash_nodes(&mut self.structure_hashed);
             });
 
+        self.local_overlays.damage = DamageOverlay::default();
+
         if input.keys().key_pressed(crate::input::MISC_DAMAGE_TOGGLE) {
             self.damage_mode = !self.damage_mode;
         }
+
         if self.damage_mode {
             const RAY_RANGE: f32 = 128f32;
             let vp = view_point.position;
-            let dir = view_point.forward();
+            let cursor = input.cursor().current_f32();
+            let inverse_view = view_point.into_mat4();
+            let mouse_world_dir = screen.to_world_space(cursor, inverse_view);
             let hashed = &self.structure_hashed;
 
-            let hit = hashed.raycast(vp, dir, RAY_RANGE).or_else(|| {
-                let cursor = input.cursor().current_f32();
-                let inverse_view = view_point.into_mat4();
-                let mouse_world_dir = screen.to_world_space(cursor, inverse_view);
-                if input.keys().key_pressed(crate::input::CAMERA_SET_ANCHOR) {
-                    let dy = mouse_world_dir.y;
-                    if dy.abs() > 0.001 {
-                        let t = -view_point.position.y / dy;
-                        let point = view_point.position + mouse_world_dir * t;
-                        return Some(hashed.cell_at(point));
-                    }
+            let hit = hashed.raycast(vp, mouse_world_dir, RAY_RANGE).or_else(|| {
+                let dy = mouse_world_dir.y;
+                if dy.abs() > 0.001 {
+                    let t = -view_point.position.y / dy;
+                    let point = view_point.position + mouse_world_dir * t;
+                    return Some(hashed.cell_at(point));
                 }
                 None
             });
@@ -804,6 +809,11 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 let position = hashed.approx_point_at(hit);
                 let volume = DamageVolume::Spherical {
                     radius: CLOUD_RADIUS,
+                };
+                self.local_overlays.damage = DamageOverlay {
+                    visible: true,
+                    position,
+                    volume,
                 };
                 if input.keys().key_pressed(crate::input::MISC_DAMAGE_SPAWN) {
                     tracing::info!("Spawn damage cloud at {position:?}");

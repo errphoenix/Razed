@@ -3,11 +3,12 @@ pub mod convex;
 pub mod mapped;
 pub mod post_process;
 
-#[allow(unused_imports)]
-pub use mapped::*;
+use std::num::NonZeroU32;
 
-#[allow(unused_imports)]
+pub use mapped::*;
 pub use post_process::{compute_normals, compute_uv_cubic, compute_vertex_normals};
+
+use crate::convex::Convex;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct QuadFace {
@@ -16,7 +17,6 @@ pub struct QuadFace {
     pub c: u32,
     pub d: u32,
 }
-
 impl From<[u32; 4]> for QuadFace {
     fn from(value: [u32; 4]) -> Self {
         Self {
@@ -27,7 +27,6 @@ impl From<[u32; 4]> for QuadFace {
         }
     }
 }
-
 impl QuadFace {
     pub const fn triangulate(self) -> (TriFace, TriFace) {
         (
@@ -44,37 +43,6 @@ impl QuadFace {
         )
     }
 }
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
-pub struct TriFace {
-    pub a: u32,
-    pub b: u32,
-    pub c: u32,
-}
-
-impl From<[u32; 3]> for TriFace {
-    fn from(value: [u32; 3]) -> Self {
-        Self {
-            a: value[0],
-            b: value[1],
-            c: value[2],
-        }
-    }
-}
-
-impl std::ops::Index<usize> for TriFace {
-    type Output = u32;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        match index {
-            0 => &self.a,
-            1 => &self.b,
-            2 => &self.c,
-            _ => panic!("cannot index above 2 in triangular face"),
-        }
-    }
-}
-
 impl std::ops::Index<usize> for QuadFace {
     type Output = u32;
 
@@ -88,25 +56,6 @@ impl std::ops::Index<usize> for QuadFace {
         }
     }
 }
-
-pub trait Face: std::ops::Index<usize, Output = u32> + Clone {
-    fn len(&self) -> usize;
-
-    fn into_alloc(self) -> Vec<u32>;
-
-    fn iter_indices(&self) -> impl std::iter::Iterator<Item = u32>;
-}
-
-impl IntoIterator for TriFace {
-    type Item = u32;
-
-    type IntoIter = std::array::IntoIter<u32, 3>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        [self.a, self.b, self.c].into_iter()
-    }
-}
-
 impl IntoIterator for QuadFace {
     type Item = u32;
 
@@ -116,21 +65,6 @@ impl IntoIterator for QuadFace {
         [self.a, self.b, self.c, self.d].into_iter()
     }
 }
-
-impl Face for TriFace {
-    fn len(&self) -> usize {
-        3
-    }
-
-    fn into_alloc(self) -> Vec<u32> {
-        vec![self.a, self.b, self.c]
-    }
-
-    fn iter_indices(&self) -> impl std::iter::Iterator<Item = u32> {
-        self.into_iter()
-    }
-}
-
 impl Face for QuadFace {
     fn len(&self) -> usize {
         4
@@ -145,6 +79,63 @@ impl Face for QuadFace {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub struct TriFace {
+    pub a: u32,
+    pub b: u32,
+    pub c: u32,
+}
+impl From<[u32; 3]> for TriFace {
+    fn from(value: [u32; 3]) -> Self {
+        Self {
+            a: value[0],
+            b: value[1],
+            c: value[2],
+        }
+    }
+}
+impl std::ops::Index<usize> for TriFace {
+    type Output = u32;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        match index {
+            0 => &self.a,
+            1 => &self.b,
+            2 => &self.c,
+            _ => panic!("cannot index above 2 in triangular face"),
+        }
+    }
+}
+impl IntoIterator for TriFace {
+    type Item = u32;
+
+    type IntoIter = std::array::IntoIter<u32, 3>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        [self.a, self.b, self.c].into_iter()
+    }
+}
+impl Face for TriFace {
+    fn len(&self) -> usize {
+        3
+    }
+
+    fn into_alloc(self) -> Vec<u32> {
+        vec![self.a, self.b, self.c]
+    }
+
+    fn iter_indices(&self) -> impl std::iter::Iterator<Item = u32> {
+        self.into_iter()
+    }
+}
+
+pub trait Face: std::ops::Index<usize, Output = u32> + Clone {
+    fn len(&self) -> usize;
+
+    fn into_alloc(self) -> Vec<u32>;
+
+    fn iter_indices(&self) -> impl std::iter::Iterator<Item = u32>;
+}
 impl<const N: usize> Face for [u32; N] {
     fn len(&self) -> usize {
         N
@@ -162,7 +153,6 @@ impl<const N: usize> Face for [u32; N] {
         self.iter().copied()
     }
 }
-
 impl Face for Vec<u32> {
     fn len(&self) -> usize {
         self.len()
@@ -177,14 +167,13 @@ impl Face for Vec<u32> {
     }
 }
 
+pub type DynFace = Box<dyn Face>;
+
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct Facen<F: Face> {
     pub indexed: F,
     pub normal: glam::Vec3,
 }
-
-pub type DynFace = Box<dyn Face>;
-
 impl<F: Face> std::ops::Index<usize> for Facen<F> {
     type Output = u32;
 
@@ -192,7 +181,6 @@ impl<F: Face> std::ops::Index<usize> for Facen<F> {
         &self.indexed[index]
     }
 }
-
 impl<F: Face> Face for Facen<F> {
     fn len(&self) -> usize {
         self.indexed.len()
@@ -206,7 +194,6 @@ impl<F: Face> Face for Facen<F> {
         self.indexed.iter_indices()
     }
 }
-
 impl<F: Face> Facen<F> {
     pub fn new(face: impl Into<F>, normal: glam::Vec3) -> Self {
         Self {
@@ -222,15 +209,50 @@ impl<F: Face> Facen<F> {
         }
     }
 }
-
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct Plane {
     pub normal: glam::Vec3,
     pub d: f32,
 }
-
 impl Plane {
     pub const fn new(normal: glam::Vec3, d: f32) -> Self {
         Self { normal, d }
     }
+}
+
+pub fn generate_sphere(radius: f32, subdiv: NonZeroU32) -> Convex<TriFace> {
+    let subdiv = subdiv.get();
+    let mut vertices = Vec::with_capacity((subdiv * subdiv) as usize);
+    let mut faces = Vec::new(); // dummy
+
+    let lat_increment = std::f32::consts::PI * 2.0 / subdiv as f32;
+    let lon_increment = std::f32::consts::PI / subdiv as f32;
+
+    for i in 0..=subdiv {
+        let lon_angle = std::f32::consts::PI / 2.0 - i as f32 * lon_increment;
+        let xy = lon_angle.cos();
+        let z = lon_angle.sin();
+        for j in 0..=subdiv {
+            let lat_angle = lat_increment * j as f32;
+            let x = xy * lat_angle.cos();
+            let y = xy * lat_angle.sin();
+            vertices.push(glam::vec3(x, y, z) * radius);
+        }
+    }
+
+    let stride = subdiv + 1;
+    for i in 0..subdiv {
+        let k1 = i * stride;
+        let k2 = k1 + stride;
+        for j in 0..subdiv {
+            if i != 0 {
+                faces.push(Facen::new([k1 + j, k2 + j, k1 + j + 1], glam::Vec3::Y));
+            }
+            if i != (subdiv - 1) {
+                faces.push(Facen::new([k1 + j + 1, k2 + j, k2 + j + 1], glam::Vec3::Y));
+            }
+        }
+    }
+
+    Convex::new(vertices, faces)
 }

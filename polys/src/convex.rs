@@ -5,7 +5,6 @@ pub struct Convex<F: Face> {
     vertices: Vec<glam::Vec3>,
     faces: Vec<Facen<F>>,
 }
-
 impl Convex<QuadFace> {
     pub fn cube(extents: f32) -> Self {
         Self::parallelepiped(glam::Vec3::splat(extents))
@@ -47,7 +46,6 @@ impl Convex<QuadFace> {
         }
     }
 }
-
 impl Convex<Vec<u32>> {
     pub fn cube(extents: f32) -> Self {
         Self::parallelepiped(glam::Vec3::splat(extents))
@@ -120,7 +118,6 @@ impl Convex<Vec<u32>> {
         Convex { vertices, faces }
     }
 }
-
 impl<F: Face> Convex<F> {
     pub const fn new(vertices: Vec<glam::Vec3>, faces: Vec<Facen<F>>) -> Self {
         Self { vertices, faces }
@@ -188,5 +185,39 @@ impl<F: Face> Convex<F> {
         let mut normals = vec![glam::Vec3::ZERO; self.faces.len()];
         self.compute_normals(&mut normals);
         normals
+    }
+}
+#[cfg(feature = "ethel")]
+impl Convex<TriFace> {
+    pub fn stage(self, out: &mut ethel::MeshStaging) -> ethel::MeshId {
+        let mut t_vb = Vec::new();
+        let mut t_nb = Vec::new();
+        let mut t_tb = Vec::new();
+
+        t_nb.resize(self.vertices().len(), glam::Vec3::ZERO);
+        //crate::compute_vertex_normals(self.faces(), self.vertices(), &mut t_nb);
+        for tri in self.faces() {
+            use ethel::mesh::Triangle;
+            t_tb.push(Triangle {
+                v0: tri[0],
+                v1: tri[1],
+                v2: tri[2],
+            });
+        }
+        for (&v, &n) in self.vertices().iter().zip(&t_nb) {
+            use ethel::mesh::Vertex;
+            //let uv = crate::compute_uv_cubic(v, n, glam::Vec3::ONE);
+            t_vb.push(Vertex {
+                pos_x: v.x,
+                pos_y: v.y,
+                pos_z: v.z,
+                norm_x: n.x,
+                norm_y: n.y,
+                norm_z: n.z,
+                uv_x: 0f32,
+                uv_y: 0f32,
+            });
+        }
+        out.stage(&t_vb, &t_tb)
     }
 }

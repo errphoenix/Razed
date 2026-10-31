@@ -1,3 +1,5 @@
+use std::num::NonZeroU32;
+
 use ethel::{
     AssetHandle, FxSpatialHash, MeshStaging, SpatialHash, SpatialResolution, StartupHandler,
 };
@@ -8,7 +10,7 @@ use rendrs::GeometryBank;
 use razed::{
     data::FrameDataBuffers,
     procedural::{CubeVoronoi, voxel_grid},
-    render::RenderGroup,
+    render::{CommonMeshMetadata, RenderGroup},
 };
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -60,19 +62,27 @@ fn main() {
     let textures_metadata_registry = textures_master_registry.create_metadata_registry();
     let texture_pipe = textures_master_registry.command_pipe();
 
+    let mut mesh_stage = ethel::mesh::MeshStaging::new();
     let fragment_mesh_mapping = {
-        let mesh_stage = ethel::mesh::MeshStaging::new();
         let group = generate_fragment_meshes(glam::Vec3::splat(3.0), mesh_stage);
-        let mesh_stage = group.voronoi.stager;
-
-        start_handler.with_mesh_data(mesh_stage);
-        start_handler.with_mesh_layouts(
-            razed::data::LayoutMeshStorageStatic::create(),
-            razed::data::LayoutMeshStorageTris::create(),
-        );
-
+        mesh_stage = group.voronoi.stager;
         group.mapping
     };
+
+    // debug sphere
+    let mesh_id_sphere;
+    let mesh_meta_sphere;
+    {
+        let mesh = polys::generate_sphere(1.0, NonZeroU32::new(8).unwrap());
+        mesh_id_sphere = mesh.stage(&mut mesh_stage);
+        mesh_meta_sphere = mesh_stage.metadata().last().copied().unwrap();
+    }
+
+    start_handler.with_mesh_data(mesh_stage);
+    start_handler.with_mesh_layouts(
+        razed::data::LayoutMeshStorageStatic::create(),
+        razed::data::LayoutMeshStorageTris::create(),
+    );
 
     start_handler.with_gl_state(|| unsafe {
         janus::gl::PixelStorei(janus::gl::UNPACK_ALIGNMENT, 1);
@@ -97,6 +107,11 @@ fn main() {
 
             renderer.handler_init_callback(|handle| {
                 handle.textures_master_registry = textures_master_registry;
+
+                handle.common_mesh_data = CommonMeshMetadata {
+                    meta_sphere: mesh_meta_sphere,
+                    id_sphere: mesh_id_sphere,
+                };
 
                 let texture = handle
                     .glyph_atlas_texture
