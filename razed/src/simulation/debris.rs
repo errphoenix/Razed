@@ -13,6 +13,7 @@ use janus::{
 };
 use physics::{
     collision::LightCollision,
+    force::{ImpulseTarget, ImpulseWorld},
     rigid::{RbVelocity, RigidBodySolver},
 };
 use rayon::iter::ParallelIterator;
@@ -240,6 +241,26 @@ impl DebrisSystem {
 
     pub fn rubber(&self) -> &RubberRowTable {
         &self.rubber
+    }
+
+    pub const fn solver(&self) -> &RigidBodySolver {
+        &self.debris_phys
+    }
+
+    pub fn integrate_impulses(&mut self, impulses: &ImpulseWorld) {
+        impulses
+            .targets_body()
+            .iter()
+            .for_each(|&ImpulseTarget { impulse, entity }| {
+                if let Some(idid) = impulses.impulses_column().solve_indirect(impulse)
+                    && let Some(edid) = self.debris.solve_indirect(entity)
+                {
+                    let impulse = impulses.impulses()[idid.as_index()].get();
+                    let out_forces = &mut self.debris.forces[edid.as_index()];
+                    let mass = self.debris.mass[edid.as_index()];
+                    *out_forces += impulse * mass;
+                }
+            });
     }
 
     pub fn clear_rubber(&mut self) {

@@ -48,7 +48,7 @@ use gui::{
     text::{GlyphAtlas, GlyphRaster},
 };
 use janus::{Cursor, DeltaTime, StringMap, sync::TriCell};
-use physics::rigid::RbVelocity;
+use physics::{force::ImpulseWorld, rigid::RbVelocity};
 use tracing::{Level, event};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -133,6 +133,7 @@ pub struct State {
     #[allow(unused, reason = "currently unused, might be discarded")]
     mesh_ids: Vec<ethel::mesh::Id>, // generic objects mesh ids imap
 
+    physw_impulse: ImpulseWorld,
     lattice: LatticeSystem,
     cage: CageSystem,
     fragments: FragmentSystem,
@@ -205,6 +206,7 @@ impl Default for State {
             damage_mode: false,
             local_overlays: Overlays::default(),
             structure_hashed: FxLsSpatialHash::new(HASH_RESOLUTION),
+            physw_impulse: Default::default(),
         }
     }
 }
@@ -610,13 +612,17 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 
         self.profiler.capture_duration("lattice_update", || {
             const WIND_FORCE: f32 = 0.0;
-            self.lattice
-                .apply_forces_batched(glam::vec3(WIND_FORCE, -9.81, WIND_FORCE));
+            let g_force = glam::vec3(WIND_FORCE, -9.81, WIND_FORCE);
+            self.lattice.apply_forces_batched(g_force);
+            self.lattice.integrate_impulses(&self.physw_impulse);
             self.lattice.update(delta);
         });
         self.profiler.capture_duration("debris_simulate", || {
+            self.debris.integrate_impulses(&self.physw_impulse);
             self.debris.simulate_bodies(delta);
         });
+
+        self.physw_impulse.tick(delta);
     }
 
     fn on_input_event(&mut self, event: InputEvent) {
@@ -802,8 +808,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 None
             });
 
-            const CLOUD_RADIUS: f32 = 7f32;
-            const CLOUD_DAMAGE: f32 = 0.1f32;
+            const CLOUD_RADIUS: f32 = 4f32;
+            const CLOUD_DAMAGE: f32 = 5.0f32;
 
             if let Some(hit) = hit {
                 let position = hashed.approx_point_at(hit);
@@ -821,8 +827,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                         position,
                         CLOUD_DAMAGE,
                         volume,
-                        DamageFalloffModel::Linear,
-                        0.5,
+                        DamageFalloffModel::Quadratic,
+                        50f32,
                     ));
                 }
             }
@@ -832,6 +838,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             &self.structure_hashed,
             &mut self.fragments,
             &mut self.lattice,
+            &mut self.physw_impulse,
         );
 
         self.local_keyev_buf.clear();
@@ -849,6 +856,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             // synchronizes lattice damage from xpbd-lattice solver
             self.lattice.register_dead_nodes();
         });
+
+        self.physw_impulse.clear();
 
         // synchronizes lattice and cage damage to fragments.
         // after this point, the order of fragment elements must not change;

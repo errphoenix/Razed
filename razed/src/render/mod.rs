@@ -675,13 +675,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 debug_draw_damage_overlay.uniform_opacity_float(DAMAGE_OVERLAY_OPACITY);
                 debug_draw_damage_overlay.uniform_position_vec3(damage_overlay.position);
                 //maybe just make all damage volumes spheres, no point in aabbs?
-                let radius = 7f32;
+                let radius = damage_overlay.volume.half_extents().length();
                 debug_draw_damage_overlay.uniform_radius_float(radius);
-
-                println!(
-                    "pos: {:?}, radius: {radius}, elements: {}",
-                    damage_overlay.position, self.common_mesh_data.meta_sphere.tris_length
-                );
 
                 self.pipeline().debug_draw_damage_overlay.execute(
                     section,

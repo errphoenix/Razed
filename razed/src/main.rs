@@ -73,7 +73,7 @@ fn main() {
     let mesh_id_sphere;
     let mesh_meta_sphere;
     {
-        let mesh = polys::generate_sphere(1.0, NonZeroU32::new(8).unwrap());
+        let mesh = polys::generate_sphere(1.0, NonZeroU32::new(32).unwrap());
         mesh_id_sphere = mesh.stage(&mut mesh_stage);
         mesh_meta_sphere = mesh_stage.metadata().last().copied().unwrap();
     }

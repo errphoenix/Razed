@@ -3,7 +3,10 @@ use ethel::{
     state::data::{Column, IndirectIndex},
 };
 use janus::context::DeltaTime;
-use physics::xpbd::{Constraints, HasConstraints, HasNodes, Nodes, RawXpbdLattice, XpbdSolver};
+use physics::{
+    force::{ImpulseTarget, ImpulseWorld},
+    xpbd::{Constraints, HasConstraints, HasNodes, Nodes, RawXpbdLattice, XpbdSolver},
+};
 use rustc_hash::FxHashMap;
 
 use crate::simulation::{
@@ -318,6 +321,22 @@ impl LatticeSystem {
         for (f, m) in f.join(m) {
             *f += force * *m;
         }
+    }
+
+    pub fn integrate_impulses(&mut self, impulses: &ImpulseWorld) {
+        impulses
+            .targets_body()
+            .iter()
+            .for_each(|&ImpulseTarget { impulse, entity }| {
+                if let Some(idid) = impulses.impulses_column().solve_indirect(impulse)
+                    && let Some(edid) = self.nodes.solve_indirect(entity)
+                {
+                    let impulse = impulses.impulses()[idid.as_index()].get();
+                    let out_forces = &mut self.nodes.forces[edid.as_index()];
+                    let mass = self.nodes.inv_mass[edid.as_index()];
+                    *out_forces += impulse * mass;
+                }
+            });
     }
 
     #[inline]
