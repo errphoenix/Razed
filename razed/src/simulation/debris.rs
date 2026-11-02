@@ -13,7 +13,7 @@ use janus::{
 };
 use physics::{
     collision::LightCollision,
-    force::{ImpulseTarget, ImpulseWorld},
+    force::{ForceTarget, ForcesRegistry},
     rigid::{RbVelocity, RigidBodySolver},
 };
 use rayon::iter::ParallelIterator;
@@ -247,18 +247,19 @@ impl DebrisSystem {
         &self.debris_phys
     }
 
-    pub fn integrate_impulses(&mut self, impulses: &ImpulseWorld) {
-        impulses
+    pub fn integrate_global_forces(&mut self, forces: &ForcesRegistry) {
+        forces
             .targets_body()
             .iter()
-            .for_each(|&ImpulseTarget { impulse, entity }| {
-                if let Some(idid) = impulses.impulses_column().solve_indirect(impulse)
+            .for_each(|&ForceTarget { force, entity }| {
+                if let Some(fdid) = forces.forces_column().solve_indirect(force)
                     && let Some(edid) = self.debris.solve_indirect(entity)
                 {
-                    let impulse = impulses.impulses()[idid.as_index()].get();
+                    let force = forces.forces()[fdid.as_index()].get();
                     let out_forces = &mut self.debris.forces[edid.as_index()];
-                    let mass = self.debris.mass[edid.as_index()];
-                    *out_forces += impulse * mass;
+                    let out_torque = &mut self.debris.torques[edid.as_index()];
+                    *out_forces += force;
+                    *out_torque += force.any_orthogonal_vector();
                 }
             });
     }

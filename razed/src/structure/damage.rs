@@ -1,6 +1,6 @@
 use ethel::{Cell, Column, FxLsSpatialHash, FxSpatialHash, SpatialHash};
 use glam::FloatExt;
-use physics::force::{ImpulseWorld, PersistentImpulse};
+use physics::force::{ForcesRegistry, PersistentForce};
 
 use crate::simulation::{
     StructurePartIndex, StructureSpatialHash, fragment::FragmentSystem, lattice::LatticeSystem,
@@ -161,7 +161,7 @@ impl DamageSystem {
         hashed: &StructureSpatialHash,
         fragment_sys: &mut FragmentSystem,
         lattice_sys: &mut LatticeSystem,
-        impulses: &mut ImpulseWorld,
+        forces: &mut ForcesRegistry,
     ) {
         let fragments = &mut fragment_sys.fragments;
         self.queue.drain(..).for_each(|cloud| {
@@ -182,18 +182,18 @@ impl DamageSystem {
                         let impulse_dir = -to_origin;
                         let f_impulse = coefficient * impulse_dir * strength;
 
-                        const IMPULSE_DURATION: f32 = 5.0;
+                        const IMPULSE_DURATION: f32 = 0.016;
 
                         for &id in affected {
-                            let p_impulse = PersistentImpulse::new(f_impulse, IMPULSE_DURATION);
-                            let iid = impulses.record_impulse(p_impulse);
+                            let p_impulse = PersistentForce::new(f_impulse, IMPULSE_DURATION);
+                            let iid = forces.record(p_impulse);
                             match id {
                                 StructurePartIndex::Lattice(id) => {
-                                    impulses.add_target_lattice(iid, id);
+                                    forces.add_target_lattice(iid, id);
                                     lattice_sys.apply_forces(id, f_impulse);
                                 }
                                 StructurePartIndex::Fragment(id) => {
-                                    impulses.add_target_body(iid, id);
+                                    forces.add_target_body(iid, id);
                                     let did = fragments.solve_indirect(id).unwrap();
                                     let index = did.as_index();
                                     let mut integrity = fragments.integrity[index];

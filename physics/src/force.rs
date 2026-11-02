@@ -5,13 +5,13 @@ use ethel::{
 use janus::DeltaTime;
 
 #[derive(Clone, Copy, Debug)]
-pub struct PersistentImpulse {
+pub struct PersistentForce {
     force: glam::Vec3,
     falloff: fn(f32) -> f32,
     progress: f32,
     duration_seconds: f32,
 }
-impl Default for PersistentImpulse {
+impl Default for PersistentForce {
     fn default() -> Self {
         Self {
             force: glam::Vec3::ZERO,
@@ -21,8 +21,8 @@ impl Default for PersistentImpulse {
         }
     }
 }
-impl PersistentImpulse {
-    /// Persistent impulse with linear falloff.
+impl PersistentForce {
+    /// Persistent force with linear falloff.
     pub const fn new(force: glam::Vec3, duration_seconds: f32) -> Self {
         Self {
             force,
@@ -32,7 +32,7 @@ impl PersistentImpulse {
         }
     }
 
-    /// Persistent impulse with custom falloff.
+    /// Persistent force with custom falloff.
     pub const fn with_falloff(
         force: glam::Vec3,
         duration_seconds: f32,
@@ -80,23 +80,23 @@ impl PersistentImpulse {
 }
 
 #[derive(Debug, Default)]
-pub struct ImpulseTarget {
-    pub impulse: IndirectIndex,
+pub struct ForceTarget {
+    pub force: IndirectIndex,
     pub entity: IndirectIndex,
 }
 
 #[derive(Debug, Default)]
-pub struct ImpulseWorld {
-    impulses: ParallelIndexArrayColumn<PersistentImpulse>,
-    targets_particle: Vec<ImpulseTarget>,
-    targets_body: Vec<ImpulseTarget>,
-    targets_lattice: Vec<ImpulseTarget>,
+pub struct ForcesRegistry {
+    forces: ParallelIndexArrayColumn<PersistentForce>,
+    targets_particle: Vec<ForceTarget>,
+    targets_body: Vec<ForceTarget>,
+    targets_lattice: Vec<ForceTarget>,
     clear_buf: Vec<IndirectIndex>,
 }
-impl ImpulseWorld {
+impl ForcesRegistry {
     pub fn new() -> Self {
         Self {
-            impulses: ParallelIndexArrayColumn::new(),
+            forces: ParallelIndexArrayColumn::new(),
             targets_particle: Vec::new(),
             targets_body: Vec::new(),
             targets_lattice: Vec::new(),
@@ -104,44 +104,44 @@ impl ImpulseWorld {
         }
     }
 
-    pub fn record_impulse(&mut self, pi: PersistentImpulse) -> IndirectIndex {
-        self.impulses.insert(pi)
+    pub fn record(&mut self, pf: PersistentForce) -> IndirectIndex {
+        self.forces.insert(pf)
     }
 
-    pub fn add_target_particle(&mut self, iid: IndirectIndex, eid: IndirectIndex) {
-        self.targets_particle.push(ImpulseTarget {
-            impulse: iid,
+    pub fn add_target_particle(&mut self, fid: IndirectIndex, eid: IndirectIndex) {
+        self.targets_particle.push(ForceTarget {
+            force: fid,
             entity: eid,
         });
     }
 
-    pub fn add_target_body(&mut self, iid: IndirectIndex, eid: IndirectIndex) {
-        self.targets_body.push(ImpulseTarget {
-            impulse: iid,
+    pub fn add_target_body(&mut self, fid: IndirectIndex, eid: IndirectIndex) {
+        self.targets_body.push(ForceTarget {
+            force: fid,
             entity: eid,
         });
     }
 
-    pub fn add_target_lattice(&mut self, iid: IndirectIndex, eid: IndirectIndex) {
-        self.targets_lattice.push(ImpulseTarget {
-            impulse: iid,
+    pub fn add_target_lattice(&mut self, fid: IndirectIndex, eid: IndirectIndex) {
+        self.targets_lattice.push(ForceTarget {
+            force: fid,
             entity: eid,
         });
     }
 
     pub fn tick(&mut self, delta: DeltaTime) {
-        self.impulses.iter_mut().for_each(|e| e.tick(delta));
+        self.forces.iter_mut().for_each(|e| e.tick(delta));
     }
 
     fn clear_targets(
-        impulses: &ParallelIndexArrayColumn<PersistentImpulse>,
-        targets: &mut Vec<ImpulseTarget>,
+        forces: &ParallelIndexArrayColumn<PersistentForce>,
+        targets: &mut Vec<ForceTarget>,
     ) {
         targets.retain(|t| {
-            let iid = t.impulse;
-            if let Some(idid) = impulses.solve_indirect(iid) {
-                let impulse = impulses.contiguous()[idid.as_index()];
-                impulse.progress_inbound()
+            let fid = t.force;
+            if let Some(fdid) = forces.solve_indirect(fid) {
+                let force = forces.contiguous()[fdid.as_index()];
+                force.progress_inbound()
             } else {
                 false
             }
@@ -149,51 +149,45 @@ impl ImpulseWorld {
     }
 
     pub fn clear(&mut self) {
-        for (impulse, &id) in self
-            .impulses
-            .iter()
-            .zip(self.impulses.handles().iter().skip(1))
-        {
-            if !impulse.progress_inbound() {
+        for (force, &id) in self.forces.iter().zip(self.forces.handles().iter().skip(1)) {
+            if !force.progress_inbound() {
                 self.clear_buf.push(id);
             }
         }
 
-        Self::clear_targets(&self.impulses, &mut self.targets_particle);
-        Self::clear_targets(&self.impulses, &mut self.targets_body);
-        Self::clear_targets(&self.impulses, &mut self.targets_lattice);
+        Self::clear_targets(&self.forces, &mut self.targets_particle);
+        Self::clear_targets(&self.forces, &mut self.targets_body);
+        Self::clear_targets(&self.forces, &mut self.targets_lattice);
 
-        self.impulses.free_many(&self.clear_buf);
+        self.forces.free_many(&self.clear_buf);
         self.clear_buf.clear();
     }
 
-    pub const fn impulses_column(&self) -> &ParallelIndexArrayColumn<PersistentImpulse> {
-        &self.impulses
+    pub const fn forces_column(&self) -> &ParallelIndexArrayColumn<PersistentForce> {
+        &self.forces
     }
 
-    pub const fn impulses_column_mut(
-        &mut self,
-    ) -> &mut ParallelIndexArrayColumn<PersistentImpulse> {
-        &mut self.impulses
+    pub const fn forces_column_mut(&mut self) -> &mut ParallelIndexArrayColumn<PersistentForce> {
+        &mut self.forces
     }
 
-    pub fn impulses(&self) -> &[PersistentImpulse] {
-        self.impulses.contiguous()
+    pub fn forces(&self) -> &[PersistentForce] {
+        self.forces.contiguous()
     }
 
-    pub fn impulses_mut(&mut self) -> &mut [PersistentImpulse] {
-        self.impulses.contiguous_mut()
+    pub fn forces_mut(&mut self) -> &mut [PersistentForce] {
+        self.forces.contiguous_mut()
     }
 
-    pub fn targets_particle(&self) -> &[ImpulseTarget] {
+    pub fn targets_particle(&self) -> &[ForceTarget] {
         &self.targets_particle
     }
 
-    pub fn targets_body(&self) -> &[ImpulseTarget] {
+    pub fn targets_body(&self) -> &[ForceTarget] {
         &self.targets_body
     }
 
-    pub fn targets_lattice(&self) -> &[ImpulseTarget] {
+    pub fn targets_lattice(&self) -> &[ForceTarget] {
         &self.targets_lattice
     }
 }

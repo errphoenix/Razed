@@ -291,8 +291,8 @@ impl FragmentSystem {
             }
             cye as f32 * lattice_hash.resolution.get()
         };
-        const MASS_BASE: f32 = 200.0;
-        let mass_curve = |y: f32| (-y).exp() * MASS_BASE * 6.0;
+        const MASS_BASE: f32 = 100.0;
+        let mass_curve = |y: f32| (-(y + 0.1).ln() + 1f32) * MASS_BASE;
 
         self.uninitialised.iter_mut().for_each(|frag| {
             let fragment_world = frag.position;

@@ -4,7 +4,7 @@ use ethel::{
 };
 use janus::context::DeltaTime;
 use physics::{
-    force::{ImpulseTarget, ImpulseWorld},
+    force::{ForceTarget, ForcesRegistry},
     xpbd::{Constraints, HasConstraints, HasNodes, Nodes, RawXpbdLattice, XpbdSolver},
 };
 use rustc_hash::FxHashMap;
@@ -323,18 +323,18 @@ impl LatticeSystem {
         }
     }
 
-    pub fn integrate_impulses(&mut self, impulses: &ImpulseWorld) {
-        impulses
+    pub fn integrate_global_forces(&mut self, forces: &ForcesRegistry) {
+        forces
             .targets_body()
             .iter()
-            .for_each(|&ImpulseTarget { impulse, entity }| {
-                if let Some(idid) = impulses.impulses_column().solve_indirect(impulse)
+            .for_each(|&ForceTarget { force, entity }| {
+                if let Some(fdid) = forces.forces_column().solve_indirect(force)
                     && let Some(edid) = self.nodes.solve_indirect(entity)
                 {
-                    let impulse = impulses.impulses()[idid.as_index()].get();
+                    let force = forces.forces()[fdid.as_index()].get();
                     let out_forces = &mut self.nodes.forces[edid.as_index()];
                     let mass = self.nodes.inv_mass[edid.as_index()];
-                    *out_forces += impulse * mass;
+                    *out_forces += force * mass;
                 }
             });
     }
