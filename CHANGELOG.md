@@ -12,5 +12,9 @@
 
 - Updated `build.sh` build script to support additional builds
 
+### Fixed
+
+- Crash during debris simulation due to missing check(s)
+
 ## 0.1.0 - 2026/10/29
 Base pre-changelog state

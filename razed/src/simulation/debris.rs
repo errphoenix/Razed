@@ -373,11 +373,11 @@ impl DebrisSystem {
                             rubber.clear();
                             if let Some(bucket) = static_hash.get(cell) {
                                 bucket.iter().for_each(|i| {
-                                    let direct =
-                                        unsafe { self.debris.solve_indirect_unchecked(*i) };
-                                    let position = static_data.position[direct.as_index()];
-                                    let volume = static_data.volume[direct.as_index()];
-                                    rubber.push(RubberStaticData { position, volume });
+                                    if let Some(direct) = self.rubber.solve_indirect(*i) {
+                                        let position = static_data.position[direct.as_index()];
+                                        let volume = static_data.volume[direct.as_index()];
+                                        rubber.push(RubberStaticData { position, volume });
+                                    }
                                 });
                             }
 
@@ -483,25 +483,25 @@ impl DebrisSystem {
             if debris_id.as_int() == 0 {
                 return;
             }
-            let direct = self.debris.solve_indirect(debris_id).unwrap();
+            if let Some(direct) = self.debris.solve_indirect(debris_id) {
+                let position = self.debris.position[direct.as_index()];
+                let rotation = self.debris.rotation[direct.as_index()];
+                let volume = self.debris.volume[direct.as_index()];
+                let age = self.debris.age[direct.as_index()];
+                let mesh_id = self.debris.mesh_id[direct.as_index()];
 
-            let position = self.debris.position[direct.as_index()];
-            let rotation = self.debris.rotation[direct.as_index()];
-            let volume = self.debris.volume[direct.as_index()];
-            let age = self.debris.age[direct.as_index()];
-            let mesh_id = self.debris.mesh_id[direct.as_index()];
-
-            let rubber_data = (
-                age,
-                position,
-                rotation,
-                volume,
-                mesh_id,
-                IndirectIndex::default(),
-            );
-            let handle = self.rubber.insert(rubber_data);
-            self.rubber_volume_stage.push(position, volume, handle);
-            self.debris.free(debris_id);
+                let rubber_data = (
+                    age,
+                    position,
+                    rotation,
+                    volume,
+                    mesh_id,
+                    IndirectIndex::default(),
+                );
+                let handle = self.rubber.insert(rubber_data);
+                self.rubber_volume_stage.push(position, volume, handle);
+                self.debris.free(debris_id);
+            }
         });
     }
 }
