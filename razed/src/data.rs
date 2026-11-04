@@ -208,8 +208,8 @@ pub struct FrameDataBuffers {
     pub debug_render_options: TriCell<DebugRenderOptions>,
 
     pub groundplane: TriCell<Groundplane>,
-
     pub overlays: TriCell<Overlays>,
+    pub mouse_world_position: TriCell<Option<glam::Vec3>>,
 }
 impl FrameDataBuffers {
     pub fn new() -> Self {
@@ -257,6 +257,7 @@ impl FrameDataBuffers {
             debug_render_options: Default::default(),
             groundplane: Default::default(),
             overlays: Default::default(),
+            mouse_world_position: Default::default(),
         }
     }
 }

@@ -2,40 +2,20 @@ use ethel::{Cell, Column, FxLsSpatialHash, FxSpatialHash, SpatialHash};
 use glam::FloatExt;
 use physics::force::{ForcesRegistry, PersistentForce};
 
-use crate::simulation::{
-    StructurePartIndex, StructureSpatialHash, fragment::FragmentSystem, lattice::LatticeSystem,
-};
+use crate::simulation::{StructurePartIndex, StructureSpatialHash, fragment::FragmentSystem};
 
 #[derive(Clone, Copy, Debug)]
 pub struct DamageOverlay {
     pub visible: bool,
     pub position: glam::Vec3,
-    pub volume: DamageVolume,
+    pub radius: f32,
 }
 impl Default for DamageOverlay {
     fn default() -> Self {
         Self {
-            volume: DamageVolume::Spherical { radius: 0f32 },
+            radius: 0f32,
             visible: false,
             position: glam::Vec3::ZERO,
-        }
-    }
-}
-
-#[non_exhaustive]
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
-pub enum DamageVolume {
-    Spherical { radius: f32 },
-    Cubic { side: f32 },
-}
-impl DamageVolume {
-    pub const fn half_extents(&self) -> glam::Vec3 {
-        match self {
-            DamageVolume::Spherical { radius } => glam::vec3(*radius, *radius, *radius),
-            DamageVolume::Cubic { side } => {
-                let half_side = *side * 0.5;
-                glam::vec3(half_side, half_side, half_side)
-            }
         }
     }
 }
@@ -75,7 +55,7 @@ impl std::ops::Mul<f32> for DamageFalloffModel {
 pub struct DamageCloud {
     pub position: glam::Vec3,
     pub amount: f32,
-    pub volume: DamageVolume,
+    pub radius: f32,
     pub falloff: DamageFalloffModel,
     pub strength: f32,
 }
@@ -83,31 +63,31 @@ impl DamageCloud {
     pub const fn new(
         position: glam::Vec3,
         amount: f32,
-        volume: DamageVolume,
+        radius: f32,
         falloff: DamageFalloffModel,
         strength: f32,
     ) -> Self {
         Self {
             position,
             amount,
-            volume,
+            radius,
             falloff,
             strength,
         }
     }
 
     pub const fn as_aabb_volume(&self) -> (glam::Vec3, glam::Vec3) {
-        let half_extents = self.volume.half_extents();
+        let half_extents = self.radius;
         (
             glam::vec3(
-                self.position.x - half_extents.x,
-                self.position.y - half_extents.y,
-                self.position.z - half_extents.z,
+                self.position.x - half_extents,
+                self.position.y - half_extents,
+                self.position.z - half_extents,
             ),
             glam::vec3(
-                self.position.x + half_extents.x,
-                self.position.y + half_extents.y,
-                self.position.z + half_extents.z,
+                self.position.x + half_extents,
+                self.position.y + half_extents,
+                self.position.z + half_extents,
             ),
         )
     }
@@ -117,14 +97,7 @@ impl DamageCloud {
             min: aabb.0,
             max: aabb.1,
         };
-        match self.volume {
-            DamageVolume::Spherical { radius } => {
-                physics::Sphere::new(radius).intersects_aabb(self.position, aabb)
-            }
-            DamageVolume::Cubic { side } => {
-                physics::Aabb::new(glam::Vec3::splat(side), self.position).intersects(aabb)
-            }
-        }
+        physics::Sphere::new(self.radius).intersects_aabb(self.position, aabb)
     }
 }
 
@@ -160,7 +133,6 @@ impl DamageSystem {
         &mut self,
         hashed: &StructureSpatialHash,
         fragment_sys: &mut FragmentSystem,
-        lattice_sys: &mut LatticeSystem,
         forces: &mut ForcesRegistry,
     ) {
         let fragments = &mut fragment_sys.fragments;
@@ -170,30 +142,30 @@ impl DamageSystem {
             let falloff = cloud.falloff;
             let dmg_amount = cloud.amount;
             let strength = cloud.strength;
+            let radius = cloud.radius;
             self.lookup_buffer.drain(..).for_each(|cell| {
                 if let Some(affected) = hashed.get(cell) {
+                    println!("affected: {}", affected.len());
                     if !affected.is_empty() {
                         let point = hashed.approx_point_at(cell);
                         let to_origin = origin - point;
-                        let vicinity = to_origin.length();
+                        let vicinity = (to_origin.length() / radius).clamp(0f32, 1f32);
 
                         let coefficient = falloff * vicinity;
-                        let damage = dmg_amount;
-                        let impulse_dir = -to_origin;
+                        let damage = coefficient * dmg_amount;
+                        let impulse_dir = -to_origin.normalize();
                         let f_impulse = coefficient * impulse_dir * strength;
 
-                        const IMPULSE_DURATION: f32 = 0.016;
+                        const IMPULSE_DURATION: f32 = 0.4;
 
                         for &id in affected {
-                            let p_impulse = PersistentForce::new(f_impulse, IMPULSE_DURATION);
-                            let iid = forces.record(p_impulse);
+                            let p_force = PersistentForce::new(f_impulse, IMPULSE_DURATION);
+                            let fid = forces.record(p_force);
                             match id {
                                 StructurePartIndex::Lattice(id) => {
-                                    forces.add_target_lattice(iid, id);
-                                    lattice_sys.apply_forces(id, f_impulse);
+                                    forces.add_target_lattice(fid, id);
                                 }
                                 StructurePartIndex::Fragment(id) => {
-                                    forces.add_target_body(iid, id);
                                     let did = fragments.solve_indirect(id).unwrap();
                                     let index = did.as_index();
                                     let mut integrity = fragments.integrity[index];

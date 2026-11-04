@@ -27,7 +27,7 @@ use crate::{
         fragment::{FragmentSystem, FragmentsRowTableView},
         lattice::{LatticeSystem, NodesRowTableView},
     },
-    structure::{DamageCloud, DamageFalloffModel, DamageOverlay, DamageSystem, DamageVolume},
+    structure::{DamageCloud, DamageFalloffModel, DamageOverlay, DamageSystem},
 };
 use ::physics::xpbd::{RawXpbdLattice, XpbdOptions, XpbdSolver};
 use ethel::{
@@ -129,6 +129,7 @@ pub struct State {
     pub texture_registry_pipe: RegistryPipe<crate::assets::Texture>,
 
     camera: camera::Orbital,
+    mouse_world_pos: Option<glam::Vec3>,
 
     #[allow(unused, reason = "currently unused, might be discarded")]
     mesh_ids: Vec<ethel::mesh::Id>, // generic objects mesh ids imap
@@ -207,6 +208,7 @@ impl Default for State {
             local_overlays: Overlays::default(),
             structure_hashed: FxLsSpatialHash::new(HASH_RESOLUTION),
             phys_forces_reg: Default::default(),
+            mouse_world_pos: Default::default(),
         }
     }
 }
@@ -361,6 +363,10 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 });
 
                 let _ = storage.overlays.set_and_advance(self.local_overlays);
+
+                let _ = storage
+                    .mouse_world_position
+                    .set_and_advance(self.mouse_world_pos);
             }
 
             // setup geometry data
@@ -784,65 +790,54 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 self.lattice.hash_nodes(&mut self.structure_hashed);
             });
 
-        self.local_overlays.damage = DamageOverlay::default();
+        self.update_mouse_world_position(&view_point, screen, input.cursor());
 
+        if let Some(selected) = self.selection.take()
+            && input
+                .keys()
+                .key_pressed(crate::input::MISC_DELETE_CONSTRAINT)
+        {
+            self.lattice.break_constraint(selected);
+        }
+        if input.keys().key_pressed(crate::input::CAMERA_SET_ANCHOR) {
+            let new_anchor = self.mouse_world_pos.unwrap_or_default();
+            self.camera.set_anchor(new_anchor);
+        }
+
+        self.local_overlays.damage = DamageOverlay::default();
         if input.keys().key_pressed(crate::input::MISC_DAMAGE_TOGGLE) {
             self.damage_mode = !self.damage_mode;
         }
-
         if self.damage_mode {
-            const RAY_RANGE: f32 = 128f32;
-            let vp = view_point.position;
-            let cursor = input.cursor().current_f32();
-            let inverse_view = view_point.into_mat4();
-            let mouse_world_dir = screen.to_world_space(cursor, inverse_view);
-            let hashed = &self.structure_hashed;
-
-            let hit = hashed.raycast(vp, mouse_world_dir, RAY_RANGE).or_else(|| {
-                let dy = mouse_world_dir.y;
-                if dy.abs() > 0.001 {
-                    let t = -view_point.position.y / dy;
-                    let point = view_point.position + mouse_world_dir * t;
-                    return Some(hashed.cell_at(point));
-                }
-                None
-            });
-
             const CLOUD_RADIUS: f32 = 4f32;
-            const CLOUD_DAMAGE: f32 = 5.0f32;
-
-            if let Some(hit) = hit {
-                let position = hashed.approx_point_at(hit);
-                let volume = DamageVolume::Spherical {
-                    radius: CLOUD_RADIUS,
-                };
+            const CLOUD_DAMAGE: f32 = 50000.0f32;
+            if let Some(position) = self.mouse_world_pos {
                 self.local_overlays.damage = DamageOverlay {
                     visible: true,
+                    radius: CLOUD_RADIUS,
                     position,
-                    volume,
                 };
                 if input.keys().key_pressed(crate::input::MISC_DAMAGE_SPAWN) {
                     tracing::info!("Spawn damage cloud at {position:?}");
                     self.damage_sys.queue_damage(DamageCloud::new(
                         position,
                         CLOUD_DAMAGE,
-                        volume,
+                        CLOUD_RADIUS,
                         DamageFalloffModel::Quadratic,
-                        50f32,
+                        100f32,
                     ));
                 }
             }
         }
-
         self.damage_sys.propagate_damage(
             &self.structure_hashed,
             &mut self.fragments,
-            &mut self.lattice,
             &mut self.phys_forces_reg,
         );
 
         self.local_keyev_buf.clear();
         self.lattice.clear_damage_buffers();
+
         let t1 = Instant::now();
         self.profiler.log_explicit("on_new_frame", t1 - t0);
 
@@ -880,6 +875,31 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
     }
 }
 impl State {
+    fn update_mouse_world_position(
+        &mut self,
+        view_point: &ViewPoint,
+        screen: &ScreenSpace,
+        cursor: &Cursor,
+    ) {
+        const RAY_RANGE: f32 = 128f32;
+        let vp = view_point.position;
+        let cursor = cursor.current_f32();
+        let inverse_view = view_point.into_mat4();
+        let mouse_world_dir = screen.to_world_space(cursor, inverse_view);
+        let hashed = &self.structure_hashed;
+
+        let cell = hashed.raycast(vp, mouse_world_dir, RAY_RANGE).or_else(|| {
+            let dy = mouse_world_dir.y;
+            if dy.abs() > 0.001 {
+                let t = -view_point.position.y / dy;
+                let point = view_point.position + mouse_world_dir * t;
+                return Some(hashed.cell_at(point));
+            }
+            None
+        });
+        self.mouse_world_pos = cell.map(|cell| HASH_RESOLUTION.approx_point(cell));
+    }
+
     pub fn update_environment(&mut self) {
         use crate::ui::env_names::*;
         use crate::ui::widget_names::*;
@@ -1318,26 +1338,9 @@ impl State {
         screen: &ScreenSpace,
         view_point: &ViewPoint,
     ) {
-        if let Some(selected) = self.selection.take()
-            && input
-                .keys()
-                .key_pressed(crate::input::MISC_DELETE_CONSTRAINT)
-        {
-            self.lattice.break_constraint(selected);
-        }
-
         let cursor = input.cursor().current_f32();
         let inverse_view = view_point.into_mat4();
         let mouse_world_dir = screen.to_world_space(cursor, inverse_view);
-        if input.keys().key_pressed(crate::input::CAMERA_SET_ANCHOR) {
-            let dy = mouse_world_dir.y;
-            if dy.abs() > 0.001 {
-                let t = -view_point.position.y / dy;
-                let anchor = view_point.position + mouse_world_dir * t;
-                self.camera.set_anchor(anchor);
-            }
-        }
-
         let mouse_ray = ::physics::Ray::new(view_point.position, mouse_world_dir);
 
         let node_positions = self.lattice.nodes().current_pos_slice();

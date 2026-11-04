@@ -7,16 +7,16 @@ pub mod shading;
 pub mod task;
 pub mod util;
 
+#[cfg(feature = "devmode")]
+use std::cell::RefCell;
 use std::{sync::atomic::Ordering, time::Instant};
 
-use ethel::{Resolution, SingleBuffer, StorageSection, ViewPoint, render::command::DrawGroups};
+use ethel::{Resolution, SingleBuffer, StorageSection, render::command::DrawGroups};
 use gui::{
     render::UiDrawPassCtx,
     text::{GlyphAtlasTexture, GlyphRaster},
 };
-use janus::{
-    DeltaTime, ImageFormat, ImageType, MipLevels, Texture, sync::TriCell, texture::TextureFiltering,
-};
+use janus::{DeltaTime, ImageFormat, ImageType, MipLevels, Texture, texture::TextureFiltering};
 use rendrs::{
     ImageObject, OutputObject, Pass, RenderPool, RenderTarget, RenderTargetDescriptor,
     RenderTargetId, SamplerObject,
@@ -670,12 +670,11 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 let debug_draw_damage_overlay = &self.shaders.debug_draw_damage_overlay;
 
                 const DAMAGE_OVERLAY_COLOR: glam::Vec3 = glam::Vec3::X;
-                const DAMAGE_OVERLAY_OPACITY: f32 = 0.2;
+                const DAMAGE_OVERLAY_OPACITY: f32 = 0.4;
                 debug_draw_damage_overlay.uniform_color_vec3(DAMAGE_OVERLAY_COLOR);
                 debug_draw_damage_overlay.uniform_opacity_float(DAMAGE_OVERLAY_OPACITY);
                 debug_draw_damage_overlay.uniform_position_vec3(damage_overlay.position);
-                //maybe just make all damage volumes spheres, no point in aabbs?
-                let radius = damage_overlay.volume.half_extents().length();
+                let radius = damage_overlay.radius;
                 debug_draw_damage_overlay.uniform_radius_float(radius);
 
                 self.pipeline().debug_draw_damage_overlay.execute(
@@ -1007,14 +1006,14 @@ impl Renderer {
         });
     }
 
-    fn setup_debug_lines(&mut self, view: &TriCell<ViewPoint>) {
+    fn setup_debug_lines(&self, view: &ViewData, mouse_world_pos: glam::Vec3) {
         // world axis indicator
         #[cfg(feature = "devmode")]
         {
             self.lines_debug_buffer.clear();
 
             const OFFSET: f32 = 1.0;
-            let o = view.position + view.forward() * OFFSET;
+            let o = view.view_pos + view.view_dir * OFFSET;
 
             const R: glam::Vec4 = glam::vec4(1.0, 0.0, 0.0, 1.0);
             const G: glam::Vec4 = glam::vec4(0.0, 1.0, 0.0, 1.0);
@@ -1025,29 +1024,27 @@ impl Renderer {
             let y = o + glam::Vec3::Y * AXIS_SIZE;
             let z = o + glam::Vec3::Z * AXIS_SIZE;
 
-            self.lines_debug_buffer.add(o, R);
-            self.lines_debug_buffer.add(x, R);
-
-            self.lines_debug_buffer.add(o, G);
-            self.lines_debug_buffer.add(y, G);
-
-            self.lines_debug_buffer.add(o, B);
-            self.lines_debug_buffer.add(z, B);
+            buf.add(o, R);
+            buf.add(x, R);
+            buf.add(o, G);
+            buf.add(y, G);
+            buf.add(o, B);
+            buf.add(z, B);
         }
 
-        // prepare debris spatial hash grid
+        // spatial hash grid visualization
         #[cfg(feature = "devmode")]
         {
             use ethel::state::data::hash::SpatialResolution;
 
-            const COLOR: glam::Vec4 = glam::vec4(1.0, 0.2, 1.0, 0.1);
-            const RANGE: f32 = 20.0;
+            const COLOR: glam::Vec4 = glam::vec4(1.0, 0.2, 1.0, 0.25);
+            const RANGE: f32 = 8.0;
             const RANGE_CELLS: i32 = (RANGE / RESOLUTION.get()) as i32;
 
             const RESOLUTION: SpatialResolution = crate::simulation::HASH_RESOLUTION;
 
-            let camera = RESOLUTION.encode_point(view.position);
-            let f_camera = RESOLUTION.approx_point(camera);
+            let origin = RESOLUTION.encode_point(mouse_world_pos);
+            let f_origin = RESOLUTION.approx_point(origin);
 
             for x in -RANGE_CELLS..RANGE_CELLS {
                 for y in -RANGE_CELLS..RANGE_CELLS {
