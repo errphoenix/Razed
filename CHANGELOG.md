@@ -15,6 +15,7 @@
 ### Fixed
 
 - Crash during debris simulation due to missing check(s)
+- Restore debug lines rendering under `devmode` feature flag
 
 ## 0.1.0 - 2026/10/29
 Base pre-changelog state

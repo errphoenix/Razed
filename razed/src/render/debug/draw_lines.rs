@@ -1,5 +1,5 @@
 use ethel::{render::buffer::PartitionedTriBuffer, shader::ShaderKind};
-use rendrs::pipeline::DrawPass;
+use rendrs::{OutputObject, RenderTargetAccessor, pipeline::DrawPass};
 
 use crate::data::LayoutDebugLinesData;
 
@@ -49,7 +49,7 @@ impl DebugLinesData {
     }
 }
 
-pub type DebugDrawLinesPass = DrawPass<DebugDrawLinesCtxWrapper, 0, 0>;
+pub type DebugDrawLinesPass = DrawPass<DebugDrawLinesCtxWrapper, 0, 2>;
 
 #[derive(Debug)]
 pub struct DebugDrawLinesCtx<'data> {
@@ -58,32 +58,45 @@ pub struct DebugDrawLinesCtx<'data> {
 }
 rendrs::context_wrapper!(for<'ctx> DebugDrawLinesCtx);
 
-pub const fn draw_lines_pass(shader: &ShaderDebugDrawLines) -> DebugDrawLinesPass {
+pub const fn draw_lines_pass(
+    shader: &ShaderDebugDrawLines,
+    ldr_output: RenderTargetAccessor,
+    depth_output: RenderTargetAccessor,
+) -> DebugDrawLinesPass {
     let handle_view = shader.handle().view();
-    DebugDrawLinesPass::new(handle_view, [], [], |section, ctx| {
-        let section = section.as_index();
-        unsafe {
-            ctx.lines_data.blit_part_padded(
-                section,
-                LayoutDebugLinesData::PodPoints as usize,
-                &ctx.lines_buffer.positions,
-                0,
-                4,
-            );
-            ctx.lines_data.blit_part(
-                section,
-                LayoutDebugLinesData::PodColors as usize,
-                &ctx.lines_buffer.colors,
-                0,
-            );
-        }
+    DebugDrawLinesPass::new(
+        handle_view,
+        [],
+        [
+            OutputObject::Color(ldr_output),
+            OutputObject::Depth(depth_output),
+        ],
+        |section, ctx| {
+            let section = section.as_index();
+            unsafe {
+                ctx.lines_data.blit_part_padded(
+                    section,
+                    LayoutDebugLinesData::PodPoints as usize,
+                    &ctx.lines_buffer.positions,
+                    0,
+                    4,
+                );
+                ctx.lines_data.blit_part(
+                    section,
+                    LayoutDebugLinesData::PodColors as usize,
+                    &ctx.lines_buffer.colors,
+                    0,
+                );
+            }
 
-        ctx.lines_data.bind_shader_storage(section);
-        let count = ctx.lines_buffer.len() as i32;
-        unsafe {
-            janus::gl::DrawArrays(janus::gl::LINES, 0, count);
-        }
-    })
+            ctx.lines_data.bind_shader_storage(section);
+            let count = ctx.lines_buffer.len() as i32;
+            unsafe {
+                janus::gl::LineWidth(2.5);
+                janus::gl::DrawArrays(janus::gl::LINES, 0, count);
+            }
+        },
+    )
 }
 
 macro_rules! ssbo_binding {

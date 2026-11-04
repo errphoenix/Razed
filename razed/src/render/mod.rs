@@ -285,7 +285,7 @@ pub struct Renderer {
     pub common_mesh_data: CommonMeshMetadata,
 
     #[cfg(feature = "devmode")]
-    lines_debug_buffer: DebugLinesData,
+    lines_debug_buffer: RefCell<DebugLinesData>,
 
     pub glyph_atlas_texture: GlyphAtlasTexture,
     pub glyph_pipe: Option<crossbeam::channel::Receiver<GlyphRaster>>,
@@ -333,9 +333,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             view_dir,
             ortho_proj_mat,
         };
-
-        #[cfg(feature = "devmode")]
-        self.setup_debug_lines(view);
 
         let RenderShaders {
             post_skybox,
@@ -687,6 +684,23 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             }
         }
 
+        // debug lines draw pass
+        #[cfg(feature = "devmode")]
+        {
+            use crate::render::debug::draw_lines::DebugDrawLinesCtx;
+
+            let origin = frame_data.mouse_world_position.get();
+            self.setup_debug_lines(&self.view_data, origin.unwrap_or_default());
+
+            let ctx = DebugDrawLinesCtx {
+                lines_data: &frame_data.lines_debug,
+                lines_buffer: unsafe { self.lines_debug_buffer.as_ptr().as_ref_unchecked() },
+            };
+            self.pipeline()
+                .debug_draw_lines
+                .execute(section, render_pool, &ctx);
+        }
+
         self.pipeline().blit.execute(section, render_pool, &());
 
         // interface draw pass
@@ -698,20 +712,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             };
             self.pipeline()
                 .draw_interface
-                .execute(section, render_pool, &ctx);
-        }
-
-        // debug lines draw pass
-        #[cfg(feature = "devmode")]
-        {
-            use crate::render::debug::draw_lines::DebugDrawLinesCtx;
-
-            let ctx = DebugDrawLinesCtx {
-                lines_data: &frame_data.lines_debug,
-                lines_buffer: &self.lines_debug_buffer,
-            };
-            self.pipeline()
-                .debug_draw_lines
                 .execute(section, render_pool, &ctx);
         }
     }
@@ -868,7 +868,11 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     base_depth,
                 ),
                 #[cfg(feature = "devmode")]
-                debug_draw_lines: debug::draw_lines_pass(&self.shaders.debug_draw_lines),
+                debug_draw_lines: debug::draw_lines_pass(
+                    &self.shaders.debug_draw_lines,
+                    mapped_ldr,
+                    base_depth,
+                ),
 
                 draw_interface: gui::render::pass(&self.shaders.draw_interface),
 
@@ -1007,11 +1011,12 @@ impl Renderer {
     }
 
     fn setup_debug_lines(&self, view: &ViewData, mouse_world_pos: glam::Vec3) {
+        let mut buf = self.lines_debug_buffer.borrow_mut();
+        buf.clear();
+
         // world axis indicator
         #[cfg(feature = "devmode")]
         {
-            self.lines_debug_buffer.clear();
-
             const OFFSET: f32 = 1.0;
             let o = view.view_pos + view.view_dir * OFFSET;
 
@@ -1054,24 +1059,22 @@ impl Renderer {
                         let py = glam::vec3(x as f32, (y + 1) as f32, z as f32) * RESOLUTION.get();
                         let pz = glam::vec3(x as f32, y as f32, (z + 1) as f32) * RESOLUTION.get();
 
-                        let po = po + f_camera;
-                        let px = px + f_camera;
-                        let py = py + f_camera;
-                        let pz = pz + f_camera;
+                        let po = po + f_origin;
+                        let px = px + f_origin;
+                        let py = py + f_origin;
+                        let pz = pz + f_origin;
 
-                        self.lines_debug_buffer.add_position(po);
-                        self.lines_debug_buffer.add_position(px);
-
-                        self.lines_debug_buffer.add_position(po);
-                        self.lines_debug_buffer.add_position(py);
-
-                        self.lines_debug_buffer.add_position(po);
-                        self.lines_debug_buffer.add_position(pz);
+                        buf.add_position(po);
+                        buf.add_position(px);
+                        buf.add_position(po);
+                        buf.add_position(py);
+                        buf.add_position(po);
+                        buf.add_position(pz);
                     }
                 }
             }
 
-            self.lines_debug_buffer.set_color_fallback(COLOR);
+            buf.set_color_fallback(COLOR);
         }
     }
 
