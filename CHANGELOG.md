@@ -8,6 +8,8 @@
 
 - Additional builds for varying CPU-supported features (sse2, sse4.2, avx2, avx512)
 
+- Visualize cursor 3D position in world (spatial hash grid)
+
 ### Changed
 
 - Updated `build.sh` build script to support additional builds

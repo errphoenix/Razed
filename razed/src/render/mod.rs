@@ -32,10 +32,8 @@ use crate::{
     render::{
         debug::{
             draw_cages::{DebugDrawCagesCtx, DebugDrawCagesPass, ShaderDebugDrawCages},
-            draw_damage_overlay::{
-                DebugDrawDamageOverlayCtx, DebugDrawDamageOverlayPass, ShaderDebugDrawDamageOverlay,
-            },
             draw_lattices::{DebugDrawLatticesCtx, DebugDrawLatticesPass, ShaderDebugDrawLattices},
+            draw_sphere::{DebugDrawSphere, DebugDrawSphereCtx, ShaderDebugDrawSphere},
         },
         geometry::{
             ComputeShaderDebrisGeomSubmit, ComputeShaderFragmentsGeomSubmit,
@@ -171,7 +169,7 @@ pub struct RenderPipeline {
     post_tonemap: PostTonemapPass,
 
     // debug visuals
-    debug_draw_damage_overlay: DebugDrawDamageOverlayPass,
+    debug_draw_sphere: DebugDrawSphere,
     debug_draw_lattice: DebugDrawLatticesPass,
     debug_draw_cages: DebugDrawCagesPass,
     #[cfg(feature = "devmode")]
@@ -205,7 +203,7 @@ impl RenderPipeline {
         self.post_tonemap.revalidate(render_pool);
 
         // debug visuals
-        self.debug_draw_damage_overlay.revalidate(render_pool);
+        self.debug_draw_sphere.revalidate(render_pool);
         self.debug_draw_lattice.revalidate(render_pool);
         self.debug_draw_cages.revalidate(render_pool);
         #[cfg(feature = "devmode")]
@@ -242,7 +240,7 @@ pub struct RenderShaders {
     post_skybox: ShaderPostSkybox,
     post_tonemap: ComputeShaderPostTonemap,
 
-    debug_draw_damage_overlay: ShaderDebugDrawDamageOverlay,
+    debug_draw_sphere: ShaderDebugDrawSphere,
     debug_draw_lattices: ShaderDebugDrawLattices,
     debug_draw_cages: ShaderDebugDrawCages,
     #[cfg(feature = "devmode")]
@@ -339,21 +337,20 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             draw_interface,
             debug_draw_lattices,
             debug_draw_cages,
-            debug_draw_damage_overlay,
+            debug_draw_sphere,
             #[cfg(feature = "devmode")]
             debug_draw_lines,
             ..
         } = &self.shaders;
 
-        draw_interface.uniform_projection_mat4(self.view_data.ortho_proj_mat);
-
-        debug_draw_damage_overlay.uniform_projection_mat4(proj_mat);
-        debug_draw_damage_overlay.uniform_view_mat4(view_mat);
-        debug_draw_damage_overlay.uniform_mesh_id_uint(self.common_mesh_data.id_sphere);
+        debug_draw_sphere.uniform_projection_mat4(proj_mat);
+        debug_draw_sphere.uniform_view_mat4(view_mat);
+        debug_draw_sphere.uniform_mesh_id_uint(self.common_mesh_data.id_sphere);
         debug_draw_lattices.uniform_projection_mat4(proj_mat);
         debug_draw_lattices.uniform_view_mat4(view_mat);
         debug_draw_cages.uniform_projection_mat4(proj_mat);
         debug_draw_cages.uniform_view_mat4(view_mat);
+        draw_interface.uniform_projection_mat4(self.view_data.ortho_proj_mat);
 
         #[cfg(feature = "devmode")]
         {
@@ -660,27 +657,42 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         let overlays = frame_data.overlays.get();
 
-        // debug damage overlay
+        // debug sphere overlays
         {
-            let damage_overlay = &overlays.damage;
-            if damage_overlay.visible {
-                let debug_draw_damage_overlay = &self.shaders.debug_draw_damage_overlay;
+            // common sphere data
+            let ctx = DebugDrawSphereCtx {
+                index_count: self.common_mesh_data.meta_sphere.tris_length * 3,
+            };
 
+            let debug_draw_sphere = &self.shaders.debug_draw_sphere;
+
+            // damage overlay
+            if overlays.damage.visible {
+                let damage_overlay = &overlays.damage;
                 const DAMAGE_OVERLAY_COLOR: glam::Vec3 = glam::Vec3::X;
-                const DAMAGE_OVERLAY_OPACITY: f32 = 0.4;
-                debug_draw_damage_overlay.uniform_color_vec3(DAMAGE_OVERLAY_COLOR);
-                debug_draw_damage_overlay.uniform_opacity_float(DAMAGE_OVERLAY_OPACITY);
-                debug_draw_damage_overlay.uniform_position_vec3(damage_overlay.position);
-                let radius = damage_overlay.radius;
-                debug_draw_damage_overlay.uniform_radius_float(radius);
+                const DAMAGE_OVERLAY_OPACITY: f32 = 0.22;
+                debug_draw_sphere.uniform_color_vec3(DAMAGE_OVERLAY_COLOR);
+                debug_draw_sphere.uniform_opacity_float(DAMAGE_OVERLAY_OPACITY);
+                debug_draw_sphere.uniform_position_vec3(damage_overlay.position);
+                debug_draw_sphere.uniform_radius_float(damage_overlay.radius);
 
-                self.pipeline().debug_draw_damage_overlay.execute(
-                    section,
-                    render_pool,
-                    &DebugDrawDamageOverlayCtx {
-                        index_count: self.common_mesh_data.meta_sphere.tris_length * 3,
-                    },
-                );
+                self.pipeline()
+                    .debug_draw_sphere
+                    .execute(section, render_pool, &ctx);
+            }
+
+            // cursor 3d
+            if let Some(mouse_pos) = frame_data.mouse_world_position.get() {
+                const RADIUS: f32 = 0.8;
+                const OPACITY: f32 = 0.6;
+                const COLOR: glam::Vec3 = glam::Vec3::Y;
+                debug_draw_sphere.uniform_color_vec3(COLOR);
+                debug_draw_sphere.uniform_opacity_float(OPACITY);
+                debug_draw_sphere.uniform_position_vec3(mouse_pos);
+                debug_draw_sphere.uniform_radius_float(RADIUS);
+                self.pipeline()
+                    .debug_draw_sphere
+                    .execute(section, render_pool, &ctx);
             }
         }
 
@@ -852,8 +864,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 ),
                 post_tonemap: post::tonemap_pass(&self.shaders.post_tonemap, base_hdr, mapped_ldr),
 
-                debug_draw_damage_overlay: debug::draw_damage_overlay_pass(
-                    &self.shaders.debug_draw_damage_overlay,
+                debug_draw_sphere: debug::draw_sphere_pass(
+                    &self.shaders.debug_draw_sphere,
                     mapped_ldr,
                     base_depth,
                 ),
@@ -927,7 +939,7 @@ impl Renderer {
         self.shaders.post_skybox = ShaderPostSkybox::new_compiled();
         self.shaders.post_tonemap = ComputeShaderPostTonemap::new_compiled();
 
-        self.shaders.debug_draw_damage_overlay = ShaderDebugDrawDamageOverlay::new_compiled();
+        self.shaders.debug_draw_sphere = ShaderDebugDrawSphere::new_compiled();
         self.shaders.debug_draw_lattices = ShaderDebugDrawLattices::new_compiled();
         self.shaders.debug_draw_cages = ShaderDebugDrawCages::new_compiled();
         #[cfg(feature = "devmode")]

@@ -1,15 +1,15 @@
 use ethel::shader::ShaderKind;
 use rendrs::{DrawPass, OutputObject, RenderTargetAccessor};
 
-pub type DebugDrawDamageOverlayPass = DrawPass<DebugDrawDamageOverlayCtxWrapper, 0, 2>;
+pub type DebugDrawSphere = DrawPass<DebugDrawSphereCtxWrapper, 0, 2>;
 
-pub const fn draw_damage_overlay_pass(
-    shader: &ShaderDebugDrawDamageOverlay,
+pub const fn draw_sphere_pass(
+    shader: &ShaderDebugDrawSphere,
     ldr_output: RenderTargetAccessor,
     depth_output: RenderTargetAccessor,
-) -> DebugDrawDamageOverlayPass {
+) -> DebugDrawSphere {
     let handle_view = shader.handle().view();
-    DebugDrawDamageOverlayPass::new(
+    DebugDrawSphere::new(
         handle_view,
         [],
         [
@@ -26,13 +26,13 @@ pub const fn draw_damage_overlay_pass(
 }
 
 #[derive(Debug)]
-pub struct DebugDrawDamageOverlayCtx {
+pub struct DebugDrawSphereCtx {
     pub index_count: u32,
 }
-rendrs::context_wrapper!(DebugDrawDamageOverlayCtx);
+rendrs::context_wrapper!(DebugDrawSphereCtx);
 
 ethel::shader_glsl! {
-    struct DebugDrawDamageOverlay > [460] {
+    struct DebugDrawSphere > [460] {
         common {};
 
         unit ShaderKind::Vertex => [
