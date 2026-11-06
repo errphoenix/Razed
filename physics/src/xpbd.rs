@@ -3,7 +3,7 @@ use janus::context::DeltaTime;
 
 pub const DEFAULT_SOLVE_ITERATIONS: u32 = 8;
 pub const DEFAULT_SUB_STEPS: u32 = 4;
-pub const DAMPING: f32 = 0.98;
+pub const DAMPING: f32 = 1f32;
 pub const DEFAULT_STEP_MULT: f32 = 1.0;
 
 #[derive(Debug, Clone, Copy, Default)]
