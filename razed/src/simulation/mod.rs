@@ -51,13 +51,8 @@ use janus::{Cursor, DeltaTime, StringMap, sync::TriCell};
 use physics::{force::ForcesRegistry, rigid::RbVelocity};
 use tracing::{Level, event};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum StructurePartIndex {
-    Lattice(IndirectIndex),
-    Fragment(IndirectIndex),
-}
-
-pub type StructureSpatialHash = FxLsSpatialHash<StructurePartIndex>;
+pub type FragmentsSpatialHash = FxLsSpatialHash<IndirectIndex>;
+pub type DebrisSpatialHash = FxLsSpatialHash<IndirectIndex>;
 
 const GROUND_LEVEL: f32 = 0.0;
 
@@ -139,7 +134,6 @@ pub struct State {
     cage: CageSystem,
     fragments: FragmentSystem,
     debris: DebrisSystem,
-    structure_hashed: StructureSpatialHash,
     damage_sys: DamageSystem,
     damage_mode: bool,
 
@@ -206,7 +200,6 @@ impl Default for State {
             damage_sys: DamageSystem::new(),
             damage_mode: false,
             local_overlays: Overlays::default(),
-            structure_hashed: FxLsSpatialHash::new(HASH_RESOLUTION),
             phys_forces_reg: Default::default(),
             mouse_world_pos: Default::default(),
         }
@@ -703,39 +696,41 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         }
 
         let vp_prev = view_point.get();
+        screen.sync().unwrap();
+
+        // sync fragments from last frame + hash
+        self.profiler
+            .capture_duration("structure_sync_and_hash", || {
+                self.fragments.sync_cage_feedback(&self.cage);
+                self.fragments.hash();
+            });
+        self.update_mouse_world_position(&view_point, screen, input.cursor());
 
         let surface_options = input.surface_options().read();
-        if !ui_consume_input {
-            if !surface_options.cursor_grabbed() {
-                screen.sync().unwrap();
-                self.select_lattice_raycast(input, screen.get(), view_point);
-            } else {
-                {
-                    const ANCHOR_Y_MOVE: glam::Vec3 = glam::vec3(0.0, 1.0, 0.0);
-                    const ANCHOR_Y_MOVE_SPRINT: f32 = 4.0;
-                    let anchor = self.camera.anchor();
+        if surface_options.cursor_grabbed() {
+            const ANCHOR_Y_MOVE: glam::Vec3 = glam::vec3(0.0, 1.0, 0.0);
+            const ANCHOR_Y_MOVE_SPRINT: f32 = 4.0;
+            let anchor = self.camera.anchor();
 
-                    let mut d = ANCHOR_Y_MOVE * delta.as_f32();
-                    if input.keys().key_down(crate::input::CAMERA_MOVE_SPEEDUP) {
-                        d *= ANCHOR_Y_MOVE_SPRINT;
-                    }
-
-                    if input.keys().key_down(crate::input::CAMERA_MOVE_Y_UP) {
-                        self.camera.set_anchor(anchor + d);
-                    } else if input.keys().key_down(crate::input::CAMERA_MOVE_Y_DOWN) {
-                        self.camera.set_anchor(anchor - d);
-                    }
-                }
-
-                let (dx, dy) = input.cursor().delta_f32();
-                let (dx, dy) = (dx.to_radians(), dy.to_radians());
-                self.camera.update(dx, dy);
-
-                let dw = input.mouse_wheel();
-                *self.camera.distance_mut() -= dw * delta.as_f32() * 100.0;
-
-                let _ = view_point.set_and_advance(*self.camera.viewpoint());
+            let mut d = ANCHOR_Y_MOVE * delta.as_f32();
+            if input.keys().key_down(crate::input::CAMERA_MOVE_SPEEDUP) {
+                d *= ANCHOR_Y_MOVE_SPRINT;
             }
+
+            if input.keys().key_down(crate::input::CAMERA_MOVE_Y_UP) {
+                self.camera.set_anchor(anchor + d);
+            } else if input.keys().key_down(crate::input::CAMERA_MOVE_Y_DOWN) {
+                self.camera.set_anchor(anchor - d);
+            }
+
+            let (dx, dy) = input.cursor().delta_f32();
+            let (dx, dy) = (dx.to_radians(), dy.to_radians());
+            self.camera.update(dx, dy);
+
+            let dw = input.mouse_wheel();
+            *self.camera.distance_mut() -= dw * delta.as_f32() * 100.0;
+
+            let _ = view_point.set_and_advance(*self.camera.viewpoint());
         }
 
         // shadow tricell with previous read viewpoint value
@@ -782,16 +777,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             });
         }
 
-        self.profiler
-            .capture_duration("structure_sync_and_hash", || {
-                self.structure_hashed.clear_buckets();
-                self.fragments.sync_cage_feedback(&self.cage);
-                self.fragments.hash_fragments(&mut self.structure_hashed);
-                self.lattice.hash_nodes(&mut self.structure_hashed);
-            });
-
-        self.update_mouse_world_position(&view_point, screen, input.cursor());
-
         if let Some(selected) = self.selection.take()
             && input
                 .keys()
@@ -799,7 +784,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         {
             self.lattice.break_constraint(selected);
         }
-        if input.keys().key_pressed(crate::input::CAMERA_SET_ANCHOR) {
+        if input.keys().key_pressed(crate::input::CAMERA_SET_ANCHOR) && !ui_consume_input {
             let new_anchor = self.mouse_world_pos.unwrap_or_default();
             self.camera.set_anchor(new_anchor);
         }
@@ -809,8 +794,10 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             self.damage_mode = !self.damage_mode;
         }
         if self.damage_mode {
-            const CLOUD_RADIUS: f32 = 4f32;
-            const CLOUD_DAMAGE: f32 = 50000.0f32;
+            const CLOUD_RADIUS: f32 = 8f32;
+            const CLOUD_DAMAGE: f32 = 0.5;
+            const CLOUD_STRENGTH: f32 = 2.5; //MN
+
             if let Some(position) = self.mouse_world_pos {
                 self.local_overlays.damage = DamageOverlay {
                     visible: true,
@@ -818,20 +805,20 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                     position,
                 };
                 if input.keys().key_pressed(crate::input::MISC_DAMAGE_SPAWN) {
-                    tracing::info!("Spawn damage cloud at {position:?}");
                     self.damage_sys.queue_damage(DamageCloud::new(
                         position,
                         CLOUD_DAMAGE,
                         CLOUD_RADIUS,
                         DamageFalloffModel::Quadratic,
-                        100f32,
+                        CLOUD_STRENGTH,
                     ));
                 }
             }
         }
+
         self.damage_sys.propagate_damage(
-            &self.structure_hashed,
             &mut self.fragments,
+            &mut self.debris,
             &mut self.phys_forces_reg,
         );
 
@@ -881,12 +868,12 @@ impl State {
         screen: &ScreenSpace,
         cursor: &Cursor,
     ) {
-        const RAY_RANGE: f32 = 128f32;
+        const RAY_RANGE: f32 = 48f32;
         let vp = view_point.position;
         let cursor = cursor.current_f32();
         let inverse_view = view_point.into_mat4();
         let mouse_world_dir = screen.to_world_space(cursor, inverse_view);
-        let hashed = &self.structure_hashed;
+        let hashed = self.fragments.hashed();
 
         let cell = hashed.raycast(vp, mouse_world_dir, RAY_RANGE).or_else(|| {
             let dy = mouse_world_dir.y;
@@ -1134,7 +1121,7 @@ impl State {
                 let b_position = data.bind_position[frag_index.as_index()].xyz();
                 let mass_coeff = data.mass_coeff[frag_index.as_index()];
                 let integrity = data.integrity[frag_index.as_index()];
-                let mass = integrity * mass_coeff;
+                let mass = (mass_coeff + mass_coeff * integrity) * 0.65;
 
                 let mut inherit_v = glam::Vec3::ZERO;
                 let mut inherit_a = glam::Vec3::ZERO;
@@ -1154,9 +1141,12 @@ impl State {
                         inherit_av += contact.cross(*velocity) * w;
                     });
                 }
-                inherit_a *= 0.01;
-                inherit_v *= 0.035;
-                inherit_av *= 0.01;
+
+                let held_velocity = data.held_force[frag_index.as_index()] * mass;
+                const INHERIT_AV_COEFF: f32 = 0.01;
+                const INHERIT_HV_COEFF: f32 = 0.5;
+                inherit_av *= INHERIT_AV_COEFF;
+                inherit_v += held_velocity * INHERIT_HV_COEFF;
 
                 let position = data.real_position[frag_index.as_index()];
                 let rotation = data.sync_rotation[frag_index.as_index()];
@@ -1243,6 +1233,7 @@ impl State {
         self.generate_structure(center, &mut voxel_grid, lattice);
     }
 
+    #[allow(unused)]
     fn spawn_debug_bridge(&mut self, view_point: &ViewPoint) {
         const WIDTH: f32 = 6.0;
         const HEIGHT: f32 = 6.0;

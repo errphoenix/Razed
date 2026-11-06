@@ -1,5 +1,5 @@
 use ethel::{
-    FxLsSpatialHash, SpatialHash,
+    FxLsSpatialHash,
     state::data::{Column, IndirectIndex},
 };
 use janus::context::DeltaTime;
@@ -9,9 +9,7 @@ use physics::{
 };
 use rustc_hash::FxHashMap;
 
-use crate::simulation::{
-    StructurePartIndex, StructureSpatialHash, fragment::FragmentsRowTableView,
-};
+use crate::simulation::fragment::FragmentsRowTableView;
 
 ethel::table_spec! {
     struct Nodes {
@@ -134,15 +132,6 @@ impl LatticeSystem {
     pub fn clear_damage_buffers(&mut self) {
         self.damaged_nodes_data.clear();
         self.damaged_nodes_hash.clear();
-    }
-
-    pub fn hash_nodes(&self, hashed: &mut StructureSpatialHash) {
-        let pos = self.nodes.current_pos_view();
-        let handles = self.nodes.handles_view();
-        for (&pos, &handle) in pos.join(handles) {
-            let cell = hashed.cell_at(pos);
-            hashed.put_element(cell, StructurePartIndex::Lattice(handle));
-        }
     }
 
     fn register_node_damage(
@@ -292,6 +281,32 @@ impl LatticeSystem {
     pub fn break_constraint(&mut self, constraint: IndirectIndex) {
         if self.links.solve_indirect(constraint).is_some() {
             self.solver.break_link(constraint);
+        }
+    }
+
+    pub fn apply_impulse(&mut self, index: IndirectIndex, impulse: glam::Vec3) {
+        if let Some(node) = self.nodes.solve_indirect(index) {
+            let mass = *unsafe { self.nodes.mass_slice().get_unchecked(node.as_index()) };
+            let out_vel = unsafe {
+                self.nodes
+                    .velocity_mut_slice()
+                    .get_unchecked_mut(node.as_index())
+            };
+            *out_vel += impulse * mass;
+        }
+    }
+
+    pub fn apply_impulse_multi(&mut self, indices: &[IndirectIndex], impulse: glam::Vec3) {
+        for &index in indices {
+            self.apply_impulse(index, impulse);
+        }
+    }
+
+    pub fn apply_impulse_batched(&mut self, impulse: glam::Vec3) {
+        let mass = &self.nodes.mass;
+        let velocity = &mut self.nodes.velocity;
+        for (vel, &w) in velocity.iter_mut().zip(mass).skip(1) {
+            *vel += impulse * w;
         }
     }
 

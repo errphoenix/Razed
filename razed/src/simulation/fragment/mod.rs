@@ -1,7 +1,7 @@
 pub mod mesh;
 
 use ethel::{
-    Cell, Column, DirectIndex, FxSpatialHash, IndirectIndex, SpatialHash,
+    Cell, Column, DirectIndex, FxLsSpatialHash, FxSpatialHash, IndirectIndex, SpatialHash,
     state::data::table::TableView,
 };
 use glam::Vec4Swizzles;
@@ -10,7 +10,7 @@ use rustc_hash::FxHashSet;
 use crate::{
     procedural::VoxelGrid,
     simulation::{
-        StructurePartIndex, StructureSpatialHash,
+        FragmentsSpatialHash,
         cage::CageSystem,
         lattice::{DamagedNode, NodesRowTableView},
     },
@@ -42,6 +42,8 @@ ethel::table_spec! {
         integrity: f32;
 
         mesh_id: ethel::mesh::Id;
+
+        held_force: glam::Vec3;
     }
 }
 
@@ -73,7 +75,8 @@ impl UninitFragment {
 
 #[derive(Debug)]
 pub struct FragmentSystem {
-    pub(crate) fragments: FragmentsRowTable,
+    pub(crate) data: FragmentsRowTable,
+    pub(crate) hashed: FragmentsSpatialHash,
 
     uninitialised: Vec<UninitFragment>,
 
@@ -82,9 +85,8 @@ pub struct FragmentSystem {
 
     /// per-frame list of damaged fragments from nodes
     /// these are the fragments' direct indices (unstable)
-    fragment_damage_frame: Vec<(DirectIndex, DamagedNode)>,
-
-    disabled_frags_frame: FxHashSet<DirectIndex>,
+    damaged_frame: Vec<(DirectIndex, DamagedNode)>,
+    disabled_frame: FxHashSet<DirectIndex>,
 }
 impl Default for FragmentSystem {
     fn default() -> Self {
@@ -94,10 +96,11 @@ impl Default for FragmentSystem {
 impl FragmentSystem {
     pub fn new() -> Self {
         Self {
-            fragments: FragmentsRowTable::new(),
+            data: FragmentsRowTable::new(),
+            hashed: FxLsSpatialHash::new(super::HASH_RESOLUTION),
             uninitialised: Vec::new(),
-            fragment_damage_frame: Vec::new(),
-            disabled_frags_frame: FxHashSet::default(),
+            damaged_frame: Vec::new(),
+            disabled_frame: FxHashSet::default(),
             // account for degenerate
             node_map: vec![Vec::new()],
         }
@@ -125,11 +128,11 @@ impl FragmentSystem {
     }
 
     pub const fn data(&self) -> &FragmentsRowTable {
-        &self.fragments
+        &self.data
     }
 
     pub const fn data_mut(&mut self) -> &mut FragmentsRowTable {
-        &mut self.fragments
+        &mut self.data
     }
 
     #[allow(unused)]
@@ -138,8 +141,8 @@ impl FragmentSystem {
     }
 
     pub fn clear_damage_buffer(&mut self) {
-        self.disabled_frags_frame.clear();
-        self.fragment_damage_frame.clear();
+        self.disabled_frame.clear();
+        self.damaged_frame.clear();
     }
 
     /// Synchronise stable indirect indices `broken_ids` of constraints and
@@ -151,17 +154,17 @@ impl FragmentSystem {
                     continue;
                 }
 
-                if let Some(direct) = self.fragments.solve_indirect(frag_id) {
-                    self.fragment_damage_frame.push((direct, node));
+                if let Some(direct) = self.data.solve_indirect(frag_id) {
+                    self.damaged_frame.push((direct, node));
                 }
             }
         }
 
         // validate disabled fragments and invalidate relations
-        let parents = &mut self.fragments.parents;
-        let weights = &mut self.fragments.parents_weights;
+        let parents = &mut self.data.parents;
+        let weights = &mut self.data.parents_weights;
 
-        self.fragment_damage_frame.drain(..).for_each(
+        self.damaged_frame.drain(..).for_each(
             |(
                 frag_idx,
                 DamagedNode {
@@ -170,7 +173,7 @@ impl FragmentSystem {
                 },
             )| {
                 if constraints_left == 0 {
-                    self.disabled_frags_frame.insert(frag_idx);
+                    self.disabled_frame.insert(frag_idx);
                     return;
                 }
 
@@ -194,37 +197,46 @@ impl FragmentSystem {
 
                 let active_count = parents.iter().filter(|id| id.as_int() != 0).count();
                 if active_count < MIN_CLUSTER_SIZE as usize {
-                    self.disabled_frags_frame.insert(frag_idx);
+                    self.disabled_frame.insert(frag_idx);
                 }
             },
         );
     }
 
     pub fn sync_cage_feedback(&mut self, cage: &CageSystem) {
-        let count = self.fragments.len();
+        let count = self.data.len();
         for i in 1..count {
-            let cage_id = self.fragments.deformation_cage[i];
+            let cage_id = self.data.deformation_cage[i];
             let cage_did = cage.gpu_index_of(cage_id).unwrap();
 
             let feedback = cage.deformation_feedback()[cage_did as usize];
             let offset = feedback.offset;
             let c_rot = feedback.rotation;
 
-            let b_pos = self.fragments.bind_position[i];
+            let b_pos = self.data.bind_position[i];
             let r_pos = glam::vec3(b_pos.x + offset.x, b_pos.y + offset.y, b_pos.z + offset.z);
 
-            self.fragments.real_position[i] = r_pos;
-            self.fragments.sync_rotation[i] = c_rot;
+            self.data.real_position[i] = r_pos;
+            self.data.sync_rotation[i] = c_rot;
         }
     }
 
-    pub fn hash_fragments(&self, hashed: &mut StructureSpatialHash) {
-        let pos = self.fragments.real_position_view();
-        let handles = self.fragments.handles_view();
+    pub fn hash(&mut self) {
+        self.hashed.clear_buckets();
+        let pos = self.data.real_position_view();
+        let handles = self.data.handles_view();
         for (&pos, &handle) in pos.join(handles) {
-            let cell = hashed.cell_at(pos);
-            hashed.put_element(cell, StructurePartIndex::Fragment(handle));
+            let cell = self.hashed.cell_at(pos);
+            self.hashed.put_element(cell, handle);
         }
+    }
+
+    pub const fn hashed(&self) -> &FragmentsSpatialHash {
+        &self.hashed
+    }
+
+    pub const fn hashed_mut(&mut self) -> &mut FragmentsSpatialHash {
+        &mut self.hashed
     }
 
     /// Return a slice containing the *direct indices* of all fragments
@@ -240,15 +252,15 @@ impl FragmentSystem {
     /// intended for use only during the same frame this was populated in and
     /// before any operation that might add/remove elements to the table.
     pub fn frame_damaged_fragments(&self) -> &[(DirectIndex, DamagedNode)] {
-        &self.fragment_damage_frame
+        &self.damaged_frame
     }
 
     pub fn frame_disabled_frags_count(&self) -> usize {
-        self.disabled_frags_frame.len()
+        self.disabled_frame.len()
     }
 
     pub fn frame_disabled_frags(&self) -> impl Iterator<Item = &DirectIndex> {
-        self.disabled_frags_frame.iter()
+        self.disabled_frame.iter()
     }
 
     const VOXEL_NEIGHBOR_QUERY_RADIUS: u32 = 12;
@@ -263,8 +275,8 @@ impl FragmentSystem {
             if let UninitFragmentStage::Unfinished { indirect } = frag.stage {
                 let fragment_world = frag.position;
                 let cage_id = cage.generate_cage(fragment_world, lattice_hash, lattice);
-                let direct = self.fragments.solve_indirect(indirect).unwrap();
-                self.fragments.deformation_cage[direct.as_index()] = cage_id;
+                let direct = self.data.solve_indirect(indirect).unwrap();
+                self.data.deformation_cage[direct.as_index()] = cage_id;
                 false
             } else {
                 true
@@ -343,7 +355,7 @@ impl FragmentSystem {
             let yt = position.y / height;
             let mass_contrib = mass_curve(yt);
 
-            let handle = self.fragments.insert((
+            let handle = self.data.insert((
                 parents,
                 weights,
                 IndirectIndex::default(),
@@ -351,9 +363,11 @@ impl FragmentSystem {
                 position.xyz(),
                 glam::Quat::IDENTITY,
                 mass_contrib,
+                // 100f32,
                 1.0, // todo: debris rigid body
                 1.0, // todo: damage and integrity
                 fragment_mesh,
+                glam::Vec3::ZERO,
             ));
             frag.stage = UninitFragmentStage::Unfinished { indirect: handle };
 

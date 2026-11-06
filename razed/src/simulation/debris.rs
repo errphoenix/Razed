@@ -18,6 +18,8 @@ use physics::{
 };
 use rayon::iter::ParallelIterator;
 
+use crate::simulation::DebrisSpatialHash;
+
 const MOTION_ACCUM_BUCKET_SIZE: Duration = Duration::from_millis(300);
 const MOTION_ACCUM_BUCKET_COUNT: usize = 6;
 
@@ -171,18 +173,18 @@ impl RubberVolumeStage {
     }
 }
 
-const DEBRIS_FREEZE_TIME_THRESHOLD: f32 = 4.0;
-const DEBRIS_FREEZE_MOVE_THRESHOLD: f32 = 0.75;
+const DEBRIS_FREEZE_TIME_THRESHOLD: f32 = 8.0;
+const DEBRIS_FREEZE_MOVE_THRESHOLD: f32 = 0.05;
 
 #[derive(Debug)]
 pub struct DebrisSystem {
-    debris: DebrisRowTable,
-    debris_phys: RigidBodySolver,
-    debris_hash: FxLsSpatialHash<IndirectIndex>,
+    pub(crate) data: DebrisRowTable,
+    pub(crate) physics: RigidBodySolver,
+    pub(crate) hashed: FxLsSpatialHash<IndirectIndex>,
 
     collision_job: LazyLock<BufferedRoutine<CollisionBuffers, LightCollision>>,
 
-    debris_trash_buffer: Vec<IndirectIndex>,
+    trash_buffer: Vec<IndirectIndex>,
 
     rubber_volume_stage: RubberVolumeStage,
     rubber: RubberRowTable,
@@ -191,11 +193,11 @@ pub struct DebrisSystem {
 impl Default for DebrisSystem {
     fn default() -> Self {
         Self {
-            debris: DebrisRowTable::default(),
-            debris_phys: RigidBodySolver::default(),
-            debris_hash: FxLsSpatialHash::new(super::HASH_RESOLUTION),
+            data: DebrisRowTable::default(),
+            physics: RigidBodySolver::default(),
+            hashed: FxLsSpatialHash::new(super::HASH_RESOLUTION),
 
-            debris_trash_buffer: Vec::new(),
+            trash_buffer: Vec::new(),
             rubber_volume_stage: RubberVolumeStage::default(),
             rubber: RubberRowTable::default(),
 
@@ -210,11 +212,11 @@ impl DebrisSystem {
 
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            debris: DebrisRowTable::with_capacity(capacity),
-            debris_phys: RigidBodySolver::default(),
-            debris_hash: FxLsSpatialHash::with_capacity(super::HASH_RESOLUTION, capacity),
+            data: DebrisRowTable::with_capacity(capacity),
+            physics: RigidBodySolver::default(),
+            hashed: FxLsSpatialHash::with_capacity(super::HASH_RESOLUTION, capacity),
 
-            debris_trash_buffer: Vec::with_capacity(capacity / 2),
+            trash_buffer: Vec::with_capacity(capacity / 2),
             rubber_volume_stage: RubberVolumeStage::new(),
             rubber: RubberRowTable::with_capacity(capacity / 2),
 
@@ -228,15 +230,15 @@ impl DebrisSystem {
     /// This subtracts `2` from the sum of the lengths of the `debris`
     /// and `rubber` to exclude degenerate elements.
     pub fn total_debris_count(&self) -> usize {
-        self.debris.len() + self.rubber.len() - 2
+        self.data.len() + self.rubber.len() - 2
     }
 
     pub fn data(&self) -> &DebrisRowTable {
-        &self.debris
+        &self.data
     }
 
     pub fn data_mut(&mut self) -> &mut DebrisRowTable {
-        &mut self.debris
+        &mut self.data
     }
 
     pub fn rubber(&self) -> &RubberRowTable {
@@ -244,22 +246,23 @@ impl DebrisSystem {
     }
 
     pub const fn solver(&self) -> &RigidBodySolver {
-        &self.debris_phys
+        &self.physics
     }
 
     pub fn integrate_global_forces(&mut self, forces: &ForcesRegistry) {
+        const TORQUE_COEFF: f32 = 0.05;
         forces
             .targets_body()
             .iter()
             .for_each(|&ForceTarget { force, entity }| {
                 if let Some(fdid) = forces.forces_column().solve_indirect(force)
-                    && let Some(edid) = self.debris.solve_indirect(entity)
+                    && let Some(edid) = self.data.solve_indirect(entity)
                 {
                     let force = forces.forces()[fdid.as_index()].get();
-                    let out_forces = &mut self.debris.forces[edid.as_index()];
-                    let out_torque = &mut self.debris.torques[edid.as_index()];
+                    let out_forces = &mut self.data.forces[edid.as_index()];
+                    let out_torque = &mut self.data.torques[edid.as_index()];
                     *out_forces += force;
-                    *out_torque += force.any_orthogonal_vector();
+                    *out_torque += force.any_orthogonal_vector() * TORQUE_COEFF;
                 }
             });
     }
@@ -269,8 +272,16 @@ impl DebrisSystem {
             let handle = self.rubber.handles[i];
             let volume_id = self.rubber.volume_id[i];
             self.rubber.free(handle);
-            self.debris_phys.remove_static_volume(volume_id);
+            self.physics.remove_static_volume(volume_id);
         }
+    }
+
+    pub const fn hashed(&self) -> &DebrisSpatialHash {
+        &self.hashed
+    }
+
+    pub const fn hashed_mut(&mut self) -> &DebrisSpatialHash {
+        &mut self.hashed
     }
 
     pub fn delete_rubber(&mut self, handle: IndirectIndex) {
@@ -297,47 +308,45 @@ impl DebrisSystem {
         }
 
         self.rubber.free(handle);
-        self.debris_phys.remove_static_volume(volume_id);
+        self.physics.remove_static_volume(volume_id);
     }
 
     pub fn hash_debris(&mut self) {
-        self.debris_hash.clear();
+        self.hashed.clear();
 
-        let pos = self.debris.position_view();
-        let bounds = self.debris.volume_view();
-        let handles = self.debris.handles_view();
+        let pos = self.data.position_view();
+        let bounds = self.data.volume_view();
+        let handles = self.data.handles_view();
         let debris = pos.join(bounds).join(handles);
 
         for (&pos, &_bounds, &handle) in debris.into_iter() {
-            let cell = self.debris_hash.cell_at(pos);
-            self.debris_hash.put_element(cell, handle);
+            let cell = self.hashed.cell_at(pos);
+            self.hashed.put_element(cell, handle);
         }
     }
 
     pub fn simulate_bodies(&mut self, delta: DeltaTime) {
         // register pending static entites
         for RubberStaticEntity { data, handle } in self.rubber_volume_stage.drain() {
-            let volume_id = self
-                .debris_phys
-                .add_static_volume(data.position, data.volume);
+            let volume_id = self.physics.add_static_volume(data.position, data.volume);
 
             let direct = self.rubber.solve_indirect(handle).unwrap();
             self.rubber.volume_id[direct.as_index()] = volume_id;
         }
 
         {
-            let positions = &self.debris.position;
-            let volumes = &self.debris.volume;
+            let positions = &self.data.position;
+            let volumes = &self.data.volume;
 
-            let rubber_par_iter = self.debris_phys.static_volumes_hash().par_iter();
+            let rubber_par_iter = self.physics.static_volumes_hash().par_iter();
             let par_iter = self
-                .debris_hash
+                .hashed
                 .par_iter()
                 .chain(rubber_par_iter)
                 .filter_map(|(&cell, bucket)| (!bucket.is_empty()).then(|| cell));
 
-            let static_hash = self.debris_phys.static_volumes_hash();
-            let static_data = self.debris_phys.static_volumes_data();
+            let static_hash = self.physics.static_volumes_hash();
+            let static_data = self.physics.static_volumes_data();
 
             self.collision_job
                 .dispatch_jobs(par_iter, |WorkBuffers { buffer, result }, cell| {
@@ -348,9 +357,9 @@ impl DebrisSystem {
                     {
                         // reconstruct debris buffer
                         debris.clear();
-                        if let Some(bucket) = self.debris_hash.get(cell) {
+                        if let Some(bucket) = self.hashed.get(cell) {
                             bucket.iter().for_each(|i| {
-                                let direct = unsafe { self.debris.solve_indirect_unchecked(*i) };
+                                let direct = unsafe { self.data.solve_indirect_unchecked(*i) };
                                 let position = positions[direct.as_index()];
                                 let volume = volumes[direct.as_index()];
                                 debris.push(position, volume, direct);
@@ -405,7 +414,7 @@ impl DebrisSystem {
                     }
                 });
 
-            let contacts = self.debris_phys.collision_buffer_mut();
+            let contacts = self.physics.collision_buffer_mut();
 
             self.collision_job
                 .thread_buffers()
@@ -418,36 +427,35 @@ impl DebrisSystem {
                 });
         }
 
-        let positions = &mut self.debris.position;
-        let rotations = &mut self.debris.rotation;
-        let velocities = &mut self.debris.velocity;
-        let forces = &mut self.debris.forces;
-        let torques = &mut self.debris.torques;
-        let masses = &self.debris.mass;
-        let inv_inertia_loc = &self.debris.inv_inertia_loc;
-        let inv_inertia_abs = &mut self.debris.inv_inertia_abs;
+        let positions = &mut self.data.position;
+        let rotations = &mut self.data.rotation;
+        let velocities = &mut self.data.velocity;
+        let forces = &mut self.data.forces;
+        let torques = &mut self.data.torques;
+        let masses = &self.data.mass;
+        let inv_inertia_loc = &self.data.inv_inertia_loc;
+        let inv_inertia_abs = &mut self.data.inv_inertia_abs;
 
-        self.debris_phys
-            .solve_collisions(positions, velocities, masses);
+        self.physics.solve_collisions(positions, velocities, masses);
 
-        self.debris_phys.apply_gravity(forces);
-        self.debris_phys
+        self.physics.apply_gravity(forces, velocities);
+        self.physics
             .sync_inertia(rotations, inv_inertia_loc, inv_inertia_abs);
 
-        self.debris_phys
+        self.physics
             .integrate(velocities, forces, torques, masses, inv_inertia_abs, delta);
-        self.debris_phys
+        self.physics
             .update_bodies(positions, rotations, velocities, delta);
 
-        self.debris_phys.damp_velocity(velocities, delta);
-        self.debris_phys.constrain_ground(positions, velocities);
+        self.physics.damp_velocity(velocities, delta);
+        self.physics.constrain_ground(positions, velocities);
     }
 
     pub fn accumulate_motion(&mut self) {
         let time = Instant::now();
 
-        let positions = &mut self.debris.position;
-        let accums = &mut self.debris.motion;
+        let positions = &mut self.data.position;
+        let accums = &mut self.data.motion;
 
         for (
             live_position,
@@ -465,30 +473,30 @@ impl DebrisSystem {
     }
 
     pub fn freeze_old_debris(&mut self, delta: DeltaTime) {
-        let age = &mut self.debris.age;
-        let handles = &self.debris.handles;
-        let motion = &self.debris.motion;
+        let age = &mut self.data.age;
+        let handles = &self.data.handles;
+        let motion = &self.data.motion;
 
         for ((age, motion), &id) in age.iter_mut().zip(motion).zip(handles).skip(1) {
             if motion.window.accumulated() < DEBRIS_FREEZE_MOVE_THRESHOLD
                 && *age > DEBRIS_FREEZE_TIME_THRESHOLD
             {
-                self.debris_trash_buffer.push(id);
+                self.trash_buffer.push(id);
             }
 
             *age += delta.as_f32();
         }
 
-        self.debris_trash_buffer.drain(..).for_each(|debris_id| {
+        self.trash_buffer.drain(..).for_each(|debris_id| {
             if debris_id.as_int() == 0 {
                 return;
             }
-            if let Some(direct) = self.debris.solve_indirect(debris_id) {
-                let position = self.debris.position[direct.as_index()];
-                let rotation = self.debris.rotation[direct.as_index()];
-                let volume = self.debris.volume[direct.as_index()];
-                let age = self.debris.age[direct.as_index()];
-                let mesh_id = self.debris.mesh_id[direct.as_index()];
+            if let Some(direct) = self.data.solve_indirect(debris_id) {
+                let position = self.data.position[direct.as_index()];
+                let rotation = self.data.rotation[direct.as_index()];
+                let volume = self.data.volume[direct.as_index()];
+                let age = self.data.age[direct.as_index()];
+                let mesh_id = self.data.mesh_id[direct.as_index()];
 
                 let rubber_data = (
                     age,
@@ -500,8 +508,64 @@ impl DebrisSystem {
                 );
                 let handle = self.rubber.insert(rubber_data);
                 self.rubber_volume_stage.push(position, volume, handle);
-                self.debris.free(debris_id);
+                self.data.free(debris_id);
             }
         });
+    }
+
+    pub fn apply_impulse(
+        &mut self,
+        index: IndirectIndex,
+        linear: Option<glam::Vec3>,
+        angular: Option<glam::Vec3>,
+    ) {
+        if linear.is_none() && angular.is_none() {
+            return;
+        }
+
+        if let Some(node) = self.data.solve_indirect(index) {
+            let mass = self.data.mass[node.as_index()];
+            let inertia = self.data.inv_inertia_abs[node.as_index()];
+            let out_vel = &mut self.data.velocity[node.as_index()];
+            if let Some(linear) = linear {
+                out_vel.linear += linear * mass;
+            }
+            if let Some(angular) = angular {
+                out_vel.angular += inertia * angular;
+            }
+        }
+    }
+
+    pub fn apply_impulse_multi(
+        &mut self,
+        indices: &[IndirectIndex],
+        linear: Option<glam::Vec3>,
+        angular: Option<glam::Vec3>,
+    ) {
+        if linear.is_none() && angular.is_none() {
+            return;
+        }
+        for &index in indices {
+            self.apply_impulse(index, linear, angular);
+        }
+    }
+
+    pub fn apply_impulse_batched(
+        &mut self,
+        linear: Option<glam::Vec3>,
+        angular: Option<glam::Vec3>,
+    ) {
+        if linear.is_none() && angular.is_none() {
+            return;
+        }
+        let linear = linear.unwrap_or_default();
+        let angular = angular.unwrap_or_default();
+        let mass = &self.data.mass;
+        let inertia = &self.data.inv_inertia_abs;
+        let velocity = &mut self.data.velocity;
+        for (vel, (&w, &i)) in velocity.iter_mut().zip(mass.iter().zip(inertia)).skip(1) {
+            vel.linear += linear * w;
+            vel.angular += i * angular;
+        }
     }
 }

@@ -2,7 +2,7 @@ use ethel::{Cell, Column, FxLsSpatialHash, FxSpatialHash, SpatialHash};
 use glam::FloatExt;
 use physics::force::{ForcesRegistry, PersistentForce};
 
-use crate::simulation::{StructurePartIndex, StructureSpatialHash, fragment::FragmentSystem};
+use crate::simulation::{debris::DebrisSystem, fragment::FragmentSystem};
 
 #[derive(Clone, Copy, Debug)]
 pub struct DamageOverlay {
@@ -131,47 +131,61 @@ impl DamageSystem {
 
     pub fn propagate_damage(
         &mut self,
-        hashed: &StructureSpatialHash,
         fragment_sys: &mut FragmentSystem,
+        debris_sys: &mut DebrisSystem,
         forces: &mut ForcesRegistry,
     ) {
-        let fragments = &mut fragment_sys.fragments;
+        let fragments = &mut fragment_sys.data;
+        let h_frags = &mut fragment_sys.hashed;
+        let h_debris = &mut debris_sys.hashed;
+
         self.queue.drain(..).for_each(|cloud| {
-            hashed.get_damage_area(&cloud, &mut self.lookup_buffer);
+            h_frags.get_damage_area(&cloud, &mut self.lookup_buffer);
+            h_debris.get_damage_area(&cloud, &mut self.lookup_buffer);
+
             let origin = cloud.position;
             let falloff = cloud.falloff;
             let dmg_amount = cloud.amount;
             let strength = cloud.strength;
             let radius = cloud.radius;
             self.lookup_buffer.drain(..).for_each(|cell| {
-                if let Some(affected) = hashed.get(cell) {
-                    println!("affected: {}", affected.len());
-                    if !affected.is_empty() {
-                        let point = hashed.approx_point_at(cell);
-                        let to_origin = origin - point;
-                        let vicinity = (to_origin.length() / radius).clamp(0f32, 1f32);
+                let b_frags = h_frags.get(cell);
+                let b_debris = h_debris.get(cell);
+                if b_frags.is_some_and(|v| !v.is_empty()) || b_debris.is_some_and(|v| !v.is_empty())
+                {
+                    let point = h_frags.approx_point_at(cell);
+                    let to_origin = origin - point;
 
-                        let coefficient = falloff * vicinity;
-                        let damage = coefficient * dmg_amount;
-                        let impulse_dir = -to_origin.normalize();
-                        let f_impulse = coefficient * impulse_dir * strength;
+                    let normalized_distance = (to_origin.length() / radius).clamp(0.0, 1.0);
+                    let vicinity = 1.0 - normalized_distance;
 
-                        const IMPULSE_DURATION: f32 = 0.4;
+                    let coefficient = falloff * vicinity;
+                    let damage = coefficient * dmg_amount;
 
-                        for &id in affected {
-                            let p_force = PersistentForce::new(f_impulse, IMPULSE_DURATION);
-                            let fid = forces.record(p_force);
-                            match id {
-                                StructurePartIndex::Lattice(id) => {
-                                    forces.add_target_lattice(fid, id);
-                                }
-                                StructurePartIndex::Fragment(id) => {
-                                    let did = fragments.solve_indirect(id).unwrap();
-                                    let index = did.as_index();
-                                    let mut integrity = fragments.integrity[index];
-                                    integrity -= damage;
-                                    fragments.integrity[index] = integrity.saturate();
-                                }
+                    let impulse_dir = -to_origin.normalize();
+                    let f_impulse = coefficient * impulse_dir * strength;
+
+                    if f_impulse.length_squared() > 0.01 {
+                        const DURATION_COEFF: f32 = 0.35;
+                        const DIRECT_FORCE_COEFF: f32 = 1.5;
+                        let p_impulse = f_impulse * radius * DIRECT_FORCE_COEFF;
+                        let p_duration = radius * DURATION_COEFF;
+                        let p_force = PersistentForce::new(p_impulse, p_duration);
+                        let fid = forces.record(p_force);
+
+                        if let Some(structure) = b_frags {
+                            for &id in structure {
+                                let did = fragments.solve_indirect(id).unwrap();
+                                let index = did.as_index();
+                                let mut integrity = fragments.integrity[index];
+                                integrity -= damage;
+                                fragments.integrity[index] = integrity.saturate();
+                                fragments.held_force[index] += f_impulse;
+                            }
+                        }
+                        if let Some(debris) = b_debris {
+                            for &id in debris {
+                                forces.add_target_body(fid, id);
                             }
                         }
                     }
