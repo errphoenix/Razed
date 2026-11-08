@@ -10,9 +10,13 @@
 
 - Visualize cursor 3D position in world (spatial hash grid)
 
+- Create interface panel to interact with internal profiler
+
 ### Changed
 
 - Updated `build.sh` build script to support additional builds
+
+- Profiler can now be enabled/disabled, rather than be running at all times
 
 ### Fixed
 

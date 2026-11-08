@@ -1,6 +1,7 @@
 use gui::{ButtonCallback, DEFAULT_GENERIC_COLOR, FloatGrabArea, FloatParams};
 
 pub mod groundctl;
+pub mod profile;
 
 pub use super::*;
 
@@ -115,7 +116,7 @@ pub fn root(
                         align_items: ItemAlignment::Stretch,
                     },
                     layout_position: LayoutPosition::Absolute {
-                        x: Some(Value::Percentage(0.2f32)),
+                        x: Some(Value::Absolute(8f32)),
                         y: Some(Value::Percentage(0.5f32)),
                     },
                     size: Some(Point {
@@ -315,6 +316,24 @@ pub fn dbg_toggle_button<const PROP: u64>(
     root: WidgetId,
     label: &'static str,
 ) -> (WidgetId, IndirectIndex) {
+    dbg_toggle_button_with(
+        system,
+        root,
+        label,
+        InteractableCallback::Once(|env, _time| {
+            if let Some(prop) = env.get_mut(&janus::StringHash::from_u64(PROP)) {
+                prop.invert();
+            }
+        }),
+    )
+}
+
+pub fn dbg_toggle_button_with(
+    system: &mut InterfaceSystem,
+    root: WidgetId,
+    label: &'static str,
+    cb: ButtonCallback,
+) -> (WidgetId, IndirectIndex) {
     system
         .create_element(ElementParams::Button(
             CoreElementParams {
@@ -327,14 +346,7 @@ pub fn dbg_toggle_button<const PROP: u64>(
                 },
                 layer: 5,
             },
-            params_dbg_button(
-                label,
-                InteractableCallback::Once(|env, _time| {
-                    if let Some(prop) = env.get_mut(&janus::StringHash::from_u64(PROP)) {
-                        prop.invert();
-                    }
-                }),
-            ),
+            params_dbg_button(label, cb),
         ))
         .unwrap()
 }

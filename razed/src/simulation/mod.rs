@@ -49,7 +49,6 @@ use gui::{
 };
 use janus::{Cursor, DeltaTime, StringMap, sync::TriCell};
 use physics::{force::ForcesRegistry, rigid::RbVelocity};
-use tracing::{Level, event};
 
 pub type FragmentsSpatialHash = FxLsSpatialHash<IndirectIndex>;
 pub type DebrisSpatialHash = FxLsSpatialHash<IndirectIndex>;
@@ -224,34 +223,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             let t1 = Instant::now();
             self.profiler.log_explicit("composite_ui", t0 - t1);
             let t0 = t1;
-
-            // populate command buffers
-            // {
-            //     command_queue.clear();
-
-            //     {
-            //         command_queue.push_group(RenderGroup::Fragment);
-            //         for _ in 0..fragment_count {
-            //             command_queue.push_command(DrawArraysIndirectCommand {
-            //                 count: 0,
-            //                 instance_count: 1,
-            //                 first_vertex: 0,
-            //                 base_instance: 0,
-            //             });
-            //         }
-            //     }
-            //     {
-            //         command_queue.push_group(RenderGroup::Debris);
-            //         for _ in 0..debris_count {
-            //             command_queue.push_command(DrawArraysIndirectCommand {
-            //                 count: 0,
-            //                 instance_count: 1,
-            //                 first_vertex: 0,
-            //                 base_instance: 0,
-            //             });
-            //         }
-            //     }
-            // }
 
             let t1 = Instant::now();
             self.profiler.log_explicit("prepare_commands", t0 - t1);
@@ -744,12 +715,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         }
         if input
             .keys()
-            .key_pressed(crate::input::MISC_SAVE_PERF_REPORT)
-        {
-            self.save_profiler_report();
-        }
-        if input
-            .keys()
             .key_pressed(crate::input::MISC_SPAWN_DEBUG_STRUCT)
         {
             self.spawn_debug_cuboid(&view_point);
@@ -892,7 +857,30 @@ impl State {
         use crate::ui::widget_names::*;
 
         {
-            let env = self.ui_system.env_mut();
+            let profiler_action = {
+                let env = &mut self.ui_system.environment;
+                env.insert(PROFILER_FRAME_COUNT, self.profiler.current_page() as u32);
+                env.insert(PROFILER_RUNNING, self.profiler.is_running());
+                env.get_integer(&PROFILER_ACTION) as u8
+            };
+            if profiler_action & crate::PROFILER_ACTION_PAUSE != 0 {
+                if self.profiler.is_running() {
+                    self.profiler.pause();
+                    tracing::info!("Paused live profiler.")
+                }
+            } else if profiler_action & crate::PROFILER_ACTION_START != 0 {
+                if !self.profiler.is_running() {
+                    self.profiler.start();
+                    tracing::info!("Started live profiler.")
+                }
+            } else if profiler_action & crate::PROFILER_ACTION_DUMP != 0 {
+                self.save_profiler_report();
+            }
+            self.ui_system.environment.insert(PROFILER_ACTION, 0);
+        }
+
+        {
+            let env = &mut self.ui_system.environment;
             if self.first_frame {
                 env.insert(DEBUG_CTL_DISPLAY_VSYNC, true);
                 env.insert(DEBUG_CTL_RENDER_LATTICE, true);
@@ -1264,65 +1252,55 @@ impl State {
     }
 
     fn save_profiler_report(&mut self) {
-        {
-            const FRAME_COUNT_MIN: usize = 1000;
-            let frame_count = self.profiler.frames_stack().len();
-            if frame_count < FRAME_COUNT_MIN {
-                event!(
-                    Level::WARN,
-                    "User requested profiler report but frames count is too little: expected atleast {}, but only got {}.",
-                    FRAME_COUNT_MIN,
-                    frame_count
-                )
+        const OUT_DIR_PATH: &str = "profile";
+        const OUT_FILE_NAME: &str = "framestack_latest.bin";
+        let path = {
+            if !std::fs::exists(OUT_DIR_PATH).unwrap_or_default() {
+                tracing::info!("Creating profiler output directory");
+                std::fs::create_dir(OUT_DIR_PATH).expect("user filesystem permissions");
             }
-        }
+            PathBuf::from_str(OUT_DIR_PATH).unwrap().join(OUT_FILE_NAME)
+        };
 
-        let path = PathBuf::from_str("framestack_latest.bin").unwrap();
         if path.exists() {
             if let Ok(creation_time) = path.metadata().map(|meta| meta.created()).flatten() {
                 let date: chrono::DateTime<chrono::Utc> = creation_time.into();
                 let formatted_date = date.format("%d_%m_%y-%H_%M_%S");
-
                 let name = format!("framestack_old_{}", formatted_date);
-                let duplicates = std::fs::read_dir(".")
+                let duplicates = std::fs::read_dir(OUT_DIR_PATH)
                     .unwrap()
                     .filter_map(|f| f.ok())
                     .filter(|f| f.file_name().into_string().unwrap().starts_with(&name))
                     .count();
-
                 let d_identifier = if duplicates != 0 {
                     format!("_{duplicates}")
                 } else {
                     String::new()
                 };
 
-                let new_path = format!("framestack_old_{}{d_identifier}.bin", formatted_date);
-
-                std::fs::rename(&path, new_path).expect("assumed user has sufficient permissions");
-
-                event!(
-                    Level::INFO,
-                    "Created backup of previous latest framestack file to: framestack_old_{}.bin",
-                    formatted_date
-                )
+                let new_name = format!("framestack_old_{}{d_identifier}.bin", formatted_date);
+                let new_path = PathBuf::from_str(OUT_DIR_PATH).unwrap().join(new_name);
+                std::fs::rename(&path, new_path).expect("user filesystem permissions");
+                tracing::info!(
+                    "Created backup of previous latest framestack file to: framestack_old_{formatted_date}.bin",
+                );
             } else {
-                event!(
-                    Level::WARN,
+                tracing::warn!(
                     "There was an error trying to backup the previous framestack_latest file: it will be deleted."
                 );
-                std::fs::remove_file(&path).expect("assumed user has file delete permissions");
+                std::fs::remove_file(&path).expect("user filesystem permissions");
             }
         }
 
         let mut out = BufWriter::new(std::fs::File::create(&path).unwrap());
         self.profiler.present_encoded(&mut out).unwrap();
-        event!(
-            Level::INFO,
-            "Exported performance statistics to file: {:?}",
-            path.canonicalize().unwrap()
+        tracing::info!(
+            "Exported performance statistics to file: {}",
+            path.canonicalize().unwrap().display()
         );
     }
 
+    #[allow(unused)]
     fn select_lattice_raycast(
         &mut self,
         input: &ethel::InputSystem,

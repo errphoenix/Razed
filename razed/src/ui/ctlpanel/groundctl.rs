@@ -34,7 +34,7 @@ pub fn root(
                         align_items: ItemAlignment::Stretch,
                     },
                     layout_position: LayoutPosition::Absolute {
-                        x: Some(Value::Percentage(0.5f32)),
+                        x: Some(Value::Absolute(8f32)),
                         y: Some(Value::Percentage(0.4f32)),
                     },
                     size: Some(Point {

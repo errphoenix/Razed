@@ -66,6 +66,7 @@ pub fn initialize_default(
     infopanel::root(&mut system, root);
     ctlpanel::root(&mut system, root, &mut map);
     ctlpanel::groundctl::root(&mut system, root, &mut map);
+    ctlpanel::profile::root(&mut system, root);
 
     (system, map)
 }
@@ -158,4 +159,8 @@ pub mod env_names {
         janus::hash_string("__debug.control.ground.scale");
     pub const DEBUG_CTL_GROUND_UVSCALE: StringHash =
         janus::hash_string("__debug.control.ground.uv-scale");
+
+    pub const PROFILER_RUNNING: StringHash = janus::hash_string("profiler.running");
+    pub const PROFILER_FRAME_COUNT: StringHash = janus::hash_string("profiler.frame_count");
+    pub const PROFILER_ACTION: StringHash = janus::hash_string("profiler.running/toggle");
 }
