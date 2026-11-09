@@ -21,7 +21,10 @@
 ### Fixed
 
 - Crash during debris simulation due to missing check(s)
+
 - Restore debug lines rendering under `devmode` feature flag
+
+- GUI: correctly selecting only the top-most floating panel when grabbing a panel that overlays another floating panel, avoiding conflict
 
 ## 0.1.0 - 2026/10/29
 Base pre-changelog state
