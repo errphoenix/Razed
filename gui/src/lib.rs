@@ -435,7 +435,8 @@ pub struct InterfaceSystem<const LAYERS: usize = 10> {
 
     /// if cursor is currently grabbing a floating panel
     /// other cursor events should be ignored if true
-    grabbing: bool,
+    /// indirect into 'floating' table
+    grabbing: Option<IndirectIndex>,
 }
 /// Safety:
 /// TaffyTree is !Send and !SYnc due to internal implementation details
@@ -493,11 +494,16 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             environment,
             text_resolve_buf: String::new(),
             text_dynamic_list: Vec::new(),
-            grabbing: false,
+            grabbing: None,
         }
     }
 
     pub const fn is_grabbing(&self) -> bool {
+        self.grabbing.is_some()
+    }
+
+    /// Indirect into 'floating' table
+    pub const fn grabbing(&self) -> Option<IndirectIndex> {
         self.grabbing
     }
 
@@ -635,7 +641,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
 
                 match float_state[fdid] {
                     FloatState::Idle => {
-                        if self.commons.pressed[root.as_index()] {
+                        if self.commons.pressed[root.as_index()] && self.grabbing.is_none() {
                             let bounds = {
                                 let p_bounds = self.commons.feedback_bounds[root.as_index()];
                                 let (min, max) = (p_bounds.min, p_bounds.max);
@@ -653,14 +659,16 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                                 Box2d::new(min, max)
                             };
 
-                            self.grabbing = bounds.contains(x, y);
-                            if self.grabbing {
+                            if bounds.contains(x, y) {
+                                self.grabbing = Some(float_id);
                                 float_state[fdid] = FloatState::Active;
                             }
                         }
                     }
                     FloatState::Active => {
-                        if self.grabbing {
+                        if let Some(grab_id) = self.grabbing
+                            && grab_id == float_id
+                        {
                             float_offset[fdid] += glam::vec2(dx, dy);
                         } else {
                             float_state[fdid] = FloatState::Released;
@@ -859,7 +867,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                     }
                 )
             }) {
-                self.grabbing = false;
+                self.grabbing = None;
             }
         }
 
