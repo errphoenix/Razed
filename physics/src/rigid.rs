@@ -29,7 +29,7 @@ impl RbVelocity {
 }
 
 pub const DEFAULT_GRAVITY: f32 = 9.807;
-pub const DEFAULT_DAMPING: f32 = 0.92;
+pub const DEFAULT_DAMPING: f32 = 0.98;
 pub const DEFAULT_RESTITUTION: f32 = 0.1;
 pub const DEFAULT_FRICTION: f32 = 0.06;
 pub const DEFAULT_STATIC_VOLUMES_HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(4.0);
@@ -321,13 +321,13 @@ impl RigidBodySolver {
             let id1 = collision.index_b.as_index();
 
             let correction = collision.depth * collision.normal;
-            positions[id0] += correction * 0.5;
-            positions[id1] -= correction * 0.5;
+            positions[id0] += correction * 0.55;
+            positions[id1] -= correction * 0.55;
 
             let rel_v = velocities[id0].linear - velocities[id1].linear;
             let d_v = rel_v.dot(collision.normal);
 
-            if d_v < 0.1 && collision.depth > 0.0 {
+            if d_v < 0.0 && collision.depth > 0.0 {
                 let j = -(1.0 - self.options.restitution) * d_v;
                 let impulse = collision.normal * j;
 
@@ -335,8 +335,8 @@ impl RigidBodySolver {
                 velocities[id1].linear -= impulse * masses[id1];
 
                 let t = collision.normal.any_orthonormal_vector();
-                velocities[id0].angular += t * rel_v;
-                velocities[id1].angular -= t * rel_v;
+                velocities[id0].angular += t * rel_v * 0.1;
+                velocities[id1].angular -= t * rel_v * 0.1;
             }
         });
     }
@@ -356,8 +356,12 @@ impl RigidBodySolver {
             });
     }
 
-    pub fn apply_gravity(&self, forces: &mut [glam::Vec3]) {
-        forces.iter_mut().for_each(|f| f.y -= self.options.gravity);
+    pub fn apply_gravity(&self, forces: &mut [glam::Vec3], velocities: &[RbVelocity]) {
+        forces.iter_mut().zip(velocities).for_each(|(f, v)| {
+            // angular velocity 'strengthens' gravity; an approximation
+            let ac = v.angular.length().sqrt().max(1.0);
+            f.y -= self.options.gravity * ac;
+        });
     }
 
     pub fn integrate(

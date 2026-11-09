@@ -166,11 +166,13 @@ impl DamageSystem {
                     let f_impulse = coefficient * impulse_dir * strength;
 
                     if f_impulse.length_squared() > 0.01 {
-                        const DURATION_COEFF: f32 = 0.35;
-                        const DIRECT_FORCE_COEFF: f32 = 1.5;
-                        let p_impulse = f_impulse * radius * DIRECT_FORCE_COEFF;
-                        let p_duration = radius * DURATION_COEFF;
-                        let p_force = PersistentForce::new(p_impulse, p_duration);
+                        const DURATION_COEFF: f32 = 0.25;
+                        //const FALLOFF: fn(f32) -> f32 = |t| 1.0 - t * t; // quadratic curve
+                        const FALLOFF: fn(f32) -> f32 = |t| (-t).exp(); // exponential curve
+
+                        let impulse = f_impulse * radius;
+                        let duration = radius * DURATION_COEFF;
+                        let p_force = PersistentForce::with_falloff(impulse, duration, FALLOFF);
                         let fid = forces.record(p_force);
 
                         if let Some(structure) = b_frags {

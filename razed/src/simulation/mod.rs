@@ -760,8 +760,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         }
         if self.damage_mode {
             const CLOUD_RADIUS: f32 = 8f32;
-            const CLOUD_DAMAGE: f32 = 0.5;
-            const CLOUD_STRENGTH: f32 = 2.5; //MN
+            const CLOUD_DAMAGE: f32 = 4.0;
+            const CLOUD_STRENGTH: f32 = 12.0; //MN
 
             if let Some(position) = self.mouse_world_pos {
                 self.local_overlays.damage = DamageOverlay {
@@ -1109,7 +1109,12 @@ impl State {
                 let b_position = data.bind_position[frag_index.as_index()].xyz();
                 let mass_coeff = data.mass_coeff[frag_index.as_index()];
                 let integrity = data.integrity[frag_index.as_index()];
-                let mass = (mass_coeff + mass_coeff * integrity) * 0.65;
+
+                // 25% of mass is variable depending on fragment's integrity
+                const MASS_INTEGVAR: f32 = 0.25;
+                let mass_nonvar = mass_coeff * (1.0 - MASS_INTEGVAR);
+                let mass_integvar = mass_coeff * MASS_INTEGVAR * integrity;
+                let mass = mass_nonvar + mass_integvar;
 
                 let mut inherit_v = glam::Vec3::ZERO;
                 let mut inherit_a = glam::Vec3::ZERO;
@@ -1130,9 +1135,9 @@ impl State {
                     });
                 }
 
-                let held_velocity = data.held_force[frag_index.as_index()] * mass;
+                let held_velocity = data.held_force[frag_index.as_index()] * mass_coeff;
                 const INHERIT_AV_COEFF: f32 = 0.01;
-                const INHERIT_HV_COEFF: f32 = 0.5;
+                const INHERIT_HV_COEFF: f32 = 0.625;
                 inherit_av *= INHERIT_AV_COEFF;
                 inherit_v += held_velocity * INHERIT_HV_COEFF;
 
