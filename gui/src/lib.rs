@@ -25,6 +25,9 @@ pub mod render;
 pub mod style;
 pub mod text;
 
+#[cfg(feature = "animation")]
+pub mod animation;
+
 use rendrs::batch::Batch;
 pub use style::*;
 
