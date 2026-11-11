@@ -1022,12 +1022,12 @@ impl Renderer {
         });
     }
 
+    #[cfg(feature = "devmode")]
     fn setup_debug_lines(&self, view: &ViewData, mouse_world_pos: glam::Vec3) {
         let mut buf = self.lines_debug_buffer.borrow_mut();
         buf.clear();
 
         // world axis indicator
-        #[cfg(feature = "devmode")]
         {
             const OFFSET: f32 = 1.0;
             let o = view.view_pos + view.view_dir * OFFSET;
@@ -1050,7 +1050,6 @@ impl Renderer {
         }
 
         // spatial hash grid visualization
-        #[cfg(feature = "devmode")]
         {
             use ethel::state::data::hash::SpatialResolution;
 
