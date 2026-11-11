@@ -759,7 +759,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             self.damage_mode = !self.damage_mode;
         }
         if self.damage_mode {
-            const CLOUD_RADIUS: f32 = 8f32;
+            const CLOUD_RADIUS: f32 = 16f32;
             const CLOUD_DAMAGE: f32 = 4.0;
             const CLOUD_STRENGTH: f32 = 12.0; //MN
 
@@ -774,7 +774,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                         position,
                         CLOUD_DAMAGE,
                         CLOUD_RADIUS,
-                        DamageFalloffModel::Quadratic,
+                        DamageFalloffModel::Cubic,
                         CLOUD_STRENGTH,
                     ));
                 }
@@ -1137,7 +1137,7 @@ impl State {
 
                 let held_velocity = data.held_force[frag_index.as_index()] * mass_coeff;
                 const INHERIT_AV_COEFF: f32 = 0.01;
-                const INHERIT_HV_COEFF: f32 = 0.625;
+                const INHERIT_HV_COEFF: f32 = 1.25;
                 inherit_av *= INHERIT_AV_COEFF;
                 inherit_v += held_velocity * INHERIT_HV_COEFF;
 

@@ -168,7 +168,8 @@ impl DamageSystem {
                     if f_impulse.length_squared() > 0.01 {
                         const DURATION_COEFF: f32 = 0.25;
                         //const FALLOFF: fn(f32) -> f32 = |t| 1.0 - t * t; // quadratic curve
-                        const FALLOFF: fn(f32) -> f32 = |t| (-t).exp(); // exponential curve
+                        //const FALLOFF: fn(f32) -> f32 = |t| (-t).exp(); // exponential curve
+                        const FALLOFF: fn(f32) -> f32 = |t| (-t * 3f32).exp(); // exponential curve alt
 
                         let impulse = f_impulse * radius;
                         let duration = radius * DURATION_COEFF;
