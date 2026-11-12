@@ -19,6 +19,7 @@ use janus::{
     input::{Cursor, KeyEvent},
 };
 
+pub mod declare;
 pub mod draw;
 pub mod env;
 pub mod render;
