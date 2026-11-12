@@ -264,6 +264,7 @@ impl InterfaceAggregator<'_> {
         let knob_press_tint = self.sliders.knob_press_tint[slider_direct];
         let track_color = self.sliders.track_color[slider_direct];
         let value = self.sliders.value_cache[slider_direct];
+        let is_vertical = self.sliders.vertical[slider_direct];
 
         let hover_f = (hovered & !pressed) as u32 as f32;
         let press_f = pressed as u32 as f32;
@@ -277,21 +278,29 @@ impl InterfaceAggregator<'_> {
         let bounds = self.commons.feedback_bounds[common_handle];
         let layer = self.commons.layer[common_handle];
 
+        let (knob_axis, cross_axis) = if is_vertical {
+            (glam::Vec2::Y, glam::Vec2::X)
+        } else {
+            (glam::Vec2::X, glam::Vec2::Y)
+        };
+
+        const TRACK_THICKNESS: f32 = 0.1; //10% of cross axis
+
         let bounds_size = bounds.size();
-        let knob_size = bounds_size.y;
-        const TRACK_THICKNESS: f32 = 0.1; //10% of height
-        let track_size = glam::vec2(bounds_size.x, knob_size * TRACK_THICKNESS);
-        let knob_posx = (bounds_size.x - knob_size) * value;
+        let knob_size = (bounds_size * cross_axis).max_element();
+        let track_size = (bounds_size * knob_axis) + (cross_axis * knob_size * TRACK_THICKNESS);
+        let oriented_value = if is_vertical { 1.0 - value } else { value };
+        let knob_posx = ((bounds_size * knob_axis).max_element() - knob_size) * oriented_value;
 
         out.push(InterfaceObject {
-            position: bounds.min + glam::vec2(0f32, knob_size * 0.5),
+            position: bounds.min + (knob_size * 0.5 * cross_axis),
             size: track_size,
             color: track_color,
             attachment: None,
             layer,
         });
         out.push(InterfaceObject {
-            position: bounds.min + glam::vec2(knob_posx, 0f32),
+            position: bounds.min + (knob_posx * knob_axis),
             size: glam::Vec2::splat(knob_size),
             color: knob_color,
             attachment: None,

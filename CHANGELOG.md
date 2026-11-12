@@ -12,6 +12,8 @@
 
 - Create interface panel to interact with internal profiler
 
+- GUI: add option to orient slider widgets vertically
+
 ### Changed
 
 - Updated `build.sh` build script to support additional builds
@@ -24,7 +26,7 @@
 
 - Restore debug lines rendering under `devmode` feature flag
 
-- GUI: correctly selecting only the top-most floating panel when grabbing a panel that overlays another floating panel, avoiding conflict
+- GUI: correctly select only the top-most floating panel when grabbing a panel that overlays another floating panel, avoiding conflict
 
 ## 0.1.0 - 2026/10/29
 Base pre-changelog state

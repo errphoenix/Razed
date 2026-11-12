@@ -236,6 +236,8 @@ ethel::table_spec! {
         // will be polled every frame from the environment before other updates
         value_sync: Option<StringHash>;
         callback: SliderCallback;
+
+        vertical: bool;
     }
 }
 
@@ -929,7 +931,20 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         let position_x = position.x + offset_x;
         let position_y = position.y + offset_y;
         let min = glam::vec2(position_x, position_y);
-        let max = glam::vec2(position_x + size.width, position_y + size.height);
+        let mut max = glam::vec2(position_x + size.width, position_y + size.height);
+
+        // correct axis if slider is vertical
+        if let ComponentKind::Slider {
+            handle: slider_id, ..
+        } = self.commons.archetype[did.as_index()]
+        {
+            let sdid = self.sliders.solve_indirect(slider_id).unwrap();
+            if self.sliders.vertical[sdid.as_index()] {
+                let mut size = max - min;
+                std::mem::swap(&mut size.x, &mut size.y);
+                max = min + size;
+            }
+        }
 
         *fb_anchor = glam::vec2(position_x, position_y);
         *fb_bounds = Box2d { min, max };
@@ -1208,6 +1223,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         value_init: f32,
         value_sync: Option<StringHash>,
         callback: SliderCallback,
+        vertical: bool,
     ) -> Result<IndirectIndex, WidgetError> {
         if let Some(commons_id) = self.commons.solve_indirect(root_id.0) {
             self.assert_null_archetype(commons_id)?;
@@ -1231,6 +1247,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 value_cache,
                 value_sync,
                 callback,
+                vertical,
             );
             let slider_id = self.sliders.insert(slider_element);
             self.commons.archetype[commons_id.as_index()] = ComponentKind::Slider {
@@ -1467,6 +1484,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                     slider_params.value_init,
                     slider_params.value_sync_handle,
                     slider_params.callback,
+                    slider_params.vertical,
                 )
             }
         }?;
@@ -1613,6 +1631,7 @@ pub struct SliderParams {
     pub value_init: f32,
     pub value_sync_handle: Option<StringHash>,
     pub callback: SliderCallback,
+    pub vertical: bool,
 }
 impl SliderParams {
     pub const DEFAULT_TRACK_COLOR: glam::Vec3 = glam::Vec3::splat(0.65);
@@ -1631,6 +1650,7 @@ impl Default for SliderParams {
             value_init: 0f32,
             value_sync_handle: None,
             callback: InteractableCallback::None,
+            vertical: false,
         }
     }
 }
