@@ -12,25 +12,16 @@ use crate::{
     },
     structure::DamageOverlay,
 };
-use ethel::{
-    DirectIndex, IndirectIndex, PartitionedTriBuffer, TriBuffer, layout_buffer, layout_mesh_buffer,
-};
+use ethel::{DirectIndex, IndirectIndex, TriBuffer, layout_buffer, layout_mesh_buffer};
 use gui::render::{UiCommandsBuffer, UiDataBuffer};
 use janus::{DeltaTime, sync::TriCell};
-
-use crate::simulation::fragment::ANCHORS_COUNT as FRAGMENT_ANCHORS_COUNT;
 
 pub const INTERFACE_COMMANDS_ALLOC: usize = 2048;
 
 pub const LATTICE_CONSTRAINT_ALLOC: usize = 32768;
 pub const LATTICE_NODE_ALLOC: usize = 8192;
-pub const LATTICE_STORAGE_PARTS: usize = 4;
-
 pub const DEBRIS_ALLOC: usize = 131072;
-pub const DEBRIS_STORAGE_PARTS: usize = 3;
-
 pub const FRAGMENTS_ALLOC: usize = 131072;
-pub const FRAGMENTS_STORAGE_PARTS: usize = 3;
 pub const CAGES_ALLOC: usize = FRAGMENTS_ALLOC;
 
 #[cfg(feature = "devmode")]
@@ -44,109 +35,103 @@ layout_mesh_buffer!(
     tris     : 32768
 );
 
-layout_buffer! {
-    const XpbdDebugData: LATTICE_STORAGE_PARTS, {
+ethel::typed_part_tribuffer! {
+    const Lattice: 3, {
         enum Constraints: LATTICE_CONSTRAINT_ALLOC => {
             type [IndirectIndex; 2];
             bind 0;
-            shader render::debug::draw_lattices::SSBO_INDEX_POD_CONSTRAINTS;
+            shader render::debug::draw_lattices::SSBOI_CONSTRAINTS;
         };
 
-        enum IMapNodes: LATTICE_NODE_ALLOC => {
+        enum IMap_Nodes: LATTICE_NODE_ALLOC => {
             type IndirectIndex;
             bind 1;
-            shader render::debug::draw_lattices::SSBO_INDEX_IMAP_NODES;
+            shader render::debug::draw_lattices::SSBOI_IMAP_NODES;
         };
-        enum PodNodes: LATTICE_CONSTRAINT_ALLOC => {
+        enum Nodes: LATTICE_CONSTRAINT_ALLOC => {
             type [f32; 4];
             bind 2;
-            shader render::debug::draw_lattices::SSBO_INDEX_POD_NODES;
-        };
-
-        enum I_Selected: 1 => {
-            type DirectIndex;
-            bind 3;
-            shader render::debug::draw_lattices::SSBO_INDEX_I_SELECTED;
+            shader render::debug::draw_lattices::SSBOI_NODES;
         };
     }
 }
 
-layout_buffer! {
-    const FragmentData: FRAGMENTS_STORAGE_PARTS, {
-        enum PodBindPose: FRAGMENTS_ALLOC => {
+ethel::typed_part_tribuffer! {
+    const Fragments: 3, {
+        enum Bind_Pose: FRAGMENTS_ALLOC => {
             type glam::Vec4;
             bind 0;
-            shader render::geometry::G_FRAGS_SSBO_BIND_POD_BINDPOSE;
+            shader render::geometry::G_FRAGS_SSBOI_BIND_POSE;
         };
-        enum PodMeshId: FRAGMENTS_ALLOC => {
+        enum Mesh_Id: FRAGMENTS_ALLOC => {
             type ethel::mesh::Id;
             bind 1;
-            shader render::geometry::G_FRAGS_SSBO_BIND_POD_MESHID;
+            shader render::geometry::G_FRAGS_SSBOI_MESH_ID;
         };
-        enum PodCageIds: FRAGMENTS_ALLOC => {
-            type [IndirectIndex; FRAGMENT_ANCHORS_COUNT];
+        enum Cage_Id: FRAGMENTS_ALLOC => {
+            type IndirectIndex;
             bind 2;
-            shader render::geometry::G_FRAGS_SSBO_BIND_POD_CAGEID;
+            shader render::geometry::G_FRAGS_SSBOI_CAGE_ID;
         };
     }
 }
 
 ethel::typed_part_buffer! {
-    const Cage: 9, {
+    const Cage: 8, {
         enum RMap: CAGES_ALLOC => {
             type IndirectIndex;
             bind 0;
         };
 
-        enum Pod_BindRef: CAGES_ALLOC => {
+        enum Bind_Ref: CAGES_ALLOC => {
             type glam::Vec4;
             bind 1;
-            shader render::task::deform_cages::SSBO_INDEX_POD_BIND_REF;
+            shader render::task::deform_cages::SSBOI_BIND_REF;
         };
-        enum Pod_Points: CAGES_ALLOC => {
+        enum Points: CAGES_ALLOC => {
             type CagePoints;
             bind 2;
-            shader render::task::deform_cages::SSBO_INDEX_POD_POINTS;
+            shader render::task::deform_cages::SSBOI_POINTS;
         };
-        enum Pod_Points_Bind: CAGES_ALLOC => {
+        enum Points_Bind: CAGES_ALLOC => {
             type CagePoints;
             bind 3;
-            shader render::task::deform_cages::SSBO_INDEX_POD_POINTS_BIND;
+            shader render::task::deform_cages::SSBOI_POINTS_BIND;
         };
-        enum Pod_Barycenter_Bind: CAGES_ALLOC => {
+        enum Barycenters_Bind: CAGES_ALLOC => {
             type [glam::Vec4; PER_CAGE_POINTS];
             bind 4;
-            shader render::task::deform_cages::SSBO_INDEX_POD_BARYCENTER_BIND;
+            shader render::task::deform_cages::SSBOI_BARYCENTERS_BIND;
         };
-        enum Pod_Attachments: CAGES_ALLOC => {
+        enum Attachments: CAGES_ALLOC => {
             type [LatticeAttachments; PER_CAGE_POINTS];
             bind 5;
-            shader render::task::deform_cages::SSBO_INDEX_POD_ATTACHMENTS;
+            shader render::task::deform_cages::SSBOI_ATTACHMENTS;
         };
-        enum Pod_Lut_Lattice: CAGES_ALLOC => {
+        enum Lattice_Lut: CAGES_ALLOC => {
             type [IndirectIndex; PER_CAGE_MAX_LATTICE_ATTACHMENTS];
             bind 6;
-            shader render::task::deform_cages::SSBO_INDEX_POD_LUT_LATTICE;
+            shader render::task::deform_cages::SSBOI_LATTICE_LUT;
         };
-        enum Pod_Bind_Lattice: CAGES_ALLOC => {
+        enum Lattice_Bind: CAGES_ALLOC => {
             type [glam::Vec4; PER_CAGE_MAX_LATTICE_ATTACHMENTS];
             bind 7;
-            shader render::task::deform_cages::SSBO_INDEX_POD_BIND_LATTICE;
+            shader render::task::deform_cages::SSBOI_LATTICE_BIND;
         };
     }
 }
 
-layout_buffer! {
-    const DebrisData: DEBRIS_STORAGE_PARTS, {
-        enum PodPositions: DEBRIS_ALLOC => {
+ethel::typed_part_tribuffer! {
+    const Debris: 3, {
+        enum Position: DEBRIS_ALLOC => {
             type [f32; 4];
             bind 0;
         };
-        enum PodRotations: DEBRIS_ALLOC => {
-            type [f32; 4];
+        enum Rotation: DEBRIS_ALLOC => {
+            type glam::Quat;
             bind 1;
         };
-        enum PodMeshId: DEBRIS_ALLOC => {
+        enum Mesh_Id: DEBRIS_ALLOC => {
             type ethel::mesh::Id;
             bind 2;
         };
@@ -154,17 +139,17 @@ layout_buffer! {
 }
 
 #[cfg(feature = "devmode")]
-layout_buffer! {
-    const DebugLinesData: 2, {
-        enum PodPoints: DEBUG_LINES_ALLOC => {
+ethel::typed_part_tribuffer! {
+    const DbgLines: 2, {
+        enum Point: DEBUG_LINES_ALLOC => {
             type [f32; 4];
             bind 0;
-            shader render::debug::draw_lines::SSBO_INDEX_POD_POINTS;
+            shader render::debug::draw_lines::SSBOI_POINTS;
         };
-        enum PodColors: DEBUG_LINES_ALLOC => {
-            type [f32; 4];
+        enum Color: DEBUG_LINES_ALLOC => {
+            type glam::Vec4;
             bind 1;
-            shader render::debug::draw_lines::SSBO_INDEX_POD_COLORS;
+            shader render::debug::draw_lines::SSBOI_COLORS;
         };
     }
 }
@@ -181,8 +166,8 @@ pub struct FrameDataBuffers {
     // count of debris geom entities
     pub debris_geom_count: TriCell<u32>,
 
-    pub fragments: PartitionedTriBuffer<FRAGMENTS_STORAGE_PARTS>,
-    pub debris: PartitionedTriBuffer<DEBRIS_STORAGE_PARTS>,
+    pub fragments: FragmentsPartitionedTriBuffer,
+    pub debris: DebrisPartitionedTriBuffer,
 
     pub cages: CagePartitionedBuffer,
     pub cage_map: TriBuffer<DirectIndex>,
@@ -190,10 +175,10 @@ pub struct FrameDataBuffers {
     pub cage_feedback: TriBuffer<OffsetRotation>,
     pub cage_sync_frame: CageSyncFrameBuffers,
 
-    pub lattice_debug: PartitionedTriBuffer<LATTICE_STORAGE_PARTS>,
+    pub lattice_debug: LatticePartitionedTriBuffer,
     pub lattice_constraint_count: Arc<AtomicU32>,
     #[cfg(feature = "devmode")]
-    pub lines_debug: PartitionedTriBuffer<2>,
+    pub lines_debug: DbgLinesPartitionedTriBuffer,
 
     pub interface_storage: UiDataBuffer,
     pub interface_commands: UiCommandsBuffer,
@@ -213,26 +198,12 @@ pub struct FrameDataBuffers {
 }
 impl FrameDataBuffers {
     pub fn new() -> Self {
-        let xpbd_visualiser = PartitionedTriBuffer::new(LayoutXpbdDebugData::create());
-        LayoutXpbdDebugData::initialise_partitions_tri(&xpbd_visualiser);
-
-        let fragment_data = PartitionedTriBuffer::new(LayoutFragmentData::create());
-        LayoutFragmentData::initialise_partitions_tri(&fragment_data);
-
-        let debris_data = PartitionedTriBuffer::new(LayoutDebrisData::create());
-        LayoutDebrisData::initialise_partitions_tri(&debris_data);
-
-        #[cfg(feature = "devmode")]
-        let lines_debug = PartitionedTriBuffer::new(LayoutDebugLinesData::create());
-        #[cfg(feature = "devmode")]
-        LayoutDebugLinesData::initialise_partitions_tri(&debris_data);
-
         Self {
             fragment_geom_count: TriCell::new(0),
             debris_geom_count: TriCell::new(0),
 
-            fragments: fragment_data,
-            debris: debris_data,
+            fragments: FragmentsPartitionedTriBuffer::new(),
+            debris: DebrisPartitionedTriBuffer::new(),
 
             cages: CagePartitionedBuffer::new(),
             cage_map: TriBuffer::zeroed(CAGES_ALLOC),
@@ -240,10 +211,10 @@ impl FrameDataBuffers {
             cage_feedback: TriBuffer::zeroed(CAGES_ALLOC),
             cage_sync_frame: CageSyncFrameBuffers::new(),
 
-            lattice_debug: xpbd_visualiser,
+            lattice_debug: LatticePartitionedTriBuffer::new(),
             lattice_constraint_count: Arc::new(AtomicU32::new(0)),
             #[cfg(feature = "devmode")]
-            lines_debug,
+            lines_debug: DbgLinesPartitionedTriBuffer::new(),
 
             interface_commands: TriBuffer::zeroed(INTERFACE_COMMANDS_ALLOC),
             interface_storage: TriBuffer::zeroed(INTERFACE_INSTANCES_ALLOC),

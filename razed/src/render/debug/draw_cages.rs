@@ -27,10 +27,8 @@ pub const fn draw_cages_pass(
             OutputObject::Depth(depth_output),
         ],
         |_, ctx| {
-            ctx.cage_data
-                .bind_ssbo_pod_bindref(Some(SSBO_INDEX_POD_CAGE_REFERENCE));
-            ctx.cage_data
-                .bind_ssbo_pod_points(Some(SSBO_INDEX_POD_CAGE_POINTS));
+            ctx.cage_data.bind_ssbo_bind_ref(Some(SSBOI_BIND_REF));
+            ctx.cage_data.bind_ssbo_points(Some(SSBOI_POINTS));
 
             let count = ctx.cage_total_count as i32 * cage::PER_CAGE_POINTS as i32;
             let point_size = ctx.point_size;
@@ -51,8 +49,8 @@ macro_rules! ssbo_binding {
     };
 }
 
-pub const SSBO_INDEX_POD_CAGE_REFERENCE: u32 = ssbo_binding!(POD_Cage_Reference);
-pub const SSBO_INDEX_POD_CAGE_POINTS: u32 = ssbo_binding!(POD_Cage_Points);
+pub const SSBOI_BIND_REF: u32 = ssbo_binding!(POD_Cage_Reference);
+pub const SSBOI_POINTS: u32 = ssbo_binding!(POD_Cage_Points);
 
 ethel::shader_glsl! {
     struct DebugDrawCages > [460] {

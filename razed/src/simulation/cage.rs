@@ -417,13 +417,13 @@ impl<'buffers> CageSyncFrameOps<'buffers, CageSyncGpu> {
 
         let mapped = buf.map();
 
-        mapped.pod_bindref_mut(0).swap(remove, length - 1);
-        mapped.pod_points_mut(0).swap(remove, length - 1);
-        mapped.pod_points_bind_mut(0).swap(remove, length - 1);
-        mapped.pod_barycenter_bind_mut(0).swap(remove, length - 1);
-        mapped.pod_lut_lattice_mut(0).swap(remove, length - 1);
-        mapped.pod_attachments_mut(0).swap(remove, length - 1);
-        mapped.pod_bind_lattice_mut(0).swap(remove, length - 1);
+        mapped.bind_ref_mut(0).swap(remove, length - 1);
+        mapped.points_mut(0).swap(remove, length - 1);
+        mapped.points_bind_mut(0).swap(remove, length - 1);
+        mapped.barycenters_bind_mut(0).swap(remove, length - 1);
+        mapped.lattice_lut_mut(0).swap(remove, length - 1);
+        mapped.attachments_mut(0).swap(remove, length - 1);
+        mapped.lattice_bind_mut(0).swap(remove, length - 1);
         mapped.rmap_mut(0).swap(remove, length - 1);
 
         mapped.rmap_mut(0)[remove]
@@ -450,12 +450,12 @@ impl<'buffers> CageSyncFrameOps<'buffers, CageSyncGpu> {
                 let bindref = glam::vec4(bindref.x, bindref.y, bindref.z, 1.0);
                 let points_bind = CagePoints(points_bind);
                 gpu_buf.blit_rmap(&[map_index], offset);
-                gpu_buf.blit_pod_bindref(&[bindref], offset);
-                gpu_buf.blit_pod_bind_lattice(&[lattice_binds], offset);
-                gpu_buf.blit_pod_lut_lattice(&[lattice_lut], offset);
-                gpu_buf.blit_pod_points_bind(&[points_bind], offset);
-                gpu_buf.blit_pod_barycenter_bind(&[points_barycenter_bind], offset);
-                gpu_buf.blit_pod_attachments(&[attachments], offset);
+                gpu_buf.blit_bind_ref(&[bindref], offset);
+                gpu_buf.blit_lattice_bind(&[lattice_binds], offset);
+                gpu_buf.blit_lattice_lut(&[lattice_lut], offset);
+                gpu_buf.blit_points_bind(&[points_bind], offset);
+                gpu_buf.blit_barycenters_bind(&[points_barycenter_bind], offset);
+                gpu_buf.blit_attachments(&[attachments], offset);
 
                 let gpu_index = NonZeroUsize::new(offset).expect("offset is never 0");
                 self.sync_remap(section, Some(gpu_index), map_index);

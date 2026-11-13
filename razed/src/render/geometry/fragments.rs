@@ -1,10 +1,10 @@
 use super::LIB_GBANK_BUFFERS_HEADER;
-use ethel::{DirectIndex, PartitionedTriBuffer, TriBuffer, shader::GlslStorage};
+use ethel::{DirectIndex, TriBuffer, shader::GlslStorage};
 use rendrs::geometry::DomainData;
 use rendrs::graphics::material::MaterialLocationRegistry;
 
 use crate::{
-    data::{CagePartitionedBuffer, FRAGMENTS_STORAGE_PARTS},
+    data::{CagePartitionedBuffer, FragmentsPartitionedTriBuffer},
     render::{ViewData, shader_commons},
 };
 
@@ -29,10 +29,10 @@ pub fn geom_fragments_pass_with_shader(
 
         let section = section.as_index();
 
-        cages_data.bind_ssbo_pod_points(Some(G_FRAGS_SSBO_BIND_POD_CAGES_LPOINTS));
-        cages_data.bind_ssbo_pod_points_bind(Some(G_FRAGS_SSBO_BIND_POD_CAGES_LPOINTS_BIND));
+        cages_data.bind_ssbo_points(Some(G_FRAGS_SSBOI_CAGES_LPOINTS));
+        cages_data.bind_ssbo_points_bind(Some(G_FRAGS_SSBOI_CAGES_LPOINTS_BIND));
         cages_map.bind_shader_storage(section, G_FRAGS_SSBO_BIND_IMAP_CAGES, 0);
-        fragments_data.bind_shader_storage(section);
+        fragments_data.bind_ssbo_all(section);
 
         shader.uniform_camera_forward_vec3(view_data.view_dir);
         shader.uniform_camera_position_vec3(view_data.view_pos);
@@ -69,11 +69,11 @@ macro_rules! ssbo_binding {
     };
 }
 
-pub const G_FRAGS_SSBO_BIND_POD_BINDPOSE: u32 = ssbo_binding!(POD_BindPose);
-pub const G_FRAGS_SSBO_BIND_POD_MESHID: u32 = ssbo_binding!(POD_MeshID);
-pub const G_FRAGS_SSBO_BIND_POD_CAGEID: u32 = ssbo_binding!(POD_CageID);
-pub const G_FRAGS_SSBO_BIND_POD_CAGES_LPOINTS: u32 = ssbo_binding!(POD_Cages_LPoints);
-pub const G_FRAGS_SSBO_BIND_POD_CAGES_LPOINTS_BIND: u32 = ssbo_binding!(POD_Cages_LPoints_Bind);
+pub const G_FRAGS_SSBOI_BIND_POSE: u32 = ssbo_binding!(POD_BindPose);
+pub const G_FRAGS_SSBOI_MESH_ID: u32 = ssbo_binding!(POD_MeshID);
+pub const G_FRAGS_SSBOI_CAGE_ID: u32 = ssbo_binding!(POD_CageID);
+pub const G_FRAGS_SSBOI_CAGES_LPOINTS: u32 = ssbo_binding!(POD_Cages_LPoints);
+pub const G_FRAGS_SSBOI_CAGES_LPOINTS_BIND: u32 = ssbo_binding!(POD_Cages_LPoints_Bind);
 pub const G_FRAGS_SSBO_BIND_IMAP_CAGES: u32 = ssbo_binding!(IMap_Cages);
 
 rendrs::geometry_submission_job! {
@@ -99,11 +99,11 @@ rendrs::geometry_submission_job! {
             shader_commons::ETH_MESH_SSBO_STATIC // bind 10
             shader_commons::ETH_MESH_SSBO_TRIS   // bind 11
 
-            G_FRAGS_SSBO_POD_BINDPOSE
-            G_FRAGS_SSBO_POD_MESHID
-            G_FRAGS_SSBO_POD_CAGEID
-            G_FRAGS_SSBO_POD_CAGES_LPOINTS
-            G_FRAGS_SSBO_POD_CAGES_LPOINTS_BIND
+            G_FRAGS_SSBO_BINDPOSE
+            G_FRAGS_SSBO_MESHID
+            G_FRAGS_SSBO_CAGEID
+            G_FRAGS_SSBO_CAGES_LPOINTS
+            G_FRAGS_SSBO_CAGES_LPOINTS_BIND
             G_FRAGS_SSBO_IMAP_CAGES
         }
         lib {
@@ -125,7 +125,7 @@ rendrs::geometry_submission_job! {
             frag_count: u32;
             cages_data: CagePartitionedBuffer, for 'ctx;
             cages_map: TriBuffer<DirectIndex>, for 'ctx;
-            fragments_data: PartitionedTriBuffer<{ FRAGMENTS_STORAGE_PARTS }>, for 'ctx;
+            fragments_data: FragmentsPartitionedTriBuffer, for 'ctx;
 
             view_data: ViewData;
 
@@ -295,27 +295,27 @@ rendrs::geometry_submission_job! {
     }
 }
 
-pub const G_FRAGS_SSBO_POD_BINDPOSE: GlslStorage = ethel::shader_glsl_ssbo! {
+pub const G_FRAGS_SSBO_BINDPOSE: GlslStorage = ethel::shader_glsl_ssbo! {
     buf POD_BindPose => {
         [dyn_array vec4: pod_bind_pose]
     }
 };
-pub const G_FRAGS_SSBO_POD_MESHID: GlslStorage = ethel::shader_glsl_ssbo! {
+pub const G_FRAGS_SSBO_MESHID: GlslStorage = ethel::shader_glsl_ssbo! {
     buf POD_MeshID => {
         [dyn_array uint: pod_mesh_id]
     }
 };
-pub const G_FRAGS_SSBO_POD_CAGEID: GlslStorage = ethel::shader_glsl_ssbo! {
+pub const G_FRAGS_SSBO_CAGEID: GlslStorage = ethel::shader_glsl_ssbo! {
     buf POD_CageID => {
         [dyn_array IndirectIndex: pod_cage_id]
     }
 };
-pub const G_FRAGS_SSBO_POD_CAGES_LPOINTS: GlslStorage = ethel::shader_glsl_ssbo! {
+pub const G_FRAGS_SSBO_CAGES_LPOINTS: GlslStorage = ethel::shader_glsl_ssbo! {
     buf POD_Cages_LPoints => {
         [dyn_array vec4: pod_cages_localpoints => each 8]
     }
 };
-pub const G_FRAGS_SSBO_POD_CAGES_LPOINTS_BIND: GlslStorage = ethel::shader_glsl_ssbo! {
+pub const G_FRAGS_SSBO_CAGES_LPOINTS_BIND: GlslStorage = ethel::shader_glsl_ssbo! {
     buf POD_Cages_LPoints_Bind => {
         [dyn_array vec4: pod_cages_localpoints_bind => each 8]
     }

@@ -1,11 +1,11 @@
 use ethel::{
-    render::buffer::{PartitionedTriBuffer, TriBuffer},
+    render::buffer::TriBuffer,
     shader::{Constant, GlslLib, GlslStruct, WriteValue},
 };
 use rendrs::pipeline::ComputePass;
 
 use crate::{
-    data::{CagePartitionedBuffer, LayoutXpbdDebugData},
+    data::{CagePartitionedBuffer, LatticePartitionedTriBuffer},
     simulation::cage::{self, OffsetRotation},
 };
 
@@ -16,7 +16,7 @@ pub struct TaskDeformCagesCtx<'data> {
     pub total_cage_count: u32,
     pub cage_data: &'data CagePartitionedBuffer,
     pub cage_feedback: &'data TriBuffer<OffsetRotation>,
-    pub lattice_data: &'data PartitionedTriBuffer<4>,
+    pub lattice_data: &'data LatticePartitionedTriBuffer,
 }
 rendrs::context_wrapper!(for<'ctx> TaskDeformCagesCtx);
 
@@ -25,18 +25,14 @@ pub const fn deform_cages_pass(shader: &ComputeShaderTaskDeformCages) -> TaskDef
     TaskDeformCagesPass::new(handle_view, [], [], |section, ctx| {
         let section = section.as_index();
 
-        ctx.lattice_data.bind_shader_storage_single(
-            section,
-            LayoutXpbdDebugData::ImapNodes as usize,
-            Some(SSBO_INDEX_IMAP_LATTICE),
-        );
-        ctx.lattice_data.bind_shader_storage_single(
-            section,
-            LayoutXpbdDebugData::PodNodes as usize,
-            Some(SSBO_INDEX_POD_LATTICE_POSITION),
-        );
+        ctx.lattice_data
+            .bind_ssbo_imap_nodes(section, Some(SSBOI_IMAP_LATTICE));
+        ctx.lattice_data
+            .bind_ssbo_nodes(section, Some(SSBOI_LATTICE_POSITION));
+
         ctx.cage_feedback
-            .bind_shader_storage(section, SSBO_INDEX_OUT_FEEDBACK, 0);
+            .bind_shader_storage(section, SSBOI_OUT_FEEDBACK, 0);
+
         ctx.cage_data.bind_ssbo_all();
 
         let rotations_count = ctx.total_cage_count * cage::PER_CAGE_POINTS as u32;
@@ -67,9 +63,6 @@ impl WriteValue for NodeAttachment {
 }
 
 macro_rules! ssbo_binding {
-    // (Pod_Rotation) => {
-    //     0
-    // };
     (Out_Feedback) => {
         0
     };
@@ -102,17 +95,16 @@ macro_rules! ssbo_binding {
     };
 }
 
-//pub const SSBO_INDEX_POD_ROTATION: u32 = ssbo_binding!(Pod_Rotation);
-pub const SSBO_INDEX_POD_BIND_REF: u32 = ssbo_binding!(Pod_BindRef);
-pub const SSBO_INDEX_POD_POINTS: u32 = ssbo_binding!(Pod_Points);
-pub const SSBO_INDEX_POD_POINTS_BIND: u32 = ssbo_binding!(Pod_Points_Bind);
-pub const SSBO_INDEX_POD_BARYCENTER_BIND: u32 = ssbo_binding!(Pod_Barycenter_Bind);
-pub const SSBO_INDEX_POD_ATTACHMENTS: u32 = ssbo_binding!(Pod_Attachments);
-pub const SSBO_INDEX_POD_LUT_LATTICE: u32 = ssbo_binding!(Pod_Lut_Lattice);
-pub const SSBO_INDEX_POD_BIND_LATTICE: u32 = ssbo_binding!(Pod_Bind_Lattice);
-pub const SSBO_INDEX_IMAP_LATTICE: u32 = ssbo_binding!(IMap_Lattice);
-pub const SSBO_INDEX_POD_LATTICE_POSITION: u32 = ssbo_binding!(Pod_Lattice_Position);
-pub const SSBO_INDEX_OUT_FEEDBACK: u32 = ssbo_binding!(Out_Feedback);
+pub const SSBOI_BIND_REF: u32 = ssbo_binding!(Pod_BindRef);
+pub const SSBOI_POINTS: u32 = ssbo_binding!(Pod_Points);
+pub const SSBOI_POINTS_BIND: u32 = ssbo_binding!(Pod_Points_Bind);
+pub const SSBOI_BARYCENTERS_BIND: u32 = ssbo_binding!(Pod_Barycenter_Bind);
+pub const SSBOI_ATTACHMENTS: u32 = ssbo_binding!(Pod_Attachments);
+pub const SSBOI_LATTICE_LUT: u32 = ssbo_binding!(Pod_Lut_Lattice);
+pub const SSBOI_LATTICE_BIND: u32 = ssbo_binding!(Pod_Bind_Lattice);
+pub const SSBOI_IMAP_LATTICE: u32 = ssbo_binding!(IMap_Lattice);
+pub const SSBOI_LATTICE_POSITION: u32 = ssbo_binding!(Pod_Lattice_Position);
+pub const SSBOI_OUT_FEEDBACK: u32 = ssbo_binding!(Out_Feedback);
 
 pub const CAGE_DEFORM_WORKGROUP_SIZE: u32 = 64;
 pub const CAGE_DEFORM_PER_GROUP_CAGE_COUNT: u32 = 8;

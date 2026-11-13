@@ -1,15 +1,15 @@
-use ethel::render::buffer::PartitionedTriBuffer;
 use ethel::shader::{GlslStruct, ShaderKind};
 use ethel::state::data::IndirectIndex;
 use rendrs::pipeline::{DrawPass, OutputObject, RenderTargetAccessor};
 
+use crate::data::LatticePartitionedTriBuffer;
 use crate::render::shader_commons;
 
 pub type DebugDrawLatticesPass = DrawPass<DebugDrawLatticesCtxWrapper, 0, 2>;
 
 #[derive(Debug)]
 pub struct DebugDrawLatticesCtx<'data> {
-    pub lattice_data: &'data PartitionedTriBuffer<4>,
+    pub lattice_data: &'data LatticePartitionedTriBuffer,
     pub constraints_count: i32,
 }
 rendrs::context_wrapper!(for<'ctx> DebugDrawLatticesCtx);
@@ -29,7 +29,7 @@ pub const fn draw_lattices_pass(
         ],
         |section, ctx| {
             let section = section.as_index();
-            ctx.lattice_data.bind_shader_storage(section);
+            ctx.lattice_data.bind_ssbo_all(section);
             let count = ctx.constraints_count;
             unsafe {
                 janus::gl::LineWidth(5.0);
@@ -49,9 +49,6 @@ macro_rules! ssbo_binding {
     (POD_Nodes) => {
         6
     };
-    (I_Selected) => {
-        7
-    };
 }
 
 ethel::shader_glsl_struct! {
@@ -62,10 +59,9 @@ ethel::shader_glsl_struct! {
 
 pub const TYPE_CONSTRAINT: GlslStruct = ConstraintGlslStruct::as_definition();
 
-pub const SSBO_INDEX_POD_CONSTRAINTS: u32 = ssbo_binding!(POD_Constraints);
-pub const SSBO_INDEX_POD_NODES: u32 = ssbo_binding!(POD_Nodes);
-pub const SSBO_INDEX_I_SELECTED: u32 = ssbo_binding!(I_Selected);
-pub const SSBO_INDEX_IMAP_NODES: u32 = ssbo_binding!(IMap_Nodes);
+pub const SSBOI_CONSTRAINTS: u32 = ssbo_binding!(POD_Constraints);
+pub const SSBOI_NODES: u32 = ssbo_binding!(POD_Nodes);
+pub const SSBOI_IMAP_NODES: u32 = ssbo_binding!(IMap_Nodes);
 
 ethel::shader_glsl! {
     struct DebugDrawLattices > [460] {
@@ -106,11 +102,6 @@ ethel::shader_glsl! {
                         [dyn_array vec4: pod_nodes]
                     }
                 }
-                ethel::shader_glsl_ssbo! {
-                    buf I_Selected => {
-                        DirectIndex: i_selected;
-                    }
-                }
             };
 
             src() {
@@ -123,9 +114,6 @@ ethel::shader_glsl! {
                 IndirectIndex node_ii = imap_nodes[node_id.index];
 
                 fs_color = vec4(0.0, 1.0, 0.0, 0.28);
-                if (constraint_id == i_selected.index) {
-                    fs_color = vec4(1.0, 0.0, 0.0, 1.0);
-                }
 
                 vec3 position = pod_nodes[node_ii.index].xyz;
                 gl_Position = projection * view * vec4(position, 1.0);

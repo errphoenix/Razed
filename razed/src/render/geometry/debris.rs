@@ -1,9 +1,9 @@
 use super::LIB_GBANK_BUFFERS_HEADER;
-use ethel::{render::buffer::PartitionedTriBuffer, shader::GlslStorage};
+use ethel::shader::GlslStorage;
 use rendrs::{geometry::DomainData, graphics::material::MaterialLocationRegistry};
 
 use crate::{
-    data::LayoutDebrisData,
+    data::DebrisPartitionedTriBuffer,
     render::{ViewData, shader_commons},
 };
 
@@ -30,12 +30,7 @@ pub fn geom_debris_pass_with_shader(shader: ComputeShaderDebrisGeomSubmit) -> De
 
         let section = section.as_index();
 
-        debris_data.bind_shader_storage_arrays(
-            section,
-            LayoutDebrisData::PodPositions as usize,
-            3,
-            Some(G_DEBRIS_SSBO_BIND_POD),
-        );
+        debris_data.bind_ssbo_arrays(section, Some(G_DEBRIS_SSBOI_ARRAYS));
 
         shader.uniform_camera_forward_vec3(view_data.view_dir);
         shader.uniform_camera_position_vec3(view_data.view_pos);
@@ -82,7 +77,7 @@ rendrs::geometry_submission_job! {
         ssbo {
             shader_commons::ETH_MESH_SSBO_STATIC // bind 10
             shader_commons::ETH_MESH_SSBO_TRIS   // bind 11
-            G_DEBRIS_SSBO_POD
+            G_DEBRIS_SSBO_ARRAYS
         }
         share {
             uint sm_inst_mesh_inst_count_thread[64];
@@ -94,7 +89,7 @@ rendrs::geometry_submission_job! {
 
         context {
             debris_count: u32;
-            debris_data: PartitionedTriBuffer<3>, for 'ctx;
+            debris_data: DebrisPartitionedTriBuffer, for 'ctx;
 
             view_data: ViewData;
 
@@ -198,9 +193,9 @@ macro_rules! ssbo_binding {
     };
 }
 
-pub const G_DEBRIS_SSBO_BIND_POD: u32 = ssbo_binding!(POD_Debris);
+pub const G_DEBRIS_SSBOI_ARRAYS: u32 = ssbo_binding!(POD_Debris);
 
-pub const G_DEBRIS_SSBO_POD: GlslStorage = ethel::shader_glsl_ssbo! {
+pub const G_DEBRIS_SSBO_ARRAYS: GlslStorage = ethel::shader_glsl_ssbo! {
     buf POD_Debris => {
         vec4 : pod_position[131072];
         vec4 : pod_rotation[131072];

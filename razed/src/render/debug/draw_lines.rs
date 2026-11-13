@@ -1,7 +1,7 @@
-use ethel::{render::buffer::PartitionedTriBuffer, shader::ShaderKind};
+use ethel::shader::ShaderKind;
 use rendrs::{OutputObject, RenderTargetAccessor, pipeline::DrawPass};
 
-use crate::data::LayoutDebugLinesData;
+use crate::data::DbgLinesPartitionedTriBuffer;
 
 #[derive(Clone, Debug, Default)]
 pub struct DebugLinesData {
@@ -53,7 +53,7 @@ pub type DebugDrawLinesPass = DrawPass<DebugDrawLinesCtxWrapper, 0, 2>;
 
 #[derive(Debug)]
 pub struct DebugDrawLinesCtx<'data> {
-    pub lines_data: &'data PartitionedTriBuffer<2>,
+    pub lines_data: &'data DbgLinesPartitionedTriBuffer,
     pub lines_buffer: &'data DebugLinesData,
 }
 rendrs::context_wrapper!(for<'ctx> DebugDrawLinesCtx);
@@ -73,23 +73,15 @@ pub const fn draw_lines_pass(
         ],
         |section, ctx| {
             let section = section.as_index();
-            unsafe {
-                ctx.lines_data.blit_part_padded(
-                    section,
-                    LayoutDebugLinesData::PodPoints as usize,
-                    &ctx.lines_buffer.positions,
-                    0,
-                    4,
-                );
-                ctx.lines_data.blit_part(
-                    section,
-                    LayoutDebugLinesData::PodColors as usize,
-                    &ctx.lines_buffer.colors,
-                    0,
-                );
-            }
 
-            ctx.lines_data.bind_shader_storage(section);
+            let positions = &ctx.lines_buffer.positions;
+            let colors = &ctx.lines_buffer.colors;
+            unsafe {
+                ctx.lines_data.blit_point_padded(section, positions, 0, 4);
+            }
+            ctx.lines_data.blit_color(section, colors, 0);
+            ctx.lines_data.bind_ssbo_all(section);
+
             let count = ctx.lines_buffer.len() as i32;
             unsafe {
                 janus::gl::LineWidth(2.5);
@@ -108,8 +100,8 @@ macro_rules! ssbo_binding {
     };
 }
 
-pub const SSBO_INDEX_POD_POINTS: u32 = ssbo_binding!(POD_Points);
-pub const SSBO_INDEX_POD_COLORS: u32 = ssbo_binding!(POD_Colors);
+pub const SSBOI_POINTS: u32 = ssbo_binding!(POD_Points);
+pub const SSBOI_COLORS: u32 = ssbo_binding!(POD_Colors);
 
 ethel::shader_glsl! {
     struct DebugDrawLines > [460] {
