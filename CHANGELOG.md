@@ -4,9 +4,11 @@
 
 ### Added
 
+- Additional builds for varying CPU-supported features (sse2, sse4.2, avx2, avx512)
+
 - Core damage systems and prototype user interactions
 
-- Additional builds for varying CPU-supported features (sse2, sse4.2, avx2, avx512)
+- Delete useless cages after associated fragment is deleted
 
 - Visualize cursor 3D position in world (spatial hash grid)
 

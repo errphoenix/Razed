@@ -759,7 +759,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             self.damage_mode = !self.damage_mode;
         }
         if self.damage_mode {
-            const CLOUD_RADIUS: f32 = 16f32;
+            const CLOUD_RADIUS: f32 = 8f32;
             const CLOUD_DAMAGE: f32 = 4.0;
             const CLOUD_STRENGTH: f32 = 12.0; //MN
 
@@ -1103,7 +1103,8 @@ impl State {
 
                 let data = self.fragments.data();
 
-                //self.cage.delete_cage(cage_id);
+                let cage_id = data.deformation_cage[frag_index.as_index()];
+                self.cage.delete_cage(cage_id);
 
                 let mesh_id = data.mesh_id[frag_index.as_index()];
                 let b_position = data.bind_position[frag_index.as_index()].xyz();
@@ -1111,9 +1112,9 @@ impl State {
                 let integrity = data.integrity[frag_index.as_index()];
 
                 // 25% of mass is variable depending on fragment's integrity
-                const MASS_INTEGVAR: f32 = 0.25;
-                let mass_nonvar = mass_coeff * (1.0 - MASS_INTEGVAR);
-                let mass_integvar = mass_coeff * MASS_INTEGVAR * integrity;
+                const VARIABLE_MASS: f32 = 0.25;
+                let mass_nonvar = mass_coeff * (1.0 - VARIABLE_MASS);
+                let mass_integvar = mass_coeff * VARIABLE_MASS * integrity;
                 let mass = mass_nonvar + mass_integvar;
 
                 let mut inherit_v = glam::Vec3::ZERO;

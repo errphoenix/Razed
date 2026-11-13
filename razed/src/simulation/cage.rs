@@ -5,13 +5,12 @@ use std::{
 
 use ethel::{
     Cell, Column, DirectIndex, FxSpatialHash, IndirectIndex, SparseSlot, SpatialHash,
-    StorageSection, render::buffer::partitioned::PartitionedBuffer, state::data::IndexArrayColumn,
-    state::data::table::TableView,
+    StorageSection, state::data::IndexArrayColumn, state::data::table::TableView,
 };
 use janus::sync::TriVec;
 
 use crate::{
-    data::{CagePartitionedBuffer, LayoutCage},
+    data::CagePartitionedBuffer,
     render::task::deform_cages::{CagePoints, LatticeAttachments, NodeAttachment},
     simulation::lattice::NodesRowTableView,
 };
@@ -94,7 +93,7 @@ pub struct CageSystem {
 
     deformation_feedback: Vec<OffsetRotation>,
 
-    /// Mapping of lattice node point ID to cage ID attached to the node.
+    /// mapping of lattice node point ID to cage ID attached to the node
     node_map: Vec<IndirectIndex>,
 
     generate_query_near_buf: Vec<Cell>,
@@ -140,11 +139,9 @@ impl CageSystem {
         &self.local_delete_buf
     }
 
-    #[allow(unused, reason = "wip feature")]
     pub fn delete_cage(&mut self, cage_id: IndirectIndex) {
         let direct = self.gpu_map.solve_indirect(cage_id);
         if direct.is_some_and(|d| d.as_int() == 0) || direct.is_none() {
-            tracing::error!("attempted to delete uninitialized or invalid cage: operation aborted");
             self.gpu_map.free(cage_id);
             return;
         }
@@ -410,85 +407,26 @@ impl<'buffers> CageSyncFrameOps<'buffers, CageSyncCpu> {
     }
 }
 impl<'buffers> CageSyncFrameOps<'buffers, CageSyncGpu> {
-    fn swap_remove_element<const PARTS: usize, T: Sized + Default>(
-        buf: &PartitionedBuffer<PARTS>,
+    fn swap_remove_cage(
+        buf: &CagePartitionedBuffer,
         buf_size: &AtomicUsize,
-        partition: usize,
-        to_remove: usize,
-        length: usize,
-    ) {
-        todo!()
-        // unsafe {
-        //     let mut view = buf.view_part_mut::<T>(partition);
-        //     view.swap(to_remove, length - 1);
-        //     buf.set_length(partition, (length - 1) as u32);
-        // }
-    }
-
-    fn swap_remove_cage<const PARTS: usize>(
-        buf: &PartitionedBuffer<PARTS>,
-        buf_size: &AtomicUsize,
-        to_remove: usize,
+        remove: usize,
         length: usize,
     ) -> IndirectIndex {
-        Self::swap_remove_element::<PARTS, glam::Vec4>(
-            buf,
-            buf_size,
-            LayoutCage::PodBindRef as usize,
-            to_remove,
-            length,
-        );
-        Self::swap_remove_element::<PARTS, CagePoints>(
-            buf,
-            buf_size,
-            LayoutCage::PodPoints as usize,
-            to_remove,
-            length,
-        );
-        Self::swap_remove_element::<PARTS, CagePoints>(
-            buf,
-            buf_size,
-            LayoutCage::PodPointsBind as usize,
-            to_remove,
-            length,
-        );
-        Self::swap_remove_element::<PARTS, [glam::Vec4; PER_CAGE_POINTS]>(
-            buf,
-            buf_size,
-            LayoutCage::PodBarycenterBind as usize,
-            to_remove,
-            length,
-        );
-        Self::swap_remove_element::<PARTS, [LatticeAttachments; PER_CAGE_POINTS]>(
-            buf,
-            buf_size,
-            LayoutCage::PodAttachments as usize,
-            to_remove,
-            length,
-        );
-        Self::swap_remove_element::<PARTS, [glam::Vec4; PER_CAGE_MAX_LATTICE_ATTACHMENTS]>(
-            buf,
-            buf_size,
-            LayoutCage::PodBindLattice as usize,
-            to_remove,
-            length,
-        );
-        Self::swap_remove_element::<PARTS, [IndirectIndex; PER_CAGE_MAX_LATTICE_ATTACHMENTS]>(
-            buf,
-            buf_size,
-            LayoutCage::PodLutLattice as usize,
-            to_remove,
-            length,
-        );
+        buf_size.fetch_sub(1, Ordering::Acquire);
 
-        todo!();
-        // const RMAP_PART_INDEX: usize = LayoutCage::Rmap as usize;
-        // unsafe {
-        //     let mut view = buf.view_part_mut::<IndirectIndex>(RMAP_PART_INDEX);
-        //     view.swap(to_remove, length - 1);
-        //     buf.set_length(RMAP_PART_INDEX, (length - 1) as u32);
-        //     view[to_remove]
-        // }
+        let mapped = buf.map();
+
+        mapped.pod_bindref_mut(0).swap(remove, length - 1);
+        mapped.pod_points_mut(0).swap(remove, length - 1);
+        mapped.pod_points_bind_mut(0).swap(remove, length - 1);
+        mapped.pod_barycenter_bind_mut(0).swap(remove, length - 1);
+        mapped.pod_lut_lattice_mut(0).swap(remove, length - 1);
+        mapped.pod_attachments_mut(0).swap(remove, length - 1);
+        mapped.pod_bind_lattice_mut(0).swap(remove, length - 1);
+        mapped.rmap_mut(0).swap(remove, length - 1);
+
+        mapped.rmap_mut(0)[remove]
     }
 
     pub fn upload(&self, section: StorageSection, gpu_buf: &CagePartitionedBuffer) {
@@ -546,7 +484,7 @@ impl<'buffers> CageSyncFrameOps<'buffers, CageSyncGpu> {
 
                 let index = direct.as_index();
                 let length = self.buffer_size.load(Ordering::Relaxed);
-                let remap_id = Self::swap_remove_cage(gpu_buf.inner(), self.buffer_size, index, length);
+                let remap_id = Self::swap_remove_cage(gpu_buf, self.buffer_size, index, length);
 
                 self.sync_remap(section, None, map_id);
                 let old_direct = imap[remap_id.as_index()];
