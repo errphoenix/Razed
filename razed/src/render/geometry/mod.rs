@@ -7,9 +7,9 @@ pub use fragments::*;
 pub use plane::*;
 
 rendrs::geometry_buffers! {
-    vertices = 1_048_560;
-    triangles = 1_048_560;
+    vertices = 4_194_240;
+    triangles = 4_194_240;
 }
 
-pub const GBANK_VERTEX_CAP: u32 = 1_048_560;
-pub const GBANK_TRIANGLE_CAP: u32 = 1_048_560;
+pub const GBANK_VERTEX_CAP: u32 = 4_194_240;
+pub const GBANK_TRIANGLE_CAP: u32 = 4_194_240;
