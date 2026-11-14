@@ -92,7 +92,7 @@ fn main() {
         janus::gl::ClearDepth(0.0);
         janus::gl::Enable(janus::gl::DEPTH_TEST);
 
-        //janus::gl::Enable(janus::gl::CULL_FACE);
+        janus::gl::Enable(janus::gl::CULL_FACE);
         janus::gl::BlendFunc(janus::gl::SRC_ALPHA, janus::gl::ONE_MINUS_SRC_ALPHA);
         janus::gl::Enable(janus::gl::BLEND);
 
