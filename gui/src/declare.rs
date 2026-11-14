@@ -1,17 +1,113 @@
+use crate::TextParams;
+
+fn a() {
+    let t = TextParams {
+        contents: todo!(),
+        font_name: todo!(),
+        color: todo!(),
+        font_size: todo!(),
+        line_height: todo!(),
+        never_invalidate: todo!(),
+    };
+}
+
+/// Generate text parameters.
+///
+/// Available fields:
+/// - `content` of type [`TextContents`] - the string to display.
+///
+///    Alternatively, the type can be of `&'static str` as a shortcut for
+///    a static literal string.
+/// - `font` of type `&'static str` - the name of the font (defaults to
+///   `Arial`)
+/// - `color` of type [`glam::Vec4`] - the foreground color
+/// - `size` of type `f32` - the font size in pixels
+/// - `height` of type `f32` - the line height of the text in pixels
+/// - `always_invalidate` field - whether the text should re-layout every frame
+///
+///   Note: re-layouting text may be expensive, this option should not be
+///   used unless necessary, if drastic content changes may require it.
+///
+/// The above fields can be defined in any order, and are optional.
+///
+/// Any non-defined field will default to the value as according to
+/// [`crate::TextParams::default`].
+///
+/// [`TextContents`]: crate::TextContents
+#[macro_export]
+macro_rules! wd_text {
+    (@prop $out:ident; content $v:literal $(; $($t:tt)*)?) => {
+        $out.contents = $crate::TextContents::literal($v);
+        $($crate::wd_text!(@prop $out; $($t:tt)*);)?
+    };
+    (@prop $out:ident; content $v:expr $(; $($t:tt)*)?) => {
+        $out.contents = $v;
+        $($crate::wd_text!(@prop $out; $($t:tt)*);)?
+    };
+    (@prop $out:ident; font $v:expr $(; $($t:tt)*)?) => {
+        $out.font_name = $v;
+        $($crate::wd_text!(@prop $out; $($t:tt)*);)?
+    };
+    (@prop $out:ident; color $v:expr $(; $($t:tt)*)?) => {
+        $out.color = $v;
+        $($crate::wd_text!(@prop $out; $($t:tt)*);)?
+    };
+    (@prop $out:ident; size $v:expr $(; $($t:tt)*)?) => {
+        $out.font_size = $v;
+        $($crate::wd_text!(@prop $out; $($t:tt)*);)?
+    };
+    (@prop $out:ident; height $v:expr $(; $($t:tt)*)?) => {
+        $out.line_height = $v;
+        $($crate::wd_text!(@prop $out; $($t:tt)*);)?
+    };
+    (@prop $out:ident; always_invalidate $(; $($t:tt)*)?) => {
+        $out.never_invalidate = false;
+        $($crate::wd_text!(@prop $out; $($t:tt)*);)?
+    };
+    (@prop $out:ident; $($t:tt)*) => {};
+
+    ($sys:ident, $core:expr => $($t:tt)*) => { $sys.create_element($crate::ElementParams::Text($core, $crate::wd_text!($($t)*))) };
+    ($($t:tt)*) => {{
+        let mut params = $crate::TextParams::default();
+        $crate::wd_text!(@prop params; $($t)*);
+        params
+    }};
+}
+
+/// Generate inner text contents string.
+///
+/// The string is composed from a series of nodes, described below.
+/// Nodes must be listed sequentially, separated by a comma.
+///
+/// A maximum of [`18`](crate::TextContents::NODE_COUNT) nodes is supported.
+///
+/// Available nodes:
+/// * Static - a literal string: `"Hello world"`
+/// * Variable - polled every frame from the UI environment by the given ID
+/// * Custom Variable - like `Variable`, but the value is captured to return
+///   another:
+///
+///   `|VAR_NAME : var| { /* do something with `var`, and return another `EnvValue` */ }`
 #[macro_export]
 macro_rules! text_contents {
     (@node $i:ident, $a:ident; ) => {};
     (@node $i:ident, $a:ident; $str:literal $(, $($o:tt)*)?) => {
         $a[$i] = $crate::TextNode::Static($str);
         $({
-            $i += 1;
+            #[allow(unused)]
+            {
+                $i += 1;
+            }
             $crate::text_contents!(@node $i, $a; $($o)*);
         })?
     };
     (@node $i:ident, $a:ident; $var:ident $(, $($o:tt)*)?) => {
         $a[$i] = $crate::TextNode::Variable($var);
         $({
-            $i += 1;
+            #[allow(unused)]
+            {
+                $i += 1;
+            }
             $crate::text_contents!(@node $i, $a; $($o)*);
         })?
     };
@@ -21,7 +117,10 @@ macro_rules! text_contents {
             operation: $opfn,
         };
         $({
-            $i += 1;
+            #[allow(unused)]
+            {
+                $i += 1;
+            }
             $crate::text_contents!(@node $i, $a; $($o)*);
         })?
     };
@@ -32,7 +131,10 @@ macro_rules! text_contents {
             operation: |$vname| $op,
         };
         $({
-            $i += 1;
+            #[allow(unused)]
+            {
+                $i += 1;
+            }
             $crate::text_contents!(@node $i, $a; $($o)*);
         })?
     };
@@ -249,10 +351,12 @@ macro_rules! style_layout {
 
 #[cfg(test)]
 mod tests {
-    use crate::env::UiEnv;
+    use ethel::Resolution;
+
+    use crate::{CoreElementParams, InterfaceSystem, env::UiEnv};
 
     #[test]
-    fn declare_text() {
+    fn declare_text_string() {
         let mut env = UiEnv::new();
         let mut buf = String::new();
 
@@ -260,9 +364,9 @@ mod tests {
         const TEST_ID_1: janus::StringHash = janus::hash_string("__test.id-1");
 
         env.insert(TEST_ID_0, "people");
-        env.insert(TEST_ID_1, 12);
+        env.insert(TEST_ID_1, 15);
 
-        let txt0 = crate::text_contents!("hello", " ", "world", "!");
+        let txt0 = crate::text_contents!("hello", " ", "world", "!",);
         let txt1 = crate::text_contents!("hello", " ", TEST_ID_0, "!");
         let txt2 = crate::text_contents!(
             "hello",
@@ -276,7 +380,7 @@ mod tests {
 
         const TEST_0: &str = "hello world!";
         const TEST_1: &str = "hello people!";
-        const TEST_2: &str = "hello 12 baboons!";
+        const TEST_2: &str = "hello 15 baboons!";
 
         txt0.resolve(&env, &mut buf);
         println!("{buf}");
@@ -292,5 +396,26 @@ mod tests {
         println!("{buf}");
         assert_eq!(janus::hash_string(&buf), janus::hash_string(&TEST_2));
         buf.clear();
+    }
+
+    #[test]
+    fn declare_widgets() {
+        let mut sys = InterfaceSystem::<1>::new(Resolution::default());
+
+        #[allow(unused)]
+        const AAA: janus::StringHash = janus::hash_string("a");
+
+        let _ = crate::wd_text! {
+            content "Hello people";
+            font "Times New Roman";
+            always_invalidate
+        };
+
+        let core = CoreElementParams::default();
+        let _ = crate::wd_text! { sys, core =>
+            size 15.0;
+            content crate::text_contents!("Hello ", AAA, " baboons");
+            font "Times New Roman"
+        };
     }
 }
