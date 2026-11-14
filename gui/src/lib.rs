@@ -64,7 +64,7 @@ pub struct InteractionTime {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct TextContents(pub [TextNode; Self::NODE_COUNT]);
 impl TextContents {
-    pub const NODE_COUNT: usize = 8;
+    pub const NODE_COUNT: usize = 18;
 
     pub const fn literal(string: &'static str) -> Self {
         Self::from_node(TextNode::Static(string))

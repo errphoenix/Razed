@@ -1,18 +1,70 @@
 #[macro_export]
-macro_rules! style {
+macro_rules! text_contents {
+    (@node $i:ident, $a:ident; ) => {};
+    (@node $i:ident, $a:ident; $str:literal $(, $($o:tt)*)?) => {
+        $a[$i] = $crate::TextNode::Static($str);
+        $({
+            $i += 1;
+            $crate::text_contents!(@node $i, $a; $($o)*);
+        })?
+    };
+    (@node $i:ident, $a:ident; $var:ident $(, $($o:tt)*)?) => {
+        $a[$i] = $crate::TextNode::Variable($var);
+        $({
+            $i += 1;
+            $crate::text_contents!(@node $i, $a; $($o)*);
+        })?
+    };
+    (@node $i:ident, $a:ident; |$var:ident| $opfn:ident $(, $($o:tt)*)?) => {
+        $a[$i] = $crate::TextNode::VariableAnd {
+            env_id: $var,
+            operation: $opfn,
+        };
+        $({
+            $i += 1;
+            $crate::text_contents!(@node $i, $a; $($o)*);
+        })?
+    };
+    (@node $i:ident, $a:ident; |$var:ident: $vname:ident| $op:block $(, $($o:tt)*)?) => {
+        $a[$i] = $crate::TextNode::VariableAnd {
+            env_id: $var,
+            #[allow(unused)]
+            operation: |$vname| $op,
+        };
+        $({
+            $i += 1;
+            $crate::text_contents!(@node $i, $a; $($o)*);
+        })?
+    };
+
+    ($($t:tt)*) => {{
+        #[allow(unused)]
+        let mut index = 0;
+        #[allow(unused)]
+        let mut array = [$crate::TextNode::Empty; $crate::TextContents::NODE_COUNT];
+        $crate::text_contents!(@node index, array; $($t)*);
+        $crate::TextContents::from_array(array)
+    }};
+}
+
+#[macro_export]
+macro_rules! style_layout {
     () => {
         std::default::Default::default()
+    };
+
+    // basic container types
+    (container-block) => {
+        $crate::style::ContainerLayout::Block
+    };
+    (container-none) => {
+        $crate::style::ContainerLayout::None
     };
 
     // position mode
     (position-relative) => {
         $crate::style::LayoutPosition::Relative
     };
-    (position-absolute x $x:expr) => {{
-        #[allow(unused)]
-        let (mut x, mut y) = (None, None);
-        $crate::style::LayoutPosition::Absolute { x, y }
-    }};
     (position-absolute x $x:expr) => {{
         #[allow(unused)]
         let (mut x, mut y) = (None, None);
@@ -25,7 +77,7 @@ macro_rules! style {
         y = Some($crate::style::Value::Absolute($y));
         $crate::style::LayoutPosition::Absolute { x, y }
     }};
-    (position-absolute x $x:expr, y $y:expr) => {{
+    (position-absolute $x:expr, $y:expr) => {{
         #[allow(unused)]
         let (mut x, mut y) = (None, None);
         x = Some($crate::style::Value::Absolute($x));
@@ -34,142 +86,63 @@ macro_rules! style {
     }};
 
     // item alignment
-    (align-item-auto) => {
-        $crate::style::ItemAlignment::Auto
-    };
-    (align-item-stretch) => {
-        $crate::style::ItemAlignment::Stretch
-    };
-    (align-item-baseline) => {
-        $crate::style::ItemAlignment::Baseline
-    };
-    (align-item-start) => {
-        $crate::style::ItemAlignment::Start
-    };
-    (align-item-center) => {
-        $crate::style::ItemAlignment::Center
-    };
-    (align-item-end) => {
-        $crate::style::ItemAlignment::End
-    };
+    (align-item-auto) => { $crate::style::ItemAlignment::Auto };
+    (align-item-stretch) => { $crate::style::ItemAlignment::Stretch };
+    (align-item-baseline) => { $crate::style::ItemAlignment::Baseline };
+    (align-item-start) => { $crate::style::ItemAlignment::Start };
+    (align-item-center) => { $crate::style::ItemAlignment::Center };
+    (align-item-end) => { $crate::style::ItemAlignment::End };
 
     // content alignment
-    (align-content-auto) => {
-        $crate::style::ContentAlignment::Auto
-    };
-    (align-content-stretch) => {
-        $crate::style::ContentAlignment::Stretch
-    };
-    (align-content-start) => {
-        $crate::style::ContentAlignment::Start
-    };
-    (align-content-center) => {
-        $crate::style::ContentAlignment::Center
-    };
-    (align-content-end) => {
-        $crate::style::ContentAlignment::End
-    };
-    (align-content-space-evenly) => {
-        $crate::style::ContentAlignment::SpaceEvenly
-    };
-    (align-content-space-around) => {
-        $crate::style::ContentAlignment::SpaceAround
-    };
-    (align-content-space-between) => {
-        $crate::style::ContentAlignment::SpaceBetween
-    };
+    (align-content-auto) => { $crate::style::ContentAlignment::Auto };
+    (align-content-stretch) => { $crate::style::ContentAlignment::Stretch };
+    (align-content-start) => { $crate::style::ContentAlignment::Start };
+    (align-content-center) => { $crate::style::ContentAlignment::Center };
+    (align-content-end) => { $crate::style::ContentAlignment::End };
+    (align-content-space-evenly) => { $crate::style::ContentAlignment::SpaceEvenly };
+    (align-content-space-around) => { $crate::style::ContentAlignment::SpaceAround };
+    (align-content-space-between) => { $crate::style::ContentAlignment::SpaceBetween };
 
     // flex direction
-    (flex-row) => {
-        $crate::style::FlexDirection::Row
-    };
-    (flex-column) => {
-        $crate::style::FlexDirection::Column
-    };
-    (flex-row-reverse) => {
-        $crate::style::FlexDirection::RowReverse
-    };
-    (flex-column-reverse) => {
-        $crate::style::FlexDirection::ColumnReverse
-    };
+    (flex-row) => { $crate::style::FlexDirection::Row };
+    (flex-column) => { $crate::style::FlexDirection::Column };
+    (flex-row-reverse) => { $crate::style::FlexDirection::RowReverse };
+    (flex-column-reverse) => { $crate::style::FlexDirection::ColumnReverse };
 
     // flex wrap
-    (flex-wrap) => {
-        $crate::style::Wrap::Wrap
-    };
-    (flex-no-wrap) => {
-        $crate::style::Wrap::DontWrap
-    };
-    (flex-wrap-revere) => {
-        $crate::style::Wrap::Reverse
-    };
+    (flex-wrap) => { $crate::style::Wrap::Wrap };
+    (flex-no-wrap) => { $crate::style::Wrap::DontWrap };
+    (flex-wrap-revere) => { $crate::style::Wrap::Reverse };
 
     // grid flow
-    (grid-flow-row) => {
-        $crate::style::GridFlow::Row
-    };
-    (grid-flow-column) => {
-        $crate::style::GridFlow::Column
-    };
-    (grid-flow-row-dense) => {
-        $crate::style::GridFlow::RowDense
-    };
-    (grid-flow-column-dense) => {
-        $crate::style::GridFlow::ColumnDense
-    };
+    (grid-flow-row) => { $crate::style::GridFlow::Row };
+    (grid-flow-column) => { $crate::style::GridFlow::Column };
+    (grid-flow-row-dense) => { $crate::style::GridFlow::RowDense };
+    (grid-flow-column-dense) => { $crate::style::GridFlow::ColumnDense };
 
     // grid line/span
-    (grid-line) => {
-        $crate::style::GridLine::Single(0)
-    };
-    (grid-line-$v:expr) => {
-        $crate::style::GridLine::Single($v)
-    };
-    (grid-span) => {
-        $crate::style::GridLine::Span(0)
-    };
-    (grid-span-$v:expr) => {
-        $crate::style::GridLine::Span($v)
-    };
+    (grid-line) => { $crate::style::GridLine::Single(0) };
+    (grid-line-$v:expr) => { $crate::style::GridLine::Single($v) };
+    (grid-span) => { $crate::style::GridLine::Span(0) };
+    (grid-span-$v:expr) => { $crate::style::GridLine::Span($v) };
 
     // overflow
-    (overflow-visible) => {
-        $crate::style::Overflow::Visible
-    };
-    (overflow-hidden) => {
-        $crate::style::Overflow::Hidden
-    };
-    (overflow-clip) => {
-        $crate::style::Overflow::Clip
-    };
-    (overflow-scroll) => {
-        $crate::style::Overflow::Scroll
-    };
+    (overflow-visible) => { $crate::style::Overflow::Visible };
+    (overflow-hidden) => { $crate::style::Overflow::Hidden };
+    (overflow-clip) => { $crate::style::Overflow::Clip };
+    (overflow-scroll) => { $crate::style::Overflow::Scroll };
 
     // real (absolute)
-    (px) => {
-        $crate::style::Value::Absolute(1f32)
-    };
-    (px $v:literal) => {
-        $crate::style::Value::Absolute($v)
-    };
-    (pixel $v:expr) => {
-        $crate::style::Value::Absolute($v)
-    };
-    (pixels $v:expr) => {
-        $crate::style::Value::Absolute($v)
-    };
-    (abs $v:expr) => {
-        $crate::style::Value::Absolute($v)
-    };
+    (px) => { $crate::style::Value::Absolute(1f32) };
+    (px $v:literal) => { $crate::style::Value::Absolute($v) };
+    (pixel $v:expr) => { $crate::style::Value::Absolute($v) };
+    (pixels $v:expr) => { $crate::style::Value::Absolute($v) };
+    (abs $v:expr) => { $crate::style::Value::Absolute($v) };
     (absolute $v:expr) => {
         $crate::style::Value::Absolute($v)
     };
-    (0) => {
-        $crate::style::Value::Absolute(0f32)
-    };
-    (0.0) => {
-        $crate::style::Value::Absolute(0f32)
+    ($num:literal) => {
+        $crate::style::Value::Absolute($num)
     };
 
     // real (relative)
@@ -220,6 +193,12 @@ macro_rules! style {
     };
 
     // point
+    ($x:literal, $y:literal) => {
+        $crate::style::Point {
+            x: $crate::style_layout!(px $x),
+            y: $crate::style_layout!(px $y),
+        }
+    };
     ($x:expr, $y:expr) => {
         $crate::style::Point {
             x: $x,
@@ -228,12 +207,28 @@ macro_rules! style {
     };
     (splat $($t:tt)*) => {
         $crate::style::Point {
-            x: $crate::style!($($t)*),
-            y: $crate::style!($($t)*),
+            x: $crate::style_layout!($($t)*),
+            y: $crate::style_layout!($($t)*),
         }
     };
 
     // rect
+    ($l:literal, $t:literal, $r:literal, $b:literal) => {
+        $crate::style::Rectangle {
+            left: $crate::style_layout!(px $l),
+            top: $crate::style_layout!(px $t),
+            right: $crate::style_layout!(px $r),
+            bottom: $crate::style_layout!(px $b),
+        }
+    };
+    (sq $v:literal) => { $crate::style_layout!($v, $v, $v, $v) };
+    (square $v:literal) => { $crate::style_layout!(sq $v) };
+    (rect $v:literal) => { $crate::style_layout!(sq $v) };
+    (horiz $h:literal, vert $v:literal) => { $crate::style_layout!($h, $v, $h, $v) };
+    (left $v:literal) => { $crate::style_layout!($v, 0.0, 0.0, 0.0) };
+    (top $v:literal) => { $crate::style_layout!(0.0, $v, 0.0, 0.0) };
+    (right $v:literal) => { $crate::style_layout!(0.0, 0.0, $v, 0.0) };
+    (bottom $v:literal) => { $crate::style_layout!(0.0, 0.0, 0.0, $v) };
     ($l:expr, $t:expr, $r:expr, $b:expr) => {
         $crate::style::Rectangle {
             left: $l,
@@ -242,44 +237,60 @@ macro_rules! style {
             bottom: $b,
         }
     };
-    (horiz $h:expr, vert $v:expr) => {
-        $crate::style::Rectangle {
-            left: $h,
-            top: $v,
-            right: $h,
-            bottom: $v,
-        }
-    };
-    (left $v:expr) => {
-        $crate::style::Rectangle {
-            left: $v,
-            top: $crate::style!(0.0),
-            right: $crate::style!(0.0),
-            bottom: $crate::style!(0.0),
-        }
-    };
-    (top $v:expr) => {
-        $crate::style::Rectangle {
-            top: $v,
-            left: $crate::style!(0.0),
-            right: $crate::style!(0.0),
-            bottom: $crate::style!(0.0),
-        }
-    };
-    (right $v:expr) => {
-        $crate::style::Rectangle {
-            right: $v,
-            top: $crate::style!(0.0),
-            left: $crate::style!(0.0),
-            bottom: $crate::style!(0.0),
-        }
-    };
-    (bottom $v:expr) => {
-        $crate::style::Rectangle {
-            bottom: $v,
-            top: $crate::style(0.0),
-            right: $crate::style(0.0),
-            left: $crate::style(0.0),
-        }
-    };
+    (sq $v:expr) => { $crate::style_layout!($v, $v, $v, $v) };
+    (square $v:expr) => { $crate::style_layout!(sq $v) };
+    (rect $v:expr) => { $crate::style_layout!(sq $v) };
+    (horiz $h:expr, vert $v:expr) => { $crate::style_layout!($h, $v, $h, $v) };
+    (left $v:expr) => { $crate::style_layout!($v, $crate::style_layout!(0.0), $crate::style_layout!(0.0), $crate::style_layout!(0.0)) };
+    (top $v:expr) => { $crate::style_layout!($crate::style_layout!(0.0), $v, $crate::style_layout!(0.0), $crate::style_layout!(0.0)) };
+    (right $v:expr) => { $crate::style_layout!($crate::style_layout!(0.0), $crate::style_layout!(0.0), $v, $crate::style_layout!(0.0)) };
+    (bottom $v:expr) => { $crate::style_layout!($crate::style_layout!(0.0), $crate::style_layout!(0.0), $crate::style_layout!(0.0), $v) };
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::env::UiEnv;
+
+    #[test]
+    fn declare_text() {
+        let mut env = UiEnv::new();
+        let mut buf = String::new();
+
+        const TEST_ID_0: janus::StringHash = janus::hash_string("__test.id-0");
+        const TEST_ID_1: janus::StringHash = janus::hash_string("__test.id-1");
+
+        env.insert(TEST_ID_0, "people");
+        env.insert(TEST_ID_1, 12);
+
+        let txt0 = crate::text_contents!("hello", " ", "world", "!");
+        let txt1 = crate::text_contents!("hello", " ", TEST_ID_0, "!");
+        let txt2 = crate::text_contents!(
+            "hello",
+            " ",
+            |TEST_ID_1: v| {
+                let num = v.as_integer().unwrap();
+                crate::env::EnvValue::DynamicString(format!("{num} baboons"))
+            },
+            "!"
+        );
+
+        const TEST_0: &str = "hello world!";
+        const TEST_1: &str = "hello people!";
+        const TEST_2: &str = "hello 12 baboons!";
+
+        txt0.resolve(&env, &mut buf);
+        println!("{buf}");
+        assert_eq!(janus::hash_string(&buf), janus::hash_string(&TEST_0));
+        buf.clear();
+
+        txt1.resolve(&env, &mut buf);
+        println!("{buf}");
+        assert_eq!(janus::hash_string(&buf), janus::hash_string(&TEST_1));
+        buf.clear();
+
+        txt2.resolve(&env, &mut buf);
+        println!("{buf}");
+        assert_eq!(janus::hash_string(&buf), janus::hash_string(&TEST_2));
+        buf.clear();
+    }
 }
