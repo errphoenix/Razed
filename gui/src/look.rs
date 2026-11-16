@@ -2,11 +2,18 @@ use janus::{StringHash, StringMap};
 
 use crate::rgb;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct LookId(StringHash);
 impl LookId {
+    pub const DEFAULT: Self = Self(janus::hash_string("gui::__look.default"));
+
     pub const fn inner(&self) -> StringHash {
         self.0
+    }
+}
+impl Default for LookId {
+    fn default() -> Self {
+        Self::DEFAULT
     }
 }
 impl<T> From<T> for LookId
@@ -18,11 +25,18 @@ where
     }
 }
 
-#[derive(Debug, Default)]
-pub struct LookManager {
+#[derive(Debug)]
+pub struct LooksManager {
     looks: StringMap<Look>,
 }
-impl LookManager {
+impl Default for LooksManager {
+    fn default() -> Self {
+        let mut looks = StringMap::default();
+        looks.insert(LookId::DEFAULT.0, Look::standard());
+        Self { looks }
+    }
+}
+impl LooksManager {
     pub fn create(&mut self, id: impl Into<StringHash>, look: Look) -> LookId {
         let id = id.into();
         self.looks.insert(id, look);
@@ -212,6 +226,30 @@ where
         ColorComponent(value).into()
     }
 }
+impl<T: Clone + Copy> Into<f32> for ColorComponent<T>
+where
+    ColorComponent<T>: Into<ColorComponent<f32>>,
+{
+    fn into(self) -> f32 {
+        self.into().get()
+    }
+}
+impl<T: Clone + Copy> Into<u32> for ColorComponent<T>
+where
+    ColorComponent<T>: Into<ColorComponent<u32>>,
+{
+    fn into(self) -> u32 {
+        self.into().get()
+    }
+}
+impl<T: Clone + Copy> Into<i32> for ColorComponent<T>
+where
+    ColorComponent<T>: Into<ColorComponent<i32>>,
+{
+    fn into(self) -> i32 {
+        self.into().get()
+    }
+}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Rgb {
@@ -328,6 +366,25 @@ where
 {
     fn from(value: [T; 3]) -> Self {
         Self::new(value[0], value[1], value[2])
+    }
+}
+impl From<Rgb> for glam::Vec3 {
+    fn from(rgb: Rgb) -> Self {
+        Self::new(
+            *rgb.red::<ColorComponent<f32>>().into(),
+            *rgb.green::<ColorComponent<f32>>().into(),
+            *rgb.blue::<ColorComponent<f32>>().into(),
+        )
+    }
+}
+impl From<Rgb> for glam::Vec4 {
+    fn from(rgb: Rgb) -> Self {
+        Self::new(
+            *rgb.red::<ColorComponent<f32>>().into(),
+            *rgb.green::<ColorComponent<f32>>().into(),
+            *rgb.blue::<ColorComponent<f32>>().into(),
+            1.0,
+        )
     }
 }
 

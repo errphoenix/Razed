@@ -15,6 +15,7 @@ use crate::{
     InterfaceFloatDataRowTableView, InterfaceImageRowTableView, InterfacePanelRowTableView,
     InterfaceSliderRowTableView, InterfaceTextRowTableView,
     env::UiEnv,
+    look::{LooksManager, Rgb},
     text::{GlyphAtlas, TextComposer},
 };
 
@@ -29,6 +30,7 @@ pub struct InterfaceAggregator<'t> {
     pub buttons: InterfaceButtonRowTableView<'t>,
     pub sliders: InterfaceSliderRowTableView<'t>,
     pub text_resolve_buf: &'t mut String,
+    pub looks: &'t LooksManager,
 }
 impl InterfaceAggregator<'_> {
     pub fn gather_quad_elements(
@@ -70,14 +72,28 @@ impl InterfaceAggregator<'_> {
         panel_index: IndirectIndex,
         out: &mut Vec<InterfaceObject>,
     ) {
-        let hovered = self.commons.hovered[common_handle];
-        let (bg_c, hover_t, &opacity, _root, float_id) = self.panels.coalesced(panel_index);
+        let hovered = self.commons.interaction_data[common_handle].hovered;
+        let look_id = self.commons.look[common_handle];
+        let float_id = self.panels.floating(panel_index);
 
-        let bg_c = glam::vec4(bg_c.x, bg_c.y, bg_c.y, opacity);
-        let hover_c = hover_t + glam::vec4(0f32, 0f32, 0f32, opacity);
+        let look = self.looks.get(look_id);
+        let background = look.panel_background;
+        let background_hover = look.panel_background_hover;
+        let opacity = look.panel_opacity;
+        let opacity_hover = look.panel_opacity_hover;
 
-        let hovered_f = hovered as u32 as f32;
-        let color = bg_c * (1.0 - hovered_f) + hovered_f * hover_c;
+        // todo border
+
+        let (rgb, opacity) = if hovered {
+            (
+                <Rgb as Into<glam::Vec3>>::into(background_hover),
+                opacity_hover,
+            )
+        } else {
+            (<Rgb as Into<glam::Vec3>>::into(background), opacity)
+        };
+
+        let color = glam::vec4(rgb.x, rgb.y, rgb.z, opacity);
 
         let bounds = self.commons.feedback_bounds[common_handle];
         let layer = self.commons.layer[common_handle];
@@ -219,23 +235,40 @@ impl InterfaceAggregator<'_> {
     fn gather_button(
         &self,
         common_handle: usize,
-        button_index: IndirectIndex,
+        _button_index: IndirectIndex,
         out: &mut Vec<InterfaceObject>,
     ) {
-        let hovered = self.commons.hovered[common_handle];
-        let pressed = self.commons.pressed[common_handle];
+        let interact = self.commons.interaction_data[common_handle];
+        let look_id = self.commons.look[common_handle];
 
-        let button_direct = self.buttons.solve(button_index).as_index();
-        let base_color = self.buttons.base_color[button_direct];
-        let hover_tint = self.buttons.hover_tint[button_direct];
-        let press_tint = self.buttons.press_tint[button_direct];
+        let hovered = interact.hovered;
+        let pressed = interact.pressed;
 
-        let hover_f = (hovered & !pressed) as u32 as f32;
-        let press_f = pressed as u32 as f32;
+        let look = self.looks.get(look_id);
+        let background = look.button_background;
+        let background_hover = look.button_background_hover;
+        let background_press = look.button_background_press;
+        let opacity = look.button_opacity;
+        let opacity_hover = look.button_opacity_hover;
+        let opacity_press = look.button_opacity_press;
 
-        let mut color = glam::vec4(base_color.x, base_color.y, base_color.z, 1.0);
-        color = color * (1.0 - hover_f) + hover_f * hover_tint;
-        color = color * (1.0 - press_f) + press_f * press_tint;
+        // todo border
+
+        let (rgb, opacity) = if pressed {
+            (
+                <Rgb as Into<glam::Vec3>>::into(background_press),
+                opacity_press,
+            )
+        } else if hovered {
+            (
+                <Rgb as Into<glam::Vec3>>::into(background_hover),
+                opacity_hover,
+            )
+        } else {
+            (<Rgb as Into<glam::Vec3>>::into(background), opacity)
+        };
+
+        let color = glam::vec4(rgb.x, rgb.y, rgb.z, opacity);
 
         let bounds = self.commons.feedback_bounds[common_handle];
         let layer = self.commons.layer[common_handle];
@@ -255,25 +288,35 @@ impl InterfaceAggregator<'_> {
         slider_index: IndirectIndex,
         out: &mut Vec<InterfaceObject>,
     ) {
-        let hovered = self.commons.hovered[common_handle];
-        let pressed = self.commons.pressed[common_handle];
+        let interact = self.commons.interaction_data[common_handle];
+        let look_id = self.commons.look[common_handle];
+
+        let hovered = interact.hovered;
+        let pressed = interact.pressed;
+
+        let look = self.looks.get(look_id);
+        let knob_base = look.slider_knob;
+        let knob_hover = look.slider_knob_hover;
+        let knob_press = look.slider_knob_press;
+        let track = look.slider_track;
+
+        // todo border
+
+        let knob_rgb = if pressed {
+            <Rgb as Into<glam::Vec3>>::into(knob_press)
+        } else if hovered {
+            <Rgb as Into<glam::Vec3>>::into(knob_hover)
+        } else {
+            <Rgb as Into<glam::Vec3>>::into(knob_base)
+        };
+        let track_rgb = <Rgb as Into<glam::Vec3>>::into(track);
+
+        let knob_color = glam::vec4(knob_rgb.x, knob_rgb.y, knob_rgb.z, 1.0);
+        let track_color = glam::vec4(track_rgb.x, track_rgb.y, track_rgb.z, 1.0);
 
         let slider_direct = self.sliders.solve(slider_index).as_index();
-        let knob_color = self.sliders.knob_color[slider_direct];
-        let knob_hover_tint = self.sliders.knob_hover_tint[slider_direct];
-        let knob_press_tint = self.sliders.knob_press_tint[slider_direct];
-        let track_color = self.sliders.track_color[slider_direct];
         let value = self.sliders.value_cache[slider_direct];
         let is_vertical = self.sliders.vertical[slider_direct];
-
-        let hover_f = (hovered & !pressed) as u32 as f32;
-        let press_f = pressed as u32 as f32;
-
-        let mut knob_color = glam::vec4(knob_color.x, knob_color.y, knob_color.z, 1.0);
-        knob_color = knob_color * (1.0 - hover_f) + hover_f * knob_hover_tint;
-        knob_color = knob_color * (1.0 - press_f) + press_f * knob_press_tint;
-        knob_color.w = 1.0; // knob is always opaque
-        let track_color = glam::vec4(track_color.x, track_color.y, track_color.z, 1.0);
 
         let bounds = self.commons.feedback_bounds[common_handle];
         let layer = self.commons.layer[common_handle];

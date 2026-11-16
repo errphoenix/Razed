@@ -1,16 +1,3 @@
-use crate::TextParams;
-
-fn a() {
-    let t = TextParams {
-        contents: todo!(),
-        font_name: todo!(),
-        color: todo!(),
-        font_size: todo!(),
-        line_height: todo!(),
-        never_invalidate: todo!(),
-    };
-}
-
 /// Generate text parameters.
 ///
 /// Available fields:

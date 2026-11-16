@@ -38,6 +38,7 @@ use taffy::prelude::*;
 use crate::{
     draw::{BatchingLayerCompositor, InterfaceAggregator, InterfaceObject, Quad},
     env::{EnvValue, UiEnv},
+    look::{LookId, LooksManager},
     text::{FontMetrics, GlyphAtlas, TextComposer, TextMeasurement, font::FontLibrary},
 };
 
@@ -128,32 +129,35 @@ pub enum TextNode {
     },
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct InteractionData {
+    pub hovered: bool,
+    pub pressed: bool,
+    pub hover_time: InteractionTime,
+    pub press_time: InteractionTime,
+}
+
 ethel::table_spec! {
     struct InterfaceCommon {
         archetype: ComponentKind;
+        look: LookId;
+
         parent: WidgetId;
         children: Vec<WidgetId>;
         taffy_id: TaffyNodeId;
-        layout_options: LayoutOptions;
 
+        layout_options: LayoutOptions;
         layer: u32;
 
         // feedback values from taffy tree after evaluation
         feedback_anchor: glam::Vec2; // top left corner
         feedback_bounds: Box2d;
 
-        hovered: bool;
-        pressed: bool;
-        hover_time: InteractionTime;
-        press_time: InteractionTime;
+        interaction_data: InteractionData;
     }
 }
 ethel::table_spec! {
     struct InterfacePanel {
-        background_color: glam::Vec3;
-        hover_tint: glam::Vec4;
-        opacity: f32;
-
         root_rvid: WidgetId;
 
         // index in InterfaceFloatData table
@@ -198,7 +202,6 @@ ethel::table_spec! {
         contents: TextContents;
         cached_text: StringHash;
         font_name: &'static str;
-        color: glam::Vec4;
         metrics: FontMetrics;
         measure: TextMeasurement;
     }
@@ -214,11 +217,6 @@ ethel::table_spec! {
     struct InterfaceButton {
         // handle in text table
         text_id: IndirectIndex;
-
-        base_color: glam::Vec3;
-        hover_tint: glam::Vec4;
-        press_tint: glam::Vec4;
-
         callback: ButtonCallback;
     }
 }
@@ -226,11 +224,6 @@ ethel::table_spec! {
     struct InterfaceSlider {
         // handle in text table, if has label
         text_id: Option<IndirectIndex>;
-
-        knob_color: glam::Vec3;
-        knob_hover_tint: glam::Vec4;
-        knob_press_tint: glam::Vec4;
-        track_color: glam::Vec3;
 
         scroll_step: f32;
         value_cache: f32;
@@ -444,6 +437,8 @@ pub struct InterfaceSystem<const LAYERS: usize = 10> {
     /// other cursor events should be ignored if true
     /// indirect into 'floating' table
     grabbing: Option<IndirectIndex>,
+
+    looks_manager: LooksManager,
 }
 /// Safety:
 /// TaffyTree is !Send and !SYnc due to internal implementation details
@@ -502,7 +497,12 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             text_resolve_buf: String::new(),
             text_dynamic_list: Vec::new(),
             grabbing: None,
+            looks_manager: LooksManager::default(),
         }
+    }
+
+    pub fn set_look_manager(&mut self, look_manager: LooksManager) {
+        self.looks_manager = look_manager;
     }
 
     pub const fn is_grabbing(&self) -> bool {
@@ -512,6 +512,14 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     /// Indirect into 'floating' table
     pub const fn grabbing(&self) -> Option<IndirectIndex> {
         self.grabbing
+    }
+
+    pub const fn looks(&self) -> &LooksManager {
+        &self.looks_manager
+    }
+
+    pub const fn looks_mut(&mut self) -> &mut LooksManager {
+        &mut self.looks_manager
     }
 
     pub const fn env(&self) -> &UiEnv {
@@ -562,6 +570,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     pub fn prepare_elements(&mut self, glyph_atlas: &mut GlyphAtlas) {
         let mut aggregator = InterfaceAggregator {
             environment: &self.environment,
+            looks: &self.looks_manager,
             text_resolve_buf: &mut self.text_resolve_buf,
             commons: InterfaceCommonRowTableView::from(&self.commons),
             panels: InterfacePanelRowTableView::from(&self.panels),
@@ -645,10 +654,11 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
 
                 let root = self.commons.solve_indirect(roots[i].0).unwrap();
                 let layouts = &mut self.commons.layout_options;
+                let interact = self.commons.interaction_data[root.as_index()];
 
                 match float_state[fdid] {
                     FloatState::Idle => {
-                        if self.commons.pressed[root.as_index()] && self.grabbing.is_none() {
+                        if interact.pressed && self.grabbing.is_none() {
                             let bounds = {
                                 let p_bounds = self.commons.feedback_bounds[root.as_index()];
                                 let (min, max) = (p_bounds.min, p_bounds.max);
@@ -707,24 +717,21 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         let count = self.commons.len();
 
         let archetypes = &self.commons.archetype;
-        let hovered = &self.commons.hovered;
-        let hover_time = &mut self.commons.hover_time;
-        let pressed = &mut self.commons.pressed;
-        let press_time = &mut self.commons.press_time;
+        let interacts = &mut self.commons.interaction_data;
 
         let button_callbacks = &self.buttons.callback;
         let slider_callbacks = &self.sliders.callback;
 
         for i in (1..count).rev() {
             let archetype = archetypes[i];
+            let interact = &mut interacts[i];
 
             match archetype {
                 ComponentKind::Button { handle, .. } => {
-                    let pressed = pressed[i];
-                    if pressed {
+                    if interact.pressed {
                         let direct = self.buttons.solve_indirect(handle).unwrap();
                         let callback = button_callbacks[direct.as_index()];
-                        let press_time = &mut press_time[i];
+                        let press_time = &mut interact.press_time;
 
                         match callback {
                             InteractableCallback::None => {}
@@ -745,20 +752,19 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 ComponentKind::Slider { handle, .. } => {
                     let direct = self.sliders.solve_indirect(handle).unwrap();
                     let callback = slider_callbacks[direct.as_index()];
-                    let pressed = pressed[i];
                     let value = &mut self.sliders.value_cache[direct.as_index()];
 
                     match callback {
                         InteractableCallback::None => {}
                         InteractableCallback::Once(cb) => {
                             // only call once slider is release
-                            if !pressed {
+                            if !interact.pressed {
                                 cb(&mut self.environment, value)
                             }
                         }
                         InteractableCallback::Repeating(cb) => {
                             // call contiuously as slider changes
-                            if pressed {
+                            if interact.pressed {
                                 cb(&mut self.environment, value)
                             }
                         }
@@ -768,17 +774,21 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 _ => {}
             }
 
-            // advance hover/press durations
-            let ht = &mut hover_time[i];
-            let hovered = hovered[i];
-            ht.frames = (ht.frames + 1) * hovered as u32;
-            ht.seconds = (ht.seconds + delta) * hovered as u32 as f32;
-
-            pressed[i] &= hovered;
-            let pt = &mut press_time[i];
-            let pf = pressed[i] as u32;
-            pt.frames = (pt.frames + 1) * pf;
-            pt.seconds = (pt.seconds + delta) * pf as f32;
+            if interact.pressed {
+                interact.press_time.frames += 1;
+                interact.press_time.seconds += delta;
+            } else {
+                interact.press_time.frames = 0;
+                interact.press_time.seconds = 0.0;
+            }
+            if interact.hovered {
+                interact.hover_time.frames += 1;
+                interact.hover_time.seconds += delta;
+            } else {
+                interact.hover_time.frames = 0;
+                interact.hover_time.seconds = 0.0;
+                interact.pressed = false;
+            }
         }
     }
 
@@ -787,30 +797,26 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
 
         let count = self.commons.len();
         let bounds = &self.commons.feedback_bounds;
-        let hovered = &mut self.commons.hovered;
-        let hover_time = &mut self.commons.hover_time;
+        let interacts = &mut self.commons.interaction_data;
 
         for i in (1..count).rev() {
             let bounds = bounds[i];
+            let interact = &mut interacts[i];
             if bounds.contains(x, y) {
-                hovered[i] = true;
-                let ht = &mut hover_time[i];
-                ht.seconds += delta;
-                ht.frames += 1;
+                interact.hovered = true;
+                interact.hover_time.frames += 1;
+                interact.hover_time.seconds += delta;
             } else {
-                hovered[i] = false;
-                let ht = &mut hover_time[i];
-                ht.seconds = 0.0;
-                ht.frames = 0;
+                interact.hovered = false;
+                interact.hover_time.frames = 0;
+                interact.hover_time.seconds = 0.0;
             }
         }
     }
 
     fn process_key_input(&mut self, table_index: usize, event: KeyEvent, delta: DeltaTime) -> bool {
         let delta = delta.as_f32();
-        let hovered = &self.commons.hovered;
-        let pressed = &mut self.commons.pressed;
-        let press_time = &mut self.commons.press_time;
+        let interact = &mut self.commons.interaction_data[table_index];
 
         // keyboard text (todo)
         {}
@@ -826,32 +832,35 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                     press_time: 1
                 }
             );
-            let press = hovered[table_index] & click;
-            pressed[table_index] = press;
-            let pt = &mut press_time[table_index];
-            pt.seconds = (pt.seconds + delta) * press as u32 as f32;
-            pt.frames = (pt.frames + 1) * press as u32;
+
+            let press = interact.hovered & click;
+            interact.pressed = press;
+            if press {
+                interact.press_time.frames += 1;
+                interact.press_time.seconds += delta;
+            } else {
+                interact.press_time.frames = 0;
+                interact.press_time.seconds = 0.0;
+            }
 
             return press;
         }
     }
 
     fn process_scroll_input(&mut self, table_index: usize, scroll_delta: f32) {
-        if !self.commons.hovered[table_index] {
+        let interact = &mut self.commons.interaction_data[table_index];
+        if !interact.hovered {
             return;
         };
 
         if let ComponentKind::Slider { handle, .. } = self.commons.archetype[table_index] {
-            let press_time = &self.commons.press_time;
-            let pressed = &mut self.commons.pressed;
-
             let slider_index = self.sliders.solve_indirect(handle).unwrap().as_index();
             let vd = self.sliders.scroll_step[slider_index] * scroll_delta;
             let v = self.sliders.value_cache[slider_index];
             self.sliders.value_cache[slider_index] = (v + vd).clamp(0.0, 1.0);
 
-            if press_time[table_index].frames == 0 {
-                pressed[table_index] = true;
+            if interact.press_time.frames == 0 {
+                interact.pressed = true;
             }
         }
     }
@@ -1086,9 +1095,6 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     pub fn make_panel(
         &mut self,
         id: WidgetId,
-        color: glam::Vec3,
-        hover_tint: glam::Vec4,
-        opacity: f32,
         float_params: Option<FloatParams>,
     ) -> Result<IndirectIndex, WidgetError> {
         if let Some(commons_id) = self.commons.solve_indirect(id.0) {
@@ -1109,7 +1115,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                     .insert((params.grab_area, glam::Vec2::ZERO, FloatState::Idle))
             });
 
-            let panel_element = (color, hover_tint, opacity, id, float_id);
+            let panel_element = (id, float_id);
             let panel_id = self.panels.insert(panel_element);
             self.commons.archetype[commons_id.as_index()] = ComponentKind::Panel(panel_id);
             Ok(panel_id)
@@ -1130,7 +1136,6 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         id: WidgetId,
         contents: TextContents,
         font_name: &'static str,
-        color: glam::Vec4,
         metrics: FontMetrics,
         never_invalidate: bool,
     ) -> Result<IndirectIndex, WidgetError> {
@@ -1140,7 +1145,6 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 contents,
                 StringHash::default(),
                 font_name,
-                color,
                 metrics,
                 TextMeasurement::default(),
             );
@@ -1194,14 +1198,11 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         root_id: WidgetId,
         text_root_id: WidgetId,
         text_id: IndirectIndex,
-        base_color: glam::Vec3,
-        hover_tint: glam::Vec4,
-        press_tint: glam::Vec4,
         callback: ButtonCallback,
     ) -> Result<IndirectIndex, WidgetError> {
         if let Some(commons_id) = self.commons.solve_indirect(root_id.0) {
             self.assert_null_archetype(commons_id)?;
-            let button_element = (text_id, base_color, hover_tint, press_tint, callback);
+            let button_element = (text_id, callback);
             let button_id = self.buttons.insert(button_element);
             self.commons.archetype[commons_id.as_index()] = ComponentKind::Button {
                 handle: button_id,
@@ -1217,10 +1218,6 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         &mut self,
         root_id: WidgetId,
         text_ids: Option<(WidgetId, IndirectIndex)>,
-        knob_base_color: glam::Vec3,
-        knob_hover_tint: glam::Vec4,
-        knob_press_tint: glam::Vec4,
-        track_color: glam::Vec3,
         scroll_step: f32,
         value_init: f32,
         value_sync: Option<StringHash>,
@@ -1241,10 +1238,6 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
 
             let slider_element = (
                 text_ids.map(|(_, id)| id),
-                knob_base_color,
-                knob_hover_tint,
-                knob_press_tint,
-                track_color,
                 scroll_step,
                 value_cache,
                 value_sync,
@@ -1271,6 +1264,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         &mut self,
         parent: Option<WidgetId>,
         children: Option<&[WidgetId]>,
+        look_id: Option<impl Into<LookId>>,
         layout_options: LayoutOptions,
         layer: u32,
     ) -> Result<WidgetId, WidgetError> {
@@ -1314,6 +1308,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
 
         let id = WidgetId(self.commons.insert((
             ComponentKind::Null,
+            look_id.map(Into::into).unwrap_or_default(),
             parent,
             children,
             TaffyNodeId(node_id),
@@ -1322,10 +1317,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             // init default feedback values
             glam::Vec2::ZERO,
             Box2d::NULL,
-            false,
-            false,
-            InteractionTime::default(),
-            InteractionTime::default(),
+            InteractionData::default(),
         )));
 
         self.layout
@@ -1392,32 +1384,33 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             self.add_new(
                 core.parent,
                 core.children,
+                core.look,
                 core.layout_options.clone(),
                 core.layer,
             )?
         };
 
         let special_id = match parameters {
-            ElementParams::Panel(_, panel_params) => self.make_panel(
-                root_id,
-                panel_params.color,
-                panel_params.hover_tint,
-                panel_params.opacity,
-                panel_params.float_params,
-            ),
+            ElementParams::Panel(_, panel_params) => {
+                self.make_panel(root_id, panel_params.float_params)
+            }
             ElementParams::Button(core, button_params) => {
                 let text = &button_params.text;
 
                 let (text_root_id, text_id) = {
                     const BUTTON_LABEL_LAYOUT: LayoutOptions = LayoutOptions::new();
 
-                    let root_text_id =
-                        self.add_new(Some(root_id), None, BUTTON_LABEL_LAYOUT, core.layer)?;
+                    let root_text_id = self.add_new(
+                        Some(root_id),
+                        None,
+                        core.look,
+                        BUTTON_LABEL_LAYOUT,
+                        core.layer,
+                    )?;
                     let special_text_id = self.make_text(
                         root_text_id,
                         text.contents,
                         text.font_name,
-                        text.color,
                         FontMetrics {
                             font_size: text.font_size,
                             line_height: text.line_height,
@@ -1427,21 +1420,12 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                     (root_text_id, special_text_id)
                 };
 
-                self.make_button(
-                    root_id,
-                    text_root_id,
-                    text_id,
-                    button_params.bg_color,
-                    button_params.bg_hover_tint,
-                    button_params.bg_press_tint,
-                    button_params.callback,
-                )
+                self.make_button(root_id, text_root_id, text_id, button_params.callback)
             }
             ElementParams::Text(_, text_params) => self.make_text(
                 root_id,
                 text_params.contents,
                 text_params.font_name,
-                text_params.color,
                 FontMetrics {
                     font_size: text_params.font_size,
                     line_height: text_params.line_height,
@@ -1459,13 +1443,17 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 if let Some(text) = &slider_params.text {
                     const SLIDER_LABEL_LAYOUT: LayoutOptions = LayoutOptions::new();
 
-                    let root_text_id =
-                        self.add_new(Some(root_id), None, SLIDER_LABEL_LAYOUT, core.layer)?;
+                    let root_text_id = self.add_new(
+                        Some(root_id),
+                        None,
+                        core.look,
+                        SLIDER_LABEL_LAYOUT,
+                        core.layer,
+                    )?;
                     let special_text_id = self.make_text(
                         root_text_id,
                         text.contents,
                         text.font_name,
-                        text.color,
                         FontMetrics {
                             font_size: text.font_size,
                             line_height: text.line_height,
@@ -1478,10 +1466,6 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 self.make_slider(
                     root_id,
                     text_ids,
-                    slider_params.knob_color,
-                    slider_params.knob_hover_tint,
-                    slider_params.knob_press_tint,
-                    slider_params.track_color,
                     slider_params.scroll_step,
                     slider_params.value_init,
                     slider_params.value_sync_handle,
@@ -1512,15 +1496,11 @@ pub fn expect_fallback_texture() -> TextureId {
 #[derive(Clone, Debug, Default)]
 pub struct CoreElementParams<'children> {
     pub parent: Option<WidgetId>,
+    pub look: Option<LookId>,
     pub children: Option<&'children [WidgetId]>,
     pub layout_options: LayoutOptions,
     pub layer: u32,
 }
-
-pub const DEFAULT_GENERIC_COLOR: glam::Vec3 = glam::Vec3::ZERO;
-pub const DEFAULT_GENERIC_HOVER_TINT: glam::Vec4 = glam::vec4(0.3, 0.3, 0.3, 0.2);
-pub const DEFAULT_GENERIC_PRESS_TINT: glam::Vec4 = glam::vec4(0.45, 0.45, 0.45, 0.37);
-pub const DEFAULT_GENERIC_OPACITY: f32 = 0.4;
 
 #[derive(Clone, Debug)]
 pub struct FloatParams {
@@ -1530,39 +1510,25 @@ pub struct FloatParams {
 
 #[derive(Clone, Debug)]
 pub struct PanelParams {
-    pub color: glam::Vec3,
-    pub hover_tint: glam::Vec4,
-    pub opacity: f32,
     /// if present, any positional layout (flex, grid) is overriden with
     /// the absolute `base_pos` defined in [`FloatParams`]
     pub float_params: Option<FloatParams>,
 }
 impl Default for PanelParams {
     fn default() -> Self {
-        Self {
-            color: DEFAULT_GENERIC_COLOR,
-            hover_tint: DEFAULT_GENERIC_HOVER_TINT,
-            opacity: DEFAULT_GENERIC_OPACITY,
-            float_params: None,
-        }
+        Self { float_params: None }
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct ButtonParams {
     pub text: TextParams,
-    pub bg_color: glam::Vec3,
-    pub bg_hover_tint: glam::Vec4,
-    pub bg_press_tint: glam::Vec4,
     pub callback: ButtonCallback,
 }
 impl Default for ButtonParams {
     fn default() -> Self {
         Self {
             text: TextParams::default(),
-            bg_color: DEFAULT_GENERIC_COLOR,
-            bg_hover_tint: DEFAULT_GENERIC_HOVER_TINT,
-            bg_press_tint: DEFAULT_GENERIC_PRESS_TINT,
             callback: InteractableCallback::default(),
         }
     }
@@ -1572,7 +1538,6 @@ impl Default for ButtonParams {
 pub struct TextParams {
     pub contents: TextContents,
     pub font_name: &'static str,
-    pub color: glam::Vec4,
     pub font_size: f32,
     pub line_height: f32,
     pub never_invalidate: bool,
@@ -1581,7 +1546,6 @@ impl TextParams {
     pub const DEFAULT_TEXT: TextContents = TextContents::literal("Invalid Text");
     pub const DEFAULT_FONT: &'static str = "Arial";
 
-    pub const DEFAULT_COLOR: glam::Vec4 = glam::Vec4::ONE;
     pub const DEFAULT_FONT_SIZE: f32 = 14.0;
     pub const DEFAULT_LINE_HEIGHT: f32 = 20.0;
 }
@@ -1590,7 +1554,6 @@ impl Default for TextParams {
         Self {
             contents: Self::DEFAULT_TEXT,
             font_name: Self::DEFAULT_FONT,
-            color: Self::DEFAULT_COLOR,
             font_size: Self::DEFAULT_FONT_SIZE,
             line_height: Self::DEFAULT_LINE_HEIGHT,
             never_invalidate: true,
@@ -1624,10 +1587,6 @@ impl Default for ImageParams {
 #[derive(Clone, Debug)]
 pub struct SliderParams {
     pub text: Option<TextParams>,
-    pub knob_color: glam::Vec3,
-    pub knob_hover_tint: glam::Vec4,
-    pub knob_press_tint: glam::Vec4,
-    pub track_color: glam::Vec3,
     pub scroll_step: f32,
     /// Normalized (0.0, 1.0)
     pub value_init: f32,
@@ -1636,7 +1595,6 @@ pub struct SliderParams {
     pub vertical: bool,
 }
 impl SliderParams {
-    pub const DEFAULT_TRACK_COLOR: glam::Vec3 = glam::Vec3::splat(0.65);
     /// 5%
     pub const DEFAULT_SCROLL_STEP: f32 = 0.05;
 }
@@ -1644,10 +1602,6 @@ impl Default for SliderParams {
     fn default() -> Self {
         Self {
             text: None,
-            knob_color: DEFAULT_GENERIC_COLOR,
-            knob_hover_tint: DEFAULT_GENERIC_HOVER_TINT,
-            knob_press_tint: DEFAULT_GENERIC_PRESS_TINT,
-            track_color: Self::DEFAULT_TRACK_COLOR,
             scroll_step: Self::DEFAULT_SCROLL_STEP,
             value_init: 0f32,
             value_sync_handle: None,
