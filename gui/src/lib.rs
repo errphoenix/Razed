@@ -22,6 +22,7 @@ use janus::{
 pub mod declare;
 pub mod draw;
 pub mod env;
+pub mod look;
 pub mod render;
 pub mod style;
 pub mod text;
