@@ -13,16 +13,13 @@ pub fn shade_mode_selector(system: &mut InterfaceSystem, root: WidgetId) -> Widg
                 children: None,
                 layout_options: LayoutOptions {
                     container: ContainerLayout::Flexbox {
-                        direction: FlexDirection::Column,
-                        wrap: Wrap::Wrap,
-                        justify_content: ContentAlignment::Stretch,
-                        align_content: ContentAlignment::Stretch,
-                        align_items: ItemAlignment::Stretch,
+                        direction: style_layout!(flex - column),
+                        wrap: style_layout!(flex - wrap),
+                        justify_content: style_layout!(align - content - stretch),
+                        align_content: style_layout!(align - content - stretch),
+                        align_items: style_layout!(align - item - stretch),
                     },
-                    margin: Some(Rectangle {
-                        top: Value::Absolute(16f32),
-                        ..Default::default()
-                    }),
+                    margin: Some(style_layout!(top 16.0)),
                     ..Default::default()
                 },
                 layer: 5,

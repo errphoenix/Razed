@@ -8,23 +8,17 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId) -> WidgetId {
                 children: None,
                 layout_options: LayoutOptions {
                     container: ContainerLayout::Flexbox {
-                        direction: FlexDirection::Column,
-                        wrap: Wrap::Wrap,
-                        justify_content: ContentAlignment::Stretch,
-                        align_content: ContentAlignment::Stretch,
-                        align_items: ItemAlignment::Stretch,
+                        direction: style_layout!(flex - column),
+                        wrap: style_layout!(flex - wrap),
+                        justify_content: style_layout!(align - content - stretch),
+                        align_content: style_layout!(align - content - stretch),
+                        align_items: style_layout!(align - item - stretch),
                     },
-                    justify_self: ItemAlignment::Start,
-                    align_self: ItemAlignment::Start,
-                    layout_position: LayoutPosition::Absolute {
-                        x: Some(Value::Absolute(8f32)),
-                        y: Some(Value::Absolute(8f32)),
-                    },
-                    size: Some(Point {
-                        x: Value::Absolute(840f32),
-                        y: Value::Absolute(420f32),
-                    }),
-                    padding: Some(Rectangle::splat(Value::Absolute(10f32))),
+                    justify_self: style_layout!(align - item - start),
+                    align_self: style_layout!(align - item - start),
+                    layout_position: style_layout!(position-absolute 8.0, 8.0),
+                    size: Some(style_layout!(840.0, 420.0)),
+                    padding: Some(style_layout!(sq 10.0)),
                     ..Default::default()
                 },
                 layer: 5,
@@ -41,7 +35,7 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId) -> WidgetId {
                     parent: Some(root),
                     children: None,
                     layout_options: LayoutOptions {
-                        align_self: ItemAlignment::Stretch,
+                        align_self: style_layout!(align - item - stretch),
                         ..Default::default()
                     },
                     layer: 5,

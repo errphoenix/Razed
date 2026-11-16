@@ -1,321 +1,330 @@
-use std::time::Duration;
-
-use glam::FloatExt;
+use ethel::{Column, DirectIndex, IndirectIndex};
 use janus::DeltaTime;
-
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub struct Translation(pub glam::Vec2);
-impl std::ops::DerefMut for Translation {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-impl std::ops::Deref for Translation {
-    type Target = glam::Vec2;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-impl From<glam::Vec2> for Translation {
-    fn from(value: glam::Vec2) -> Self {
-        Self(value)
-    }
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub struct Rotation(pub f32);
-impl std::ops::DerefMut for Rotation {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-impl std::ops::Deref for Rotation {
-    type Target = f32;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-impl From<f32> for Rotation {
-    fn from(value: f32) -> Self {
-        Self(value)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Scaling(pub f32);
-impl Default for Scaling {
-    fn default() -> Self {
-        Self(1f32)
-    }
-}
-impl std::ops::DerefMut for Scaling {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-impl std::ops::Deref for Scaling {
-    type Target = f32;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-impl From<f32> for Scaling {
-    fn from(value: f32) -> Self {
-        Self(value)
-    }
-}
-
-/// Transformation-related properties for animation.
-///
-/// `Translation`, `rotation`, and `scale` are optional field: while
-/// interpolating, a `None` property is ignored.
-#[derive(Clone, Copy, Debug, PartialEq, Default)]
-pub struct Transform {
-    pub translate: Option<Translation>,
-    /// Internal rotation in radians
-    pub rotate: Option<Rotation>,
-    pub scale: Option<Scaling>,
-}
-impl Transform {
-    pub fn translate(self, p: glam::Vec2) -> Self {
-        Self {
-            translate: Some(Translation(self.translate.unwrap_or_default().0 + p)),
-            rotate: self.rotate,
-            scale: self.scale,
-        }
-    }
-
-    pub fn rotate(self, degrees: f32) -> Self {
-        Self {
-            translate: self.translate,
-            rotate: Some(Rotation(
-                self.rotate.unwrap_or_default().0 + degrees.to_radians(),
-            )),
-            scale: self.scale,
-        }
-    }
-
-    pub fn scale(self, mult: f32) -> Self {
-        Self {
-            translate: self.translate,
-            rotate: self.rotate,
-            scale: Some(Scaling(self.scale.unwrap_or_default().0 * mult)),
-        }
-    }
-
-    pub const fn has_translation(&self) -> bool {
-        self.translate.is_some()
-    }
-
-    pub const fn has_rotation(&self) -> bool {
-        self.rotate.is_some()
-    }
-
-    pub const fn has_scaling(&self) -> bool {
-        self.scale.is_some()
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
-pub struct Progress(pub f64);
-impl Progress {
-    pub const fn getd(&self) -> f64 {
-        self.0
-    }
-
-    pub const fn getf(&self) -> f32 {
-        self.0 as f32
-    }
-
-    pub const fn ended(&self) -> bool {
-        self.0 >= 1f64
-    }
-
-    const fn tick(&mut self, d: f64) {
-        self.0 = (self.0 + d).min(1.0)
-    }
-}
 
 #[derive(Clone, Copy, Debug, Default)]
 pub enum TransitionCurve {
     #[default]
     Linear,
-    Quadratic,
-    Cubic,
-    Smoothstep,
-    Custom(fn(f32) -> f32),
+
+    QuadraticIn,
+    QuadraticOut,
+    QuadraticInOut,
+
+    CubicIn,
+    CubicOut,
+    CubicInOut,
+
+    Custom(fn(f64) -> f64),
 }
 impl TransitionCurve {
-    pub const fn custom(curve: fn(f32) -> f32) -> Self {
+    pub const fn custom(curve: fn(f64) -> f64) -> Self {
         Self::Custom(curve)
     }
 
-    pub fn apply(&self, value: &mut f32) {
+    pub fn apply(&self, value: &mut f64) {
         match self {
             TransitionCurve::Linear => { /* no op */ }
-            TransitionCurve::Quadratic => *value *= *value,
-            TransitionCurve::Cubic => *value *= *value * *value,
-            TransitionCurve::Smoothstep => todo!("smoothstep transition curve"),
-            TransitionCurve::Custom(func) => *value = func(*value),
+            TransitionCurve::QuadraticIn => *value *= *value,
+            TransitionCurve::QuadraticOut => {
+                let v = 1.0 - *value;
+                let s = v * v;
+                *value = 1.0 - s;
+            }
+            TransitionCurve::QuadraticInOut => {
+                if *value < 0.5 {
+                    *value = 2.0 * *value * *value;
+                } else {
+                    let v = -2.0 * *value + 2.0;
+                    *value = 1.0 - (v * v) / 2.0;
+                }
+            }
+            TransitionCurve::CubicIn => *value *= *value * *value,
+            TransitionCurve::CubicOut => {
+                let v = 1.0 - *value;
+                let s = v * v * v;
+                *value = 1.0 - s;
+            }
+            TransitionCurve::CubicInOut => {
+                if *value < 0.5 {
+                    *value = 4.0 * *value * *value * *value;
+                } else {
+                    let v = -2.0 * *value + 2.0;
+                    *value = 1.0 - (v * v * v) / 2.0;
+                }
+            }
+            TransitionCurve::Custom(f) => *value = f(*value),
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub enum Verse {
-    #[default]
-    Forward,
-    Reverse,
+pub trait Lerp: Clone + Copy {
+    fn lerp(&self, other: Self, t: f64) -> Self;
 }
-impl Verse {
-    pub const fn invert(self) -> Self {
-        match self {
-            Self::Forward => Self::Reverse,
-            Self::Reverse => Self::Forward,
-        }
+impl Lerp for f32 {
+    fn lerp(&self, other: Self, t: f64) -> Self {
+        *self + ((other - *self) * t as f32)
+    }
+}
+impl Lerp for f64 {
+    fn lerp(&self, other: Self, t: f64) -> Self {
+        *self + ((other - *self) * t)
+    }
+}
+impl Lerp for glam::Vec2 {
+    fn lerp(&self, other: Self, t: f64) -> Self {
+        glam::vec2(self.x.lerp(other.x, t), self.y.lerp(other.y, t))
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct AnimationPropTargets(u8);
+impl AnimationPropTargets {
+    const SHIFT_OFFSET: u8 = 0;
+    const SHIFT_ROTATION: u8 = 1;
+    const SHIFT_SCALE: u8 = 2;
+
+    const MASK_OFFSET: u8 = 1 << Self::SHIFT_OFFSET;
+    const MASK_ROTATION: u8 = 1 << Self::SHIFT_ROTATION;
+    const MASK_SCALE: u8 = 1 << Self::SHIFT_SCALE;
+
+    pub const fn new(offset: bool, rotation: bool, scale: bool) -> Self {
+        Self(
+            ((offset as u8) << Self::SHIFT_OFFSET)
+                | ((rotation as u8) << Self::SHIFT_ROTATION)
+                | ((scale as u8) << Self::SHIFT_SCALE),
+        )
+    }
+
+    pub const fn flip_offset(&mut self) {
+        self.0 ^= Self::MASK_OFFSET
+    }
+    pub const fn flip_rotation(&mut self) {
+        self.0 ^= Self::MASK_ROTATION
+    }
+    pub const fn flip_scale(&mut self) {
+        self.0 ^= Self::MASK_SCALE
+    }
+
+    pub const fn has_offset(&self) -> bool {
+        (self.0 & Self::MASK_OFFSET) != 0
+    }
+    pub const fn has_rotation(&self) -> bool {
+        (self.0 & Self::MASK_ROTATION) != 0
+    }
+    pub const fn has_scale(&self) -> bool {
+        (self.0 & Self::MASK_SCALE) != 0
     }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct Track {
-    transform: Transform,
-    progress: Progress,
-    duration: Duration,
+pub struct AnimationProp<T: Lerp> {
+    current: T,
+    target: T,
+    data: Option<Tween>,
+}
+impl<T: Lerp> AnimationProp<T> {
+    pub const fn new(current: T) -> Self {
+        Self {
+            current,
+            target: current,
+            data: None,
+        }
+    }
+
+    pub const fn with_transition(start: T, end: T, data: Tween) -> Self {
+        Self {
+            current: start,
+            target: end,
+            data: Some(data),
+        }
+    }
+
+    pub const fn current_value(&self) -> T {
+        self.current
+    }
+
+    pub const fn target_value(&self) -> T {
+        self.target
+    }
+
+    pub const fn data(&self) -> Option<&Tween> {
+        self.data.as_ref()
+    }
+
+    pub const fn active(&self) -> bool {
+        self.data.is_some()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Tween {
+    /// in seconds
+    elapsed: f64,
+    /// in seconds
+    duration: f64,
     curve: TransitionCurve,
-    verse: Verse,
 }
-impl Track {
-    pub const fn new(transform: Transform, duration: Duration, curve: TransitionCurve) -> Self {
+impl Tween {
+    pub const fn new(duration_seconds: f64, curve: TransitionCurve) -> Self {
         Self {
-            transform,
-            progress: Progress(0.0),
-            duration,
             curve,
-            verse: Verse::Forward,
+            elapsed: 0.0,
+            duration: duration_seconds,
         }
     }
 
-    pub const fn new_linear(transform: Transform, duration: Duration) -> Self {
-        Self::new(transform, duration, TransitionCurve::Linear)
+    pub fn evaluate<T: Lerp>(&self, a: T, b: T) -> T {
+        let mut t = self.duration / self.elapsed;
+        self.curve.apply(&mut t);
+        a.lerp(b, t)
     }
 
-    pub const fn new_quadratic(transform: Transform, duration: Duration) -> Self {
-        Self::new(transform, duration, TransitionCurve::Quadratic)
-    }
-
-    pub const fn invert(self) -> Self {
-        Self {
-            transform: self.transform,
-            progress: self.progress,
-            duration: self.duration,
-            curve: self.curve,
-            verse: self.verse.invert(),
-        }
-    }
-
-    pub const fn tick(&mut self, delta: DeltaTime) {
+    pub const fn update(&mut self, delta: DeltaTime) {
         let dt = delta.as_f64();
-        let seconds = self.duration.as_secs_f64();
-        let dp = seconds / dt;
-        self.progress.tick(dp);
+        self.elapsed = (self.elapsed + dt).min(self.duration);
     }
 
-    pub fn update(&self, origin: &Transform) -> Transform {
-        let target = &self.transform;
-        let progress = {
-            let mut progress_m = self.progress.getf();
-            self.curve.apply(&mut progress_m);
-            progress_m
-        };
-
-        let has_translation = origin.has_translation() || target.has_translation();
-        let has_rotation = origin.has_rotation() || target.has_rotation();
-        let has_scaling = origin.has_scaling() || target.has_scaling();
-
-        let (origin, target) = match self.verse {
-            Verse::Forward => (origin, target),
-            Verse::Reverse => (target, origin),
-        };
-
-        let translate = if has_translation {
-            let origin = origin.translate.unwrap_or_default();
-            let target = target.translate.unwrap_or(origin);
-            Some(Translation(origin.lerp(*target, progress)))
-        } else {
-            None
-        };
-        let rotate = if has_rotation {
-            let origin = origin.rotate.unwrap_or_default();
-            let target = target.rotate.unwrap_or(origin);
-            Some(Rotation(origin.lerp(*target, progress)))
-        } else {
-            None
-        };
-        let scale = if has_scaling {
-            let origin = origin.scale.unwrap_or_default();
-            let target = target.scale.unwrap_or(origin);
-            Some(Scaling(origin.lerp(*target, progress)))
-        } else {
-            None
-        };
-
-        Transform {
-            translate,
-            rotate,
-            scale,
-        }
+    pub const fn finished(&self) -> bool {
+        self.elapsed >= self.duration
     }
 
-    pub const fn ended(&self) -> bool {
-        self.progress.ended()
+    pub const fn elapsed(&self) -> f64 {
+        self.elapsed
     }
 
-    pub const fn target_transform(&self) -> &Transform {
-        &self.transform
-    }
-
-    pub const fn progress(&self) -> &Progress {
-        &self.progress
-    }
-
-    pub const fn duration(&self) -> &Duration {
-        &self.duration
-    }
-
-    pub const fn curve(&self) -> &TransitionCurve {
-        &self.curve
+    pub const fn duration(&self) -> f64 {
+        self.elapsed
     }
 }
+
+pub type Offset = glam::Vec2;
+pub type Rotation = f32;
+pub type Scale = f32;
 
 ethel::table_spec! {
-    struct Animations {
-        tfm_transient: Transform;
-        tfm_latest: Transform;
-
-        // current active animation track
-        // gets overriden by latest animation
-        active_track: Track;
-
+    struct AnimationData {
+        offsets   : AnimationProp<Offset>;
+        rotations : AnimationProp<Rotation>;
+        scales    : AnimationProp<Scale>;
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct AnimationManager {
-    pub data: AnimationsRowTable,
+    data: AnimationDataRowTable,
 }
 impl AnimationManager {
-    pub fn update(&mut self, delta: DeltaTime) {
-        todo!()
+    pub fn delete_handle(&mut self, handle: IndirectIndex) {
+        self.data.free(handle);
     }
 
-    pub const fn data(&self) -> &AnimationsRowTable {
+    pub fn create_handle(&mut self) -> IndirectIndex {
+        let dummy = (Default::default(), Default::default(), Default::default());
+        self.data.insert(dummy)
+    }
+
+    pub fn set_offset(
+        &mut self,
+        handle: IndirectIndex,
+        offset: Offset,
+        duration_seconds: f64,
+        curve: TransitionCurve,
+    ) {
+        let index = self
+            .data
+            .solve_indirect(handle)
+            .expect("invalid animation handle")
+            .as_index();
+        let prop = &mut self.data.offsets[index];
+        prop.target = offset + prop.current;
+        prop.data = Some(Tween::new(duration_seconds, curve));
+    }
+
+    pub fn set_rotation(
+        &mut self,
+        handle: IndirectIndex,
+        rotation: Rotation,
+        duration_seconds: f64,
+        curve: TransitionCurve,
+    ) {
+        let index = self
+            .data
+            .solve_indirect(handle)
+            .expect("invalid animation handle")
+            .as_index();
+        let prop = &mut self.data.rotations[index];
+        prop.target = rotation + prop.current;
+        prop.data = Some(Tween::new(duration_seconds, curve));
+    }
+
+    pub fn set_scale(
+        &mut self,
+        handle: IndirectIndex,
+        scale: Scale,
+        duration_seconds: f64,
+        curve: TransitionCurve,
+    ) {
+        let index = self
+            .data
+            .solve_indirect(handle)
+            .expect("invalid animation handle")
+            .as_index();
+        let prop = &mut self.data.scales[index];
+        prop.target = scale + prop.current;
+        prop.data = Some(Tween::new(duration_seconds, curve));
+    }
+
+    fn update_array<T: Lerp>(array: &mut [AnimationProp<T>], delta: DeltaTime) {
+        for prop in array {
+            let mut finish = false;
+            if let Some(tween) = &mut prop.data {
+                tween.update(delta);
+                let (a, b) = (prop.current, prop.target);
+                prop.current = tween.evaluate(a, b);
+                finish = tween.finished();
+            }
+            if finish {
+                prop.data = None;
+            }
+        }
+    }
+
+    pub fn update(&mut self, delta: DeltaTime) {
+        Self::update_array(&mut self.data.offsets[1..], delta);
+        Self::update_array(&mut self.data.rotations[1..], delta);
+        Self::update_array(&mut self.data.scales[1..], delta);
+    }
+
+    pub fn solve_indirect(&self, id: IndirectIndex) -> Option<DirectIndex> {
+        self.data.solve_indirect(id)
+    }
+
+    pub fn offset(&self, did: DirectIndex) -> Option<Offset> {
+        self.data
+            .offsets
+            .get(did.as_index())
+            .map(AnimationProp::current_value)
+    }
+
+    pub fn rotation(&self, did: DirectIndex) -> Option<Rotation> {
+        self.data
+            .rotations
+            .get(did.as_index())
+            .map(AnimationProp::current_value)
+    }
+
+    pub fn scale(&self, did: DirectIndex) -> Option<Scale> {
+        self.data
+            .scales
+            .get(did.as_index())
+            .map(AnimationProp::current_value)
+    }
+
+    pub fn data(&self) -> &AnimationDataRowTable {
         &self.data
     }
 
-    pub const fn data_mut(&mut self) -> &mut AnimationsRowTable {
+    pub fn data_mut(&mut self) -> &mut AnimationDataRowTable {
         &mut self.data
     }
 }

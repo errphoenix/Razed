@@ -1,11 +1,12 @@
 use ethel::{Column, IndirectIndex, Resolution};
 use gui::{
     ButtonParams, ContainerLayout, ContentAlignment, CoreElementParams, ElementParams,
-    InteractableCallback, InterfaceButtonRowTable, InterfaceSystem, ItemAlignment, LayoutOptions,
-    LayoutPosition, PanelParams, Point, Rectangle, SliderParams, TextContents, TextNode,
-    TextParams, Value, WidgetId, Wrap,
+    FloatGrabArea, FloatParams, InteractableCallback, InterfaceButtonRowTable, InterfaceSystem,
+    ItemAlignment, LayoutOptions, LayoutPosition, PanelParams, Point, Rectangle, SliderParams,
+    TextContents, TextNode, TextParams, Value, WidgetId, Wrap,
     env::{EnvValue, UiEnv},
     style::FlexDirection,
+    style_layout,
 };
 use janus::{StringHash, StringMap};
 
@@ -36,21 +37,11 @@ pub fn initialize_default(
                 children: None,
                 layer: 5,
                 layout_options: LayoutOptions {
-                    // container: ContainerLayout::Flexbox {
-                    //     direction: FlexDirection::Column,
-                    //     wrap: Wrap::Wrap,
-                    //     justify_content: ContentAlignment::Auto,
-                    //     align_content: ContentAlignment::Auto,
-                    //     align_items: ItemAlignment::Auto,
-                    // },
-                    container: ContainerLayout::Block,
-                    align_self: ItemAlignment::Stretch,
-                    justify_self: ItemAlignment::Stretch,
-                    layout_position: LayoutPosition::Relative,
-                    size: Some(Point::new(
-                        Value::Absolute(2560f32),
-                        Value::Absolute(1440f32),
-                    )),
+                    container: style_layout!(container - block),
+                    align_self: style_layout!(align - item - stretch),
+                    justify_self: style_layout!(align - item - stretch),
+                    layout_position: style_layout!(position - relative),
+                    size: Some(style_layout!(2560.0, 1440.0)),
                     ..Default::default()
                 },
             },

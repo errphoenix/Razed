@@ -1,8 +1,7 @@
 use gui::{
-    ContainerLayout, ContentAlignment, CoreElementParams, ElementParams, FloatGrabArea,
-    FloatParams, InterfaceSystem, ItemAlignment, LayoutOptions, LayoutPosition, PanelParams, Point,
-    Rectangle, TextContents, TextNode, TextParams, Value, WidgetId, Wrap, env::EnvValue,
-    style::FlexDirection,
+    ContainerLayout, CoreElementParams, ElementParams, FloatGrabArea, FloatParams, InterfaceSystem,
+    LayoutOptions, PanelParams, TextContents, TextNode, TextParams, WidgetId, env::EnvValue,
+    style_layout,
 };
 
 use crate::{
@@ -18,24 +17,15 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId) -> WidgetId {
                 children: None,
                 layout_options: LayoutOptions {
                     container: ContainerLayout::Flexbox {
-                        direction: FlexDirection::Column,
-                        wrap: Wrap::Wrap,
-                        justify_content: ContentAlignment::Stretch,
-                        align_content: ContentAlignment::Stretch,
-                        align_items: ItemAlignment::Stretch,
+                        direction: style_layout!(flex - column),
+                        wrap: style_layout!(flex - wrap),
+                        justify_content: style_layout!(align - content - stretch),
+                        align_content: style_layout!(align - content - stretch),
+                        align_items: style_layout!(align - item - stretch),
                     },
-                    layout_position: LayoutPosition::Absolute {
-                        x: Some(Value::Absolute(8f32)),
-                        y: Some(Value::Percentage(0.5f32)),
-                    },
-                    size: Some(Point {
-                        x: Value::Absolute(240f32),
-                        y: Value::Absolute(160f32),
-                    }),
-                    padding: Some(Rectangle {
-                        top: Value::Absolute(26f32),
-                        ..Default::default()
-                    }),
+                    layout_position: style_layout!(position-absolute 8.0, 0.5),
+                    size: Some(style_layout!(240.0, 160.0)),
+                    padding: Some(style_layout!(top 26.0)),
                     ..Default::default()
                 },
                 layer: 5,
