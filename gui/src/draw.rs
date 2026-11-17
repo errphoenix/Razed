@@ -218,8 +218,8 @@ impl InterfaceAggregator<'_> {
         image_index: IndirectIndex,
         out: &mut Vec<InterfaceObject>,
     ) {
-        let (tint, &opacity, &texture) = self.images.coalesced(image_index);
-        let opacity = (tint.w + opacity).min(1.0);
+        let (tint, &tint_opacity, &texture) = self.images.coalesced(image_index);
+        let opacity = tint_opacity.min(1.0);
 
         let color = glam::vec4(tint.x, tint.y, tint.z, opacity);
         let attachment = InterfaceAttachment::Texture(texture);

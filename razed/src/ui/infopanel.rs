@@ -2,11 +2,11 @@ pub use super::*;
 
 pub fn root(system: &mut InterfaceSystem, root: WidgetId) -> WidgetId {
     let root = system
-        .create_element(ElementParams::Panel(
-            CoreElementParams {
+        .create_element(ElementOptions::Panel(
+            CommonWidgetOptions {
                 parent: Some(root),
-                children: None,
-                layout_options: LayoutOptions {
+                layer: 5,
+                layout: LayoutOptions {
                     container: ContainerLayout::Flexbox {
                         direction: style_layout!(flex - column),
                         wrap: style_layout!(flex - wrap),
@@ -21,7 +21,7 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId) -> WidgetId {
                     padding: Some(style_layout!(sq 10.0)),
                     ..Default::default()
                 },
-                layer: 5,
+                ..Default::default()
             },
             Default::default(),
         ))
@@ -30,17 +30,17 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId) -> WidgetId {
 
     let mut debug_text = |contents: TextContents| {
         system
-            .create_element(ElementParams::Text(
-                CoreElementParams {
+            .create_element(ElementOptions::Text(
+                CommonWidgetOptions {
                     parent: Some(root),
-                    children: None,
-                    layout_options: LayoutOptions {
+                    layer: 5,
+                    layout: LayoutOptions {
                         align_self: style_layout!(align - item - stretch),
                         ..Default::default()
                     },
-                    layer: 5,
+                    ..Default::default()
                 },
-                TextParams {
+                TextOptions {
                     contents,
                     font_size: 16f32,
                     line_height: 18f32,

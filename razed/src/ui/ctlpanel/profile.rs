@@ -1,7 +1,6 @@
 use gui::{
-    ContainerLayout, CoreElementParams, ElementParams, FloatGrabArea, FloatParams, InterfaceSystem,
-    LayoutOptions, PanelParams, TextContents, TextNode, TextParams, WidgetId, env::EnvValue,
-    style_layout,
+    CommonWidgetOptions, ElementOptions, InterfaceSystem, LayoutOptions, TextContents, TextNode,
+    TextOptions, WidgetId, env::EnvValue, style_layout,
 };
 
 use crate::{
@@ -11,47 +10,25 @@ use crate::{
 
 pub fn root(system: &mut InterfaceSystem, root: WidgetId) -> WidgetId {
     let root = system
-        .create_element(ElementParams::Panel(
-            CoreElementParams {
-                parent: Some(root),
-                children: None,
-                layout_options: LayoutOptions {
-                    container: ContainerLayout::Flexbox {
-                        direction: style_layout!(flex - column),
-                        wrap: style_layout!(flex - wrap),
-                        justify_content: style_layout!(align - content - stretch),
-                        align_content: style_layout!(align - content - stretch),
-                        align_items: style_layout!(align - item - stretch),
-                    },
-                    layout_position: style_layout!(position-absolute 8.0, 0.5),
-                    size: Some(style_layout!(240.0, 160.0)),
-                    padding: Some(style_layout!(top 26.0)),
-                    ..Default::default()
-                },
-                layer: 5,
-            },
-            PanelParams {
-                float_params: Some(FloatParams {
-                    base_pos: None,
-                    grab_area: FloatGrabArea::SectionHoriz { height: 20f32 },
-                }),
-                ..Default::default()
-            },
+        .create_element(crate::ui::params_panel_dev_options(
+            Some(root),
+            style_layout!(position-absolute 8.0, 750.0),
+            Some(style_layout!(240.0, 160.0)),
         ))
         .unwrap()
         .0;
 
     system
-        .create_element(ElementParams::Text(
-            CoreElementParams {
+        .create_element(ElementOptions::Text(
+            CommonWidgetOptions {
                 parent: Some(root),
-                children: None,
                 layer: 5,
-                layout_options: LayoutOptions {
+                layout: LayoutOptions {
                     ..Default::default()
                 },
+                ..Default::default()
             },
-            TextParams {
+            TextOptions {
                 contents: TextContents::from_nodes(&[
                     TextNode::Static("Profiler::running = "),
                     TextNode::Variable(PROFILER_RUNNING),
@@ -66,16 +43,16 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId) -> WidgetId {
         ))
         .unwrap();
     system
-        .create_element(ElementParams::Text(
-            CoreElementParams {
+        .create_element(ElementOptions::Text(
+            CommonWidgetOptions {
                 parent: Some(root),
-                children: None,
                 layer: 5,
-                layout_options: LayoutOptions {
+                layout: LayoutOptions {
                     ..Default::default()
                 },
+                ..Default::default()
             },
-            TextParams {
+            TextOptions {
                 contents: TextContents::from_nodes(&[
                     TextNode::Static("Profiler::frames = "),
                     TextNode::Variable(PROFILER_FRAME_COUNT),

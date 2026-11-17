@@ -1,8 +1,8 @@
 use ethel::IndirectIndex;
 use gui::{
-    ContainerLayout, CoreElementParams, ElementParams, FloatGrabArea, FloatParams,
-    InteractableCallback, InterfaceSystem, LayoutOptions, PanelParams, Point, Rectangle,
-    SliderParams, TextContents, TextNode, TextParams, Value, WidgetId, env::EnvValue, style_layout,
+    CommonWidgetOptions, ElementOptions, InteractableCallback, InterfaceSystem, LayoutOptions,
+    Point, Rectangle, SliderOptions, TextContents, TextNode, TextOptions, Value, WidgetId,
+    env::EnvValue, style_layout,
 };
 use janus::StringMap;
 
@@ -20,32 +20,10 @@ pub fn root(
     map: &mut StringMap<(WidgetId, IndirectIndex)>,
 ) -> WidgetId {
     let root = system
-        .create_element(ElementParams::Panel(
-            CoreElementParams {
-                parent: Some(root),
-                children: None,
-                layout_options: LayoutOptions {
-                    container: ContainerLayout::Flexbox {
-                        direction: style_layout!(flex - column),
-                        wrap: style_layout!(flex - wrap),
-                        justify_content: style_layout!(align - content - stretch),
-                        align_content: style_layout!(align - content - stretch),
-                        align_items: style_layout!(align - item - stretch),
-                    },
-                    layout_position: style_layout!(position-absolute 8.0, 0.8),
-                    size: Some(style_layout!(510.0, 240.0)),
-                    padding: Some(style_layout!(top 26.0)),
-                    ..Default::default()
-                },
-                layer: 5,
-            },
-            PanelParams {
-                float_params: Some(FloatParams {
-                    base_pos: None,
-                    grab_area: FloatGrabArea::SectionHoriz { height: 20f32 },
-                }),
-                ..Default::default()
-            },
+        .create_element(crate::ui::params_panel_dev_options(
+            Some(root),
+            style_layout!(position-absolute 8.0, 900.0),
+            Some(style_layout!(510.0, 180.0)),
         ))
         .unwrap()
         .0;
@@ -58,11 +36,11 @@ pub fn root(
     // ground scale
     {
         system
-            .create_element(ElementParams::Slider(
-                CoreElementParams {
+            .create_element(ElementOptions::Slider(
+                CommonWidgetOptions {
                     parent: Some(root),
-                    children: None,
-                    layout_options: LayoutOptions {
+                    layer: 5,
+                    layout: LayoutOptions {
                         size: Some(Point::new(Value::Absolute(360.0), Value::Absolute(16.0))),
                         padding: Some(Rectangle::new(
                             Value::Absolute(0f32),
@@ -72,10 +50,10 @@ pub fn root(
                         )),
                         ..Default::default()
                     },
-                    layer: 5,
+                    ..Default::default()
                 },
-                SliderParams {
-                    text: Some(TextParams {
+                SliderOptions {
+                    text: Some(TextOptions {
                         contents: TextContents::from_nodes(&[
                             TextNode::Static("geom.ground.scale = "),
                             TextNode::VariableAnd {
@@ -105,11 +83,11 @@ pub fn root(
     // ground UV scale
     {
         system
-            .create_element(ElementParams::Slider(
-                CoreElementParams {
+            .create_element(ElementOptions::Slider(
+                CommonWidgetOptions {
                     parent: Some(root),
-                    children: None,
-                    layout_options: LayoutOptions {
+                    layer: 5,
+                    layout: LayoutOptions {
                         size: Some(Point::new(Value::Absolute(360.0), Value::Absolute(16.0))),
                         margin: Some(Rectangle {
                             top: Value::Absolute(12f32),
@@ -123,10 +101,10 @@ pub fn root(
                         )),
                         ..Default::default()
                     },
-                    layer: 5,
+                    ..Default::default()
                 },
-                SliderParams {
-                    text: Some(TextParams {
+                SliderOptions {
+                    text: Some(TextOptions {
                         contents: TextContents::from_nodes(&[
                             TextNode::Static("geom.ground.uv-scale = "),
                             TextNode::VariableAnd {

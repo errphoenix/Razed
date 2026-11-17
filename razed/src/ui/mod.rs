@@ -1,12 +1,9 @@
 use ethel::{Column, IndirectIndex, Resolution};
 use gui::{
-    ButtonParams, ContainerLayout, ContentAlignment, CoreElementParams, ElementParams,
-    FloatGrabArea, FloatParams, InteractableCallback, InterfaceButtonRowTable, InterfaceSystem,
-    ItemAlignment, LayoutOptions, LayoutPosition, PanelParams, Point, Rectangle, SliderParams,
-    TextContents, TextNode, TextParams, Value, WidgetId, Wrap,
-    env::{EnvValue, UiEnv},
-    style::FlexDirection,
-    style_layout,
+    ButtonOptions, CommonWidgetOptions, ContainerLayout, ElementOptions, FloatGrabArea,
+    FloatParams, InteractableCallback, InterfaceSystem, ItemAlignment, LayoutOptions,
+    LayoutPosition, PanelOptions, Point, Rectangle, SliderOptions, TextContents, TextNode,
+    TextOptions, Value, WidgetId, env::EnvValue, style_layout,
 };
 use janus::{StringHash, StringMap};
 
@@ -36,20 +33,17 @@ pub fn initialize_default(
                 parent: None,
                 children: None,
                 layer: 5,
-                layout_options: LayoutOptions {
+                layout: LayoutOptions {
                     container: style_layout!(container - block),
                     align_self: style_layout!(align - item - stretch),
                     justify_self: style_layout!(align - item - stretch),
                     layout_position: style_layout!(position - relative),
-                    size: Some(style_layout!(2560.0, 1440.0)),
+                    size: Some(style_layout!(splat 0.0)),
                     ..Default::default()
                 },
-            },
-            PanelParams {
-                hover_tint: glam::Vec4::ZERO,
-                opacity: 0f32,
                 ..Default::default()
             },
+            PanelOptions::default(),
         ))
         .unwrap()
         .0;
@@ -154,4 +148,38 @@ pub mod env_names {
     pub const PROFILER_RUNNING: StringHash = janus::hash_string("profiler.running");
     pub const PROFILER_FRAME_COUNT: StringHash = janus::hash_string("profiler.frame_count");
     pub const PROFILER_ACTION: StringHash = janus::hash_string("profiler.running/toggle");
+}
+
+pub fn params_panel_dev_options(
+    parent: Option<WidgetId>,
+    layout_position: LayoutPosition,
+    size: Option<Point>,
+) -> ElementOptions {
+    ElementOptions::Panel(
+        CommonWidgetOptions {
+            parent,
+            layer: 5,
+            layout: LayoutOptions {
+                container: ContainerLayout::Flexbox {
+                    direction: style_layout!(flex - column),
+                    wrap: style_layout!(flex - wrap),
+                    justify_content: style_layout!(align - content - stretch),
+                    align_content: style_layout!(align - content - stretch),
+                    align_items: style_layout!(align - item - stretch),
+                },
+                padding: Some(style_layout!(6.0, 26.0, 6.0, 6.0)),
+                layout_position,
+                size,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        PanelOptions {
+            floating: Some(FloatParams {
+                base_pos: None,
+                grab_area: FloatGrabArea::SectionHoriz { height: 20f32 },
+            }),
+            ..Default::default()
+        },
+    )
 }

@@ -7,11 +7,11 @@ pub use super::*;
 
 pub fn shade_mode_selector(system: &mut InterfaceSystem, root: WidgetId) -> WidgetId {
     let panel = system
-        .create_element(ElementParams::Panel(
-            CoreElementParams {
+        .create_element(ElementOptions::Panel(
+            CommonWidgetOptions {
                 parent: Some(root),
-                children: None,
-                layout_options: LayoutOptions {
+                layer: 5,
+                layout: LayoutOptions {
                     container: ContainerLayout::Flexbox {
                         direction: style_layout!(flex - column),
                         wrap: style_layout!(flex - wrap),
@@ -22,22 +22,21 @@ pub fn shade_mode_selector(system: &mut InterfaceSystem, root: WidgetId) -> Widg
                     margin: Some(style_layout!(top 16.0)),
                     ..Default::default()
                 },
-                layer: 5,
+                ..Default::default()
             },
-            Default::default(),
+            PanelOptions::hidden(),
         ))
         .unwrap()
         .0;
 
     system
-        .create_element(ElementParams::Text(
-            CoreElementParams {
+        .create_element(ElementOptions::Text(
+            CommonWidgetOptions {
                 parent: Some(panel),
-                children: None,
-                layout_options: LayoutOptions::default(),
                 layer: 5,
+                ..Default::default()
             },
-            TextParams {
+            TextOptions {
                 contents: TextContents::from_node(TextNode::Static("shading-mode:")),
                 ..Default::default()
             },
@@ -46,18 +45,18 @@ pub fn shade_mode_selector(system: &mut InterfaceSystem, root: WidgetId) -> Widg
         .0;
 
     system
-        .create_element(ElementParams::Button(
-            CoreElementParams {
+        .create_element(ElementOptions::Button(
+            CommonWidgetOptions {
                 parent: Some(panel),
-                children: None,
-                layout_options: LayoutOptions {
+                layer: 5,
+                layout: LayoutOptions {
                     size: Some(Point::new(Value::Absolute(256f32), Value::Absolute(22f32))),
                     ..Default::default()
                 },
-                layer: 5,
+                ..Default::default()
             },
-            ButtonParams {
-                text: TextParams {
+            ButtonOptions {
+                text: TextOptions {
                     contents: TextContents::from_node(TextNode::VariableAnd {
                         env_id: DEBUG_CTL_SHADE_MODE,
                         operation: |var| {
@@ -74,9 +73,6 @@ pub fn shade_mode_selector(system: &mut InterfaceSystem, root: WidgetId) -> Widg
                     }),
                     ..Default::default()
                 },
-                bg_color: glam::vec3(0.6, 0.3, 0.0),
-                bg_hover_tint: glam::vec4(0.65, 0.3, 0.0, 0.95),
-                bg_press_tint: glam::vec4(0.3, 0.15, 0.0, 0.95),
                 callback: InteractableCallback::Once(|env, _time| {
                     const OPTIONS_COUNT: u32 = 5;
                     env.modify_or_default(DEBUG_CTL_SHADE_MODE, |id| {
@@ -94,78 +90,35 @@ pub fn shade_mode_selector(system: &mut InterfaceSystem, root: WidgetId) -> Widg
     panel
 }
 
-pub fn root(
-    system: &mut InterfaceSystem,
-    root: WidgetId,
-    map: &mut StringMap<(WidgetId, IndirectIndex)>,
-) -> WidgetId {
+pub fn root(system: &mut InterfaceSystem, root: WidgetId) -> WidgetId {
     let root = system
-        .create_element(ElementParams::Panel(
-            CoreElementParams {
-                parent: Some(root),
-                children: None,
-                layout_options: LayoutOptions {
-                    container: ContainerLayout::Flexbox {
-                        direction: FlexDirection::Column,
-                        wrap: Wrap::Wrap,
-                        justify_content: ContentAlignment::Stretch,
-                        align_content: ContentAlignment::Stretch,
-                        align_items: ItemAlignment::Stretch,
-                    },
-                    layout_position: LayoutPosition::Absolute {
-                        x: Some(Value::Absolute(8f32)),
-                        y: Some(Value::Percentage(0.5f32)),
-                    },
-                    size: Some(Point {
-                        x: Value::Absolute(400f32),
-                        y: Value::Absolute(340f32),
-                    }),
-                    padding: Some(Rectangle {
-                        top: Value::Absolute(26f32),
-                        ..Default::default()
-                    }),
-                    ..Default::default()
-                },
-                layer: 5,
-            },
-            PanelParams {
-                float_params: Some(FloatParams {
-                    base_pos: None,
-                    grab_area: FloatGrabArea::SectionHoriz { height: 20f32 },
-                }),
-                ..Default::default()
-            },
+        .create_element(crate::ui::params_panel_dev_options(
+            Some(root),
+            style_layout!(position-absolute 8.0, 500.0),
+            Some(style_layout!(420.0, 240.0)),
         ))
         .unwrap()
         .0;
 
-    let dbg_button_vsync = dbg_toggle_button::<{ env_names::DEBUG_CTL_DISPLAY_VSYNC.as_u64() }>(
+    dbg_toggle_button::<{ env_names::DEBUG_CTL_DISPLAY_VSYNC.as_u64() }>(
         system,
         root,
         "Toggle: V-sync",
     );
-    let dbg_button_lattice = dbg_toggle_button::<{ env_names::DEBUG_CTL_RENDER_LATTICE.as_u64() }>(
+    dbg_toggle_button::<{ env_names::DEBUG_CTL_RENDER_LATTICE.as_u64() }>(
         system,
         root,
         "Viz: lattice",
     );
-    let dbg_button_cage = dbg_toggle_button::<{ env_names::DEBUG_CTL_RENDER_CAGE.as_u64() }>(
-        system,
-        root,
-        "Viz: cage",
-    );
-
-    map.insert(DEBUG_CTL_DISPLAY_VSYNC_BUTTON, dbg_button_vsync);
-    map.insert(DEBUG_CTL_RENDER_LATTICE_BUTTON, dbg_button_lattice);
-    map.insert(DEBUG_CTL_RENDER_CAGE_BUTTON, dbg_button_cage);
+    dbg_toggle_button::<{ env_names::DEBUG_CTL_RENDER_CAGE.as_u64() }>(system, root, "Viz: cage");
 
     // gamma slider
     system
-        .create_element(ElementParams::Slider(
-            CoreElementParams {
+        .create_element(ElementOptions::Slider(
+            CommonWidgetOptions {
                 parent: Some(root),
-                children: None,
-                layout_options: LayoutOptions {
+                layer: 5,
+                layout: LayoutOptions {
                     size: Some(Point::new(Value::Absolute(256.0), Value::Absolute(16.0))),
                     padding: Some(Rectangle::new(
                         Value::Absolute(0f32),
@@ -175,10 +128,10 @@ pub fn root(
                     )),
                     ..Default::default()
                 },
-                layer: 5,
+                ..Default::default()
             },
-            SliderParams {
-                text: Some(TextParams {
+            SliderOptions {
+                text: Some(TextOptions {
                     contents: TextContents::from_nodes(&[
                         TextNode::Static("graphics.gamma = "),
                         TextNode::VariableAnd {
@@ -192,7 +145,6 @@ pub fn root(
                     ]),
                     ..Default::default()
                 }),
-
                 value_init: graphics::Gamma::DEFAULT_NORMALIZED,
                 value_sync_handle: Some(DEBUG_CTL_GRAPHICS_GAMMA),
                 callback: InteractableCallback::Repeating(|env, v| {
@@ -208,11 +160,11 @@ pub fn root(
 
     // roughness bias
     system
-        .create_element(ElementParams::Slider(
-            CoreElementParams {
+        .create_element(ElementOptions::Slider(
+            CommonWidgetOptions {
                 parent: Some(root),
-                children: None,
-                layout_options: LayoutOptions {
+                layer: 5,
+                layout: LayoutOptions {
                     size: Some(Point::new(Value::Absolute(256.0), Value::Absolute(16.0))),
                     padding: Some(Rectangle::new(
                         Value::Absolute(0f32),
@@ -222,17 +174,16 @@ pub fn root(
                     )),
                     ..Default::default()
                 },
-                layer: 5,
+                ..Default::default()
             },
-            SliderParams {
-                text: Some(TextParams {
-                    contents: TextContents::from_nodes(&[
-                        TextNode::Static("shading.bias.roughness = "),
-                        TextNode::Variable(DEBUG_CTL_SHADE_BIAS_ROUGHNESS),
-                    ]),
+            SliderOptions {
+                text: Some(TextOptions {
+                    contents: text_contents!(
+                        "shading.bias.roughness =",
+                        DEBUG_CTL_SHADE_BIAS_ROUGHNESS
+                    ),
                     ..Default::default()
                 }),
-
                 scroll_step: 0.01,
                 value_init: 0f32,
                 value_sync_handle: Some(DEBUG_CTL_SHADE_BIAS_ROUGHNESS),
@@ -245,11 +196,11 @@ pub fn root(
         .unwrap();
     // metallic bias
     system
-        .create_element(ElementParams::Slider(
-            CoreElementParams {
+        .create_element(ElementOptions::Slider(
+            CommonWidgetOptions {
                 parent: Some(root),
-                children: None,
-                layout_options: LayoutOptions {
+                layer: 5,
+                layout: LayoutOptions {
                     size: Some(Point::new(Value::Absolute(256.0), Value::Absolute(16.0))),
                     padding: Some(Rectangle::new(
                         Value::Absolute(0f32),
@@ -259,17 +210,16 @@ pub fn root(
                     )),
                     ..Default::default()
                 },
-                layer: 5,
+                ..Default::default()
             },
-            SliderParams {
-                text: Some(TextParams {
-                    contents: TextContents::from_nodes(&[
-                        TextNode::Static("shading.bias.metallic = "),
-                        TextNode::Variable(DEBUG_CTL_SHADE_BIAS_METALLIC),
-                    ]),
+            SliderOptions {
+                text: Some(TextOptions {
+                    contents: text_contents!(
+                        "shading.bias.metallic =",
+                        DEBUG_CTL_SHADE_BIAS_METALLIC
+                    ),
                     ..Default::default()
                 }),
-
                 scroll_step: 0.01,
                 value_init: 0f32,
                 value_sync_handle: Some(DEBUG_CTL_SHADE_BIAS_METALLIC),
@@ -284,28 +234,21 @@ pub fn root(
     root
 }
 
-pub const fn params_dbg_button(text: &'static str, cb: ButtonCallback) -> ButtonParams {
+pub const fn params_dbg_button(text: &'static str, cb: ButtonCallback) -> ButtonOptions {
     params_dbg_button_with_text(
-        TextParams {
+        TextOptions {
             contents: TextContents::from_node(TextNode::Static(text)),
             never_invalidate: true,
-            font_name: TextParams::DEFAULT_FONT,
-            color: TextParams::DEFAULT_COLOR,
-            font_size: TextParams::DEFAULT_FONT_SIZE,
-            line_height: TextParams::DEFAULT_LINE_HEIGHT,
+            font_name: TextOptions::DEFAULT_FONT,
+            font_size: TextOptions::DEFAULT_FONT_SIZE,
+            line_height: TextOptions::DEFAULT_LINE_HEIGHT,
         },
         cb,
     )
 }
 
-pub const fn params_dbg_button_with_text(text: TextParams, cb: ButtonCallback) -> ButtonParams {
-    ButtonParams {
-        text,
-        bg_color: DEFAULT_GENERIC_COLOR,
-        bg_hover_tint: COLORTINT_HOVER_INVARIANT,
-        bg_press_tint: COLORTINT_HOVER_INVARIANT,
-        callback: cb,
-    }
+pub const fn params_dbg_button_with_text(text: TextOptions, cb: ButtonCallback) -> ButtonOptions {
+    ButtonOptions { text, callback: cb }
 }
 
 pub fn dbg_toggle_button<const PROP: u64>(
@@ -332,16 +275,16 @@ pub fn dbg_toggle_button_with(
     cb: ButtonCallback,
 ) -> (WidgetId, IndirectIndex) {
     system
-        .create_element(ElementParams::Button(
-            CoreElementParams {
+        .create_element(ElementOptions::Button(
+            CommonWidgetOptions {
                 parent: Some(root),
-                children: None,
-                layout_options: LayoutOptions {
+                layer: 5,
+                layout: LayoutOptions {
                     align_self: ItemAlignment::Start,
                     justify_self: ItemAlignment::Start,
                     ..Default::default()
                 },
-                layer: 5,
+                ..Default::default()
             },
             params_dbg_button(label, cb),
         ))

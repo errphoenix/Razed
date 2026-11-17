@@ -7,21 +7,19 @@ use crate::{
 };
 
 #[derive(Clone, Debug, Default)]
-pub struct CoreElementParams<'children> {
+pub struct CommonWidgetOptions {
     pub parent: Option<WidgetId>,
     pub look: Option<LookId>,
-    pub children: Option<&'children [WidgetId]>,
     pub layout: LayoutOptions,
     pub layer: u32,
 }
-impl<'children> CoreElementParams<'children> {
+impl CommonWidgetOptions {
     pub const DEFAULT_LAYER: u32 = 5;
 
     pub const fn new() -> Self {
         Self {
             parent: None,
             look: None,
-            children: None,
             layer: Self::DEFAULT_LAYER,
             layout: LayoutOptions::new(),
         }
@@ -37,13 +35,6 @@ impl<'children> CoreElementParams<'children> {
     pub const fn with_look(self, look: LookId) -> Self {
         Self {
             look: Some(look),
-            ..self
-        }
-    }
-
-    pub const fn with_children(self, children: &'children [WidgetId]) -> Self {
-        Self {
-            children: Some(children),
             ..self
         }
     }
@@ -105,13 +96,13 @@ impl FloatParams {
 }
 
 #[derive(Clone, Debug, Default, Copy)]
-pub struct PanelParams {
+pub struct PanelOptions {
     pub hidden: bool,
     /// if present, any positional layout (flex, grid) is overriden with
     /// the absolute `base_pos` defined in [`FloatParams`]
     pub floating: Option<FloatParams>,
 }
-impl PanelParams {
+impl PanelOptions {
     pub const fn new() -> Self {
         Self {
             hidden: false,
@@ -143,19 +134,19 @@ impl PanelParams {
 }
 
 #[derive(Clone, Debug, Copy, Default)]
-pub struct ButtonParams {
-    pub text: TextParams,
+pub struct ButtonOptions {
+    pub text: TextOptions,
     pub callback: ButtonCallback,
 }
-impl ButtonParams {
+impl ButtonOptions {
     pub const fn new() -> Self {
         Self {
-            text: TextParams::new(),
+            text: TextOptions::new(),
             callback: ButtonCallback::None,
         }
     }
 
-    pub const fn labelled(label: TextParams) -> Self {
+    pub const fn labelled(label: TextOptions) -> Self {
         Self::new().with_label(label)
     }
 
@@ -163,7 +154,7 @@ impl ButtonParams {
         Self::new().with_label_literal(label_literal)
     }
 
-    pub const fn with_label(self, label: TextParams) -> Self {
+    pub const fn with_label(self, label: TextOptions) -> Self {
         Self {
             text: label,
             ..self
@@ -172,7 +163,7 @@ impl ButtonParams {
 
     pub const fn with_label_literal(self, label_literal: &'static str) -> Self {
         Self {
-            text: TextParams::new().with_contents(TextContents::literal(label_literal)),
+            text: TextOptions::new().with_contents(TextContents::literal(label_literal)),
             ..self
         }
     }
@@ -183,26 +174,26 @@ impl ButtonParams {
 }
 
 #[derive(Clone, Debug, Copy)]
-pub struct TextParams {
+pub struct TextOptions {
     pub contents: TextContents,
     pub font_name: &'static str,
     pub font_size: f32,
     pub line_height: f32,
     pub never_invalidate: bool,
 }
-impl TextParams {
+impl TextOptions {
     pub const DEFAULT_TEXT: TextContents = TextContents::literal("Invalid Text");
     pub const DEFAULT_FONT: &'static str = "Arial";
 
     pub const DEFAULT_FONT_SIZE: f32 = 14.0;
     pub const DEFAULT_LINE_HEIGHT: f32 = 20.0;
 }
-impl Default for TextParams {
+impl Default for TextOptions {
     fn default() -> Self {
         Self::new()
     }
 }
-impl TextParams {
+impl TextOptions {
     pub const fn new() -> Self {
         Self {
             contents: Self::DEFAULT_TEXT,
@@ -256,31 +247,55 @@ impl TextParams {
 }
 
 #[derive(Clone, Debug, Copy)]
-pub struct ImageParams {
-    pub tint: glam::Vec4,
-    pub opacity: f32,
+pub struct ImageOptions {
+    pub tint: glam::Vec3,
+    pub tint_opacity: f32,
     pub texture: TextureId,
 }
-impl ImageParams {
-    pub const DEFAULT_TINT: glam::Vec4 = glam::Vec4::ZERO;
-    pub const DEFAULT_OPACITY: f32 = 1.0;
-}
-impl Default for ImageParams {
+impl Default for ImageOptions {
     fn default() -> Self {
+        Self::new(super::expect_fallback_texture())
+    }
+}
+impl ImageOptions {
+    pub const DEFAULT_TINT: glam::Vec3 = glam::Vec3::ZERO;
+    pub const DEFAULT_TINT_OPACITY: f32 = 0.0;
+
+    pub const fn new(texture: TextureId) -> Self {
         Self {
             tint: Self::DEFAULT_TINT,
-            opacity: Self::DEFAULT_OPACITY,
-            texture: super::FALLBACK_TEXTURE
-                .read()
-                .unwrap()
-                .expect("fallback texture must be st"),
+            tint_opacity: Self::DEFAULT_TINT_OPACITY,
+            texture,
+        }
+    }
+
+    pub const fn tinted(texture: TextureId, tint: glam::Vec3) -> Self {
+        Self::new(texture).with_tint(tint)
+    }
+
+    pub const fn with_texture(self, texture: TextureId) -> Self {
+        Self { texture, ..self }
+    }
+
+    pub const fn with_tint(self, tint: glam::Vec3) -> Self {
+        Self {
+            tint,
+            tint_opacity: 0.5,
+            ..self
+        }
+    }
+
+    pub const fn with_tint_opacity(self, tint_opacity: f32) -> Self {
+        Self {
+            tint_opacity,
+            ..self
         }
     }
 }
 
 #[derive(Clone, Debug, Copy)]
-pub struct SliderParams {
-    pub text: Option<TextParams>,
+pub struct SliderOptions {
+    pub text: Option<TextOptions>,
     pub scroll_step: f32,
     /// Normalized (0.0, 1.0)
     pub value_init: f32,
@@ -288,12 +303,16 @@ pub struct SliderParams {
     pub callback: SliderCallback,
     pub vertical: bool,
 }
-impl SliderParams {
+impl Default for SliderOptions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+impl SliderOptions {
     /// 5%
     pub const DEFAULT_SCROLL_STEP: f32 = 0.05;
-}
-impl Default for SliderParams {
-    fn default() -> Self {
+
+    pub const fn new() -> Self {
         Self {
             text: None,
             scroll_step: Self::DEFAULT_SCROLL_STEP,
@@ -303,24 +322,92 @@ impl Default for SliderParams {
             vertical: false,
         }
     }
+
+    pub const fn labelled(label: TextOptions) -> Self {
+        Self::new().with_text(label)
+    }
+
+    pub const fn labelled_literal(label_literal: &'static str) -> Self {
+        Self::new().with_text_literal(label_literal)
+    }
+
+    pub const fn with_text(self, text: TextOptions) -> Self {
+        Self {
+            text: Some(text),
+            ..self
+        }
+    }
+
+    pub const fn with_text_literal(self, text_literal: &'static str) -> Self {
+        Self {
+            text: Some(TextOptions::from_literal(text_literal)),
+            ..self
+        }
+    }
+
+    pub const fn with_scroll_step(self, scroll_step: f32) -> Self {
+        Self {
+            scroll_step,
+            ..self
+        }
+    }
+
+    pub const fn with_starting_value(self, value_init: f32) -> Self {
+        Self { value_init, ..self }
+    }
+
+    pub const fn with_sync_handle(self, value_sync_handle: StringHash) -> Self {
+        Self {
+            value_sync_handle: Some(value_sync_handle),
+            ..self
+        }
+    }
+
+    pub const fn with_callback(self, callback: SliderCallback) -> Self {
+        Self { callback, ..self }
+    }
+
+    pub const fn with_vertical(self, vertical: bool) -> Self {
+        Self { vertical, ..self }
+    }
 }
 
 #[derive(Clone, Debug)]
-pub enum ElementParams<'children> {
-    Panel(CoreElementParams<'children>, PanelParams),
-    Button(CoreElementParams<'children>, ButtonParams),
-    Text(CoreElementParams<'children>, TextParams),
-    Image(CoreElementParams<'children>, ImageParams),
-    Slider(CoreElementParams<'children>, SliderParams),
+pub enum ElementOptions {
+    Panel(CommonWidgetOptions, PanelOptions),
+    Button(CommonWidgetOptions, ButtonOptions),
+    Text(CommonWidgetOptions, TextOptions),
+    Image(CommonWidgetOptions, ImageOptions),
+    Slider(CommonWidgetOptions, SliderOptions),
 }
-impl ElementParams<'_> {
-    pub fn core(&'_ self) -> &CoreElementParams<'_> {
+impl ElementOptions {
+    pub const fn panel(core: CommonWidgetOptions, panel: PanelOptions) -> Self {
+        Self::Panel(core, panel)
+    }
+
+    pub const fn button(core: CommonWidgetOptions, button: ButtonOptions) -> Self {
+        Self::Button(core, button)
+    }
+
+    pub const fn text(core: CommonWidgetOptions, text: TextOptions) -> Self {
+        Self::Text(core, text)
+    }
+
+    pub const fn image(core: CommonWidgetOptions, image: ImageOptions) -> Self {
+        Self::Image(core, image)
+    }
+
+    pub const fn slider(core: CommonWidgetOptions, slider: SliderOptions) -> Self {
+        Self::Slider(core, slider)
+    }
+
+    pub fn common_options(&self) -> &CommonWidgetOptions {
         match self {
-            ElementParams::Panel(core_element_params, _) => core_element_params,
-            ElementParams::Button(core_element_params, _) => core_element_params,
-            ElementParams::Text(core_element_params, _) => core_element_params,
-            ElementParams::Image(core_element_params, _) => core_element_params,
-            ElementParams::Slider(core_element_params, _) => core_element_params,
+            ElementOptions::Panel(core_element_params, _) => core_element_params,
+            ElementOptions::Button(core_element_params, _) => core_element_params,
+            ElementOptions::Text(core_element_params, _) => core_element_params,
+            ElementOptions::Image(core_element_params, _) => core_element_params,
+            ElementOptions::Slider(core_element_params, _) => core_element_params,
         }
     }
 }

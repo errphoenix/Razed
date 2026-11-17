@@ -1220,46 +1220,6 @@ impl State {
         );
     }
 
-    #[allow(unused)]
-    fn select_lattice_raycast(
-        &mut self,
-        input: &ethel::InputSystem,
-        screen: &ScreenSpace,
-        view_point: &ViewPoint,
-    ) {
-        let cursor = input.cursor().current_f32();
-        let inverse_view = view_point.into_mat4();
-        let mouse_world_dir = screen.to_world_space(cursor, inverse_view);
-        let mouse_ray = ::physics::Ray::new(view_point.position, mouse_world_dir);
-
-        let node_positions = self.lattice.nodes().current_pos_slice();
-        let constraints = self.lattice.links().relation_view();
-        let mut closest = None::<f32>;
-
-        for (i, [a, b]) in constraints.into_iter().enumerate() {
-            const RAY_SIZE: f32 = 0.1;
-
-            // view start at 1 to ignore degenerate element 0
-            let i = i + 1;
-
-            let a_i = unsafe { self.lattice.nodes().solve_indirect_unchecked(*a) };
-            let b_i = unsafe { self.lattice.nodes().solve_indirect_unchecked(*b) };
-            let a_p = *unsafe { node_positions.get_unchecked(a_i.as_index()) };
-            let b_p = *unsafe { node_positions.get_unchecked(b_i.as_index()) };
-
-            if let Some(t) = ::physics::intersect_ray_segment(mouse_ray, (a_p, b_p), RAY_SIZE) {
-                if let Some(ct) = closest
-                    && t > ct
-                {
-                    continue;
-                }
-
-                closest = Some(t);
-                self.selection = self.lattice.links().handles().get(i).copied();
-            }
-        }
-    }
-
     pub fn generate_structure(
         &mut self,
         origin: glam::Vec3,

@@ -53,9 +53,9 @@ macro_rules! wd_text {
     };
     (@prop $out:ident; $($t:tt)*) => {};
 
-    ($sys:ident, $core:expr => $($t:tt)*) => { $sys.create_element($crate::ElementParams::Text($core, $crate::wd_text!($($t)*))) };
+    ($sys:ident, $core:expr => $($t:tt)*) => { $sys.create_element($crate::ElementOptions::Text($core, $crate::wd_text!($($t)*))) };
     ($($t:tt)*) => {{
-        let mut params = $crate::TextParams::default();
+        let mut params = $crate::TextOptions::default();
         $crate::wd_text!(@prop params; $($t)*);
         params
     }};
@@ -340,7 +340,7 @@ macro_rules! style_layout {
 mod tests {
     use ethel::Resolution;
 
-    use crate::{CoreElementParams, InterfaceSystem, env::UiEnv};
+    use crate::{CommonWidgetOptions, InterfaceSystem, env::UiEnv};
 
     #[test]
     fn declare_text_string() {
@@ -398,7 +398,7 @@ mod tests {
             always_invalidate
         };
 
-        let core = CoreElementParams::default();
+        let core = CommonWidgetOptions::default();
         let _ = crate::wd_text! { sys, core =>
             size 15.0;
             content crate::text_contents!("Hello ", AAA, " baboons");

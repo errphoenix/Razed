@@ -147,7 +147,6 @@ ethel::table_spec! {
         look: LookId;
 
         parent: WidgetId;
-        children: Vec<WidgetId>;
         taffy_id: TaffyNodeId;
 
         layout_options: LayoutOptions;
@@ -214,8 +213,8 @@ ethel::table_spec! {
 }
 ethel::table_spec! {
     struct InterfaceImage {
-        tint: glam::Vec4;
-        opacity: f32;
+        tint: glam::Vec3;
+        tint_opacity: f32;
         texture: TextureId;
     }
 }
@@ -1178,13 +1177,13 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     pub fn make_image(
         &mut self,
         id: WidgetId,
-        tint: glam::Vec4,
-        opacity: f32,
+        tint: glam::Vec3,
+        tint_opacity: f32,
         texture: TextureId,
     ) -> Result<IndirectIndex, WidgetError> {
         if let Some(commons_id) = self.commons.solve_indirect(id.0) {
             self.assert_null_archetype(commons_id)?;
-            let image_element = (tint, opacity, texture);
+            let image_element = (tint, tint_opacity, texture);
             let image_id = self.images.insert(image_element);
             self.commons.archetype[commons_id.as_index()] = ComponentKind::Image(image_id);
             Ok(image_id)
@@ -1271,7 +1270,6 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     pub fn add_new(
         &mut self,
         parent: Option<WidgetId>,
-        children: Option<&[WidgetId]>,
         look_id: Option<impl Into<LookId>>,
         layout_options: LayoutOptions,
         layer: u32,
@@ -1295,30 +1293,11 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 .add_child(parent_taffy_id.0, node_id)
                 .map_err(WidgetError::TaffyLayoutError)?;
         }
-        // add children to this
-        let children = if let Some(children) = children {
-            children.iter().try_for_each(|child| {
-                if let Some(direct) = self.commons.solve_indirect(child.0) {
-                    let taffy_id = self.commons.taffy_id[direct.as_index()];
-
-                    self.layout
-                        .add_child(node_id, taffy_id.0)
-                        .map_err(WidgetError::TaffyLayoutError)
-                } else {
-                    Err(WidgetError::ChildNotFound(*child))
-                }
-            })?;
-            children.to_vec()
-        } else {
-            // does not allocate
-            Vec::new()
-        };
 
         let id = WidgetId(self.commons.insert((
             ComponentKind::Null,
             look_id.map(Into::into).unwrap_or_default(),
             parent,
-            children,
             TaffyNodeId(node_id),
             layout_options,
             layer.min(LAYERS as u32),
@@ -1385,36 +1364,25 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
 
     pub fn create_element(
         &mut self,
-        parameters: ElementParams,
+        parameters: ElementOptions,
     ) -> Result<(WidgetId, IndirectIndex), WidgetError> {
         let root_id = {
-            let core = parameters.core();
-            self.add_new(
-                core.parent,
-                core.children,
-                core.look,
-                core.layout.clone(),
-                core.layer,
-            )?
+            let core = parameters.common_options();
+            self.add_new(core.parent, core.look, core.layout.clone(), core.layer)?
         };
 
         let special_id = match parameters {
-            ElementParams::Panel(_, panel_params) => {
+            ElementOptions::Panel(_, panel_params) => {
                 self.make_panel(root_id, panel_params.hidden, panel_params.floating)
             }
-            ElementParams::Button(core, button_params) => {
+            ElementOptions::Button(core, button_params) => {
                 let text = &button_params.text;
 
                 let (text_root_id, text_id) = {
                     const BUTTON_LABEL_LAYOUT: LayoutOptions = LayoutOptions::new();
 
-                    let root_text_id = self.add_new(
-                        Some(root_id),
-                        None,
-                        core.look,
-                        BUTTON_LABEL_LAYOUT,
-                        core.layer,
-                    )?;
+                    let root_text_id =
+                        self.add_new(Some(root_id), core.look, BUTTON_LABEL_LAYOUT, core.layer)?;
                     let special_text_id = self.make_text(
                         root_text_id,
                         text.contents,
@@ -1430,7 +1398,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
 
                 self.make_button(root_id, text_root_id, text_id, button_params.callback)
             }
-            ElementParams::Text(_, text_params) => self.make_text(
+            ElementOptions::Text(_, text_params) => self.make_text(
                 root_id,
                 text_params.contents,
                 text_params.font_name,
@@ -1440,24 +1408,19 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 },
                 text_params.never_invalidate,
             ),
-            ElementParams::Image(_, image_params) => self.make_image(
+            ElementOptions::Image(_, image_params) => self.make_image(
                 root_id,
                 image_params.tint,
-                image_params.opacity,
+                image_params.tint_opacity,
                 image_params.texture,
             ),
-            ElementParams::Slider(core, slider_params) => {
+            ElementOptions::Slider(core, slider_params) => {
                 let mut text_ids = None;
                 if let Some(text) = &slider_params.text {
                     const SLIDER_LABEL_LAYOUT: LayoutOptions = LayoutOptions::new();
 
-                    let root_text_id = self.add_new(
-                        Some(root_id),
-                        None,
-                        core.look,
-                        SLIDER_LABEL_LAYOUT,
-                        core.layer,
-                    )?;
+                    let root_text_id =
+                        self.add_new(Some(root_id), core.look, SLIDER_LABEL_LAYOUT, core.layer)?;
                     let special_text_id = self.make_text(
                         root_text_id,
                         text.contents,
