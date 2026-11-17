@@ -1393,14 +1393,14 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 core.parent,
                 core.children,
                 core.look,
-                core.layout_options.clone(),
+                core.layout.clone(),
                 core.layer,
             )?
         };
 
         let special_id = match parameters {
             ElementParams::Panel(_, panel_params) => {
-                self.make_panel(root_id, panel_params.hidden, panel_params.float_params)
+                self.make_panel(root_id, panel_params.hidden, panel_params.floating)
             }
             ElementParams::Button(core, button_params) => {
                 let text = &button_params.text;
