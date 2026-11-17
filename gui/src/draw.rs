@@ -72,9 +72,13 @@ impl InterfaceAggregator<'_> {
         panel_index: IndirectIndex,
         out: &mut Vec<InterfaceObject>,
     ) {
+        let (_root, hidden, float_id) = self.panels.coalesced(panel_index);
+        if *hidden {
+            return;
+        }
+
         let hovered = self.commons.interaction_data[common_handle].hovered;
         let look_id = self.commons.look[common_handle];
-        let float_id = self.panels.floating(panel_index);
 
         let look = self.looks.get(look_id);
         let background = look.panel_background;

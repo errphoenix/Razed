@@ -23,6 +23,7 @@ pub mod declare;
 pub mod draw;
 pub mod env;
 pub mod look;
+pub mod options;
 pub mod render;
 pub mod style;
 pub mod text;
@@ -41,6 +42,9 @@ use crate::{
     look::{LookId, LooksManager},
     text::{FontMetrics, GlyphAtlas, TextComposer, TextMeasurement, font::FontLibrary},
 };
+
+#[allow(unused_imports)]
+pub use options::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct TaffyNodeId(pub(crate) NodeId);
@@ -159,6 +163,8 @@ ethel::table_spec! {
 ethel::table_spec! {
     struct InterfacePanel {
         root_rvid: WidgetId;
+
+        hidden: bool;
 
         // index in InterfaceFloatData table
         floating: Option<IndirectIndex>;
@@ -1037,6 +1043,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             .expect("failed to evaluate taffy layout");
     }
 
+    /// Evaluates the layout if necessary or `force`d by the caller.
     pub fn evaluate_layout(&mut self, force: bool) {
         self.impl_evaluate_layout(TaffyNodeId(self.root_node.tree_id), force);
     }
@@ -1095,6 +1102,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     pub fn make_panel(
         &mut self,
         id: WidgetId,
+        hidden: bool,
         float_params: Option<FloatParams>,
     ) -> Result<IndirectIndex, WidgetError> {
         if let Some(commons_id) = self.commons.solve_indirect(id.0) {
@@ -1115,7 +1123,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                     .insert((params.grab_area, glam::Vec2::ZERO, FloatState::Idle))
             });
 
-            let panel_element = (id, float_id);
+            let panel_element = (id, hidden, float_id);
             let panel_id = self.panels.insert(panel_element);
             self.commons.archetype[commons_id.as_index()] = ComponentKind::Panel(panel_id);
             Ok(panel_id)
@@ -1392,7 +1400,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
 
         let special_id = match parameters {
             ElementParams::Panel(_, panel_params) => {
-                self.make_panel(root_id, panel_params.float_params)
+                self.make_panel(root_id, panel_params.hidden, panel_params.float_params)
             }
             ElementParams::Button(core, button_params) => {
                 let text = &button_params.text;
@@ -1491,142 +1499,4 @@ pub fn get_fallback_texture() -> Option<TextureId> {
 
 pub fn expect_fallback_texture() -> TextureId {
     get_fallback_texture().expect("global fallback texture is not set")
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct CoreElementParams<'children> {
-    pub parent: Option<WidgetId>,
-    pub look: Option<LookId>,
-    pub children: Option<&'children [WidgetId]>,
-    pub layout_options: LayoutOptions,
-    pub layer: u32,
-}
-
-#[derive(Clone, Debug)]
-pub struct FloatParams {
-    pub base_pos: Option<glam::Vec2>,
-    pub grab_area: FloatGrabArea,
-}
-
-#[derive(Clone, Debug)]
-pub struct PanelParams {
-    /// if present, any positional layout (flex, grid) is overriden with
-    /// the absolute `base_pos` defined in [`FloatParams`]
-    pub float_params: Option<FloatParams>,
-}
-impl Default for PanelParams {
-    fn default() -> Self {
-        Self { float_params: None }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct ButtonParams {
-    pub text: TextParams,
-    pub callback: ButtonCallback,
-}
-impl Default for ButtonParams {
-    fn default() -> Self {
-        Self {
-            text: TextParams::default(),
-            callback: InteractableCallback::default(),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct TextParams {
-    pub contents: TextContents,
-    pub font_name: &'static str,
-    pub font_size: f32,
-    pub line_height: f32,
-    pub never_invalidate: bool,
-}
-impl TextParams {
-    pub const DEFAULT_TEXT: TextContents = TextContents::literal("Invalid Text");
-    pub const DEFAULT_FONT: &'static str = "Arial";
-
-    pub const DEFAULT_FONT_SIZE: f32 = 14.0;
-    pub const DEFAULT_LINE_HEIGHT: f32 = 20.0;
-}
-impl Default for TextParams {
-    fn default() -> Self {
-        Self {
-            contents: Self::DEFAULT_TEXT,
-            font_name: Self::DEFAULT_FONT,
-            font_size: Self::DEFAULT_FONT_SIZE,
-            line_height: Self::DEFAULT_LINE_HEIGHT,
-            never_invalidate: true,
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct ImageParams {
-    pub tint: glam::Vec4,
-    pub opacity: f32,
-    pub texture: TextureId,
-}
-impl ImageParams {
-    pub const DEFAULT_TINT: glam::Vec4 = glam::Vec4::ZERO;
-    pub const DEFAULT_OPACITY: f32 = 1.0;
-}
-impl Default for ImageParams {
-    fn default() -> Self {
-        Self {
-            tint: Self::DEFAULT_TINT,
-            opacity: Self::DEFAULT_OPACITY,
-            texture: FALLBACK_TEXTURE
-                .read()
-                .unwrap()
-                .expect("fallback texture must be st"),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct SliderParams {
-    pub text: Option<TextParams>,
-    pub scroll_step: f32,
-    /// Normalized (0.0, 1.0)
-    pub value_init: f32,
-    pub value_sync_handle: Option<StringHash>,
-    pub callback: SliderCallback,
-    pub vertical: bool,
-}
-impl SliderParams {
-    /// 5%
-    pub const DEFAULT_SCROLL_STEP: f32 = 0.05;
-}
-impl Default for SliderParams {
-    fn default() -> Self {
-        Self {
-            text: None,
-            scroll_step: Self::DEFAULT_SCROLL_STEP,
-            value_init: 0f32,
-            value_sync_handle: None,
-            callback: InteractableCallback::None,
-            vertical: false,
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum ElementParams<'children> {
-    Panel(CoreElementParams<'children>, PanelParams),
-    Button(CoreElementParams<'children>, ButtonParams),
-    Text(CoreElementParams<'children>, TextParams),
-    Image(CoreElementParams<'children>, ImageParams),
-    Slider(CoreElementParams<'children>, SliderParams),
-}
-impl ElementParams<'_> {
-    pub fn core(&'_ self) -> &CoreElementParams<'_> {
-        match self {
-            ElementParams::Panel(core_element_params, _) => core_element_params,
-            ElementParams::Button(core_element_params, _) => core_element_params,
-            ElementParams::Text(core_element_params, _) => core_element_params,
-            ElementParams::Image(core_element_params, _) => core_element_params,
-            ElementParams::Slider(core_element_params, _) => core_element_params,
-        }
-    }
 }
