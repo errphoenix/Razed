@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use ethel::TextureId;
 use janus::StringHash;
 
@@ -5,6 +7,62 @@ use crate::{
     ButtonCallback, FloatGrabArea, InteractableCallback, LayoutOptions, SliderCallback,
     TextContents, WidgetId, look::LookId,
 };
+
+pub trait HasOptions {
+    type Options: Default + Clone + Copy + Debug;
+
+    fn complement_options(common: CommonWidgetOptions, this: Self::Options) -> ElementOptions;
+}
+
+#[derive(Debug)]
+pub struct Panel;
+impl HasOptions for Panel {
+    type Options = PanelOptions;
+
+    fn complement_options(common: CommonWidgetOptions, this: Self::Options) -> ElementOptions {
+        ElementOptions::Panel(common, this)
+    }
+}
+
+#[derive(Debug)]
+pub struct Button;
+impl HasOptions for Button {
+    type Options = ButtonOptions;
+
+    fn complement_options(common: CommonWidgetOptions, this: Self::Options) -> ElementOptions {
+        ElementOptions::Button(common, this)
+    }
+}
+
+#[derive(Debug)]
+pub struct Text;
+impl HasOptions for Text {
+    type Options = TextOptions;
+
+    fn complement_options(common: CommonWidgetOptions, this: Self::Options) -> ElementOptions {
+        ElementOptions::Text(common, this)
+    }
+}
+
+#[derive(Debug)]
+pub struct Image;
+impl HasOptions for Image {
+    type Options = ImageOptions;
+
+    fn complement_options(common: CommonWidgetOptions, this: Self::Options) -> ElementOptions {
+        ElementOptions::Image(common, this)
+    }
+}
+
+#[derive(Debug)]
+pub struct Slider;
+impl HasOptions for Slider {
+    type Options = SliderOptions;
+
+    fn complement_options(common: CommonWidgetOptions, this: Self::Options) -> ElementOptions {
+        ElementOptions::Slider(common, this)
+    }
+}
 
 #[derive(Clone, Debug, Default)]
 pub struct CommonWidgetOptions {

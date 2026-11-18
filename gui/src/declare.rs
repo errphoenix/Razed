@@ -1,3 +1,129 @@
+use std::fmt::Debug;
+
+use crate::{
+    CommonWidgetOptions, HasOptions, InterfaceSystem, LayoutOptions, WidgetId, look::LookId,
+};
+
+pub trait HasUi: Debug {
+    fn build_node(&self, parent: Option<WidgetId>, interface: &mut InterfaceSystem) -> WidgetId;
+}
+
+pub type UiPanel = UiNode<crate::options::Panel>;
+pub type UiButton = UiNode<crate::options::Button>;
+pub type UiText = UiNode<crate::options::Text>;
+pub type UiImage = UiNode<crate::options::Image>;
+pub type UiSlider = UiNode<crate::options::Slider>;
+
+#[derive(Debug)]
+pub struct UiNodeStack<'stack>(&'stack mut Vec<Box<dyn HasUi>>);
+impl UiNodeStack<'_> {
+    pub fn push_mut(&mut self, node: impl HasUi + 'static) -> &mut Box<dyn HasUi> {
+        self.0.push_mut(Box::new(node))
+    }
+
+    pub fn push(&mut self, node: impl HasUi + 'static) {
+        let _ = self.push_mut(node);
+    }
+}
+
+#[derive(Debug)]
+pub struct UiNode<T: HasOptions> {
+    commons: CommonWidgetOptions,
+    options: T::Options,
+    children: Vec<Box<dyn HasUi>>,
+}
+impl<T: HasOptions> Default for UiNode<T> {
+    fn default() -> Self {
+        Self {
+            commons: CommonWidgetOptions::new(),
+            options: Default::default(),
+            children: Vec::new(),
+        }
+    }
+}
+impl<T: HasOptions + Debug> HasUi for UiNode<T> {
+    fn build_node(&self, parent: Option<WidgetId>, interface: &mut InterfaceSystem) -> WidgetId {
+        let mut commons = self.commons.clone();
+        if parent.is_some() {
+            commons.parent = parent;
+        }
+        let options = T::complement_options(commons, self.options);
+        let id = interface.create_element(options).unwrap().0;
+        for child in &self.children {
+            child.build_node(Some(id), interface);
+        }
+        id
+    }
+}
+impl<T: HasOptions + Debug> UiNode<T> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn from(options: T::Options) -> Self {
+        Self {
+            options,
+            ..Default::default()
+        }
+    }
+
+    pub const fn with_parent(mut self, parent: WidgetId) -> Self {
+        self.commons = self.commons.with_parent(parent);
+        self
+    }
+
+    pub const fn with_look(mut self, look: LookId) -> Self {
+        self.commons = self.commons.with_look(look);
+        self
+    }
+
+    pub const fn with_layout(mut self, layout: LayoutOptions) -> Self {
+        self.commons = self.commons.with_layout(layout);
+        self
+    }
+
+    pub const fn with_layer(mut self, layer: u32) -> Self {
+        self.commons = self.commons.with_layer(layer);
+        self
+    }
+
+    pub fn builder<F: FnOnce(UiNodeStack, T::Options) -> T::Options>(
+        mut self,
+        operation: F,
+    ) -> Self {
+        self.options = operation(UiNodeStack(&mut self.children), self.options);
+        self
+    }
+
+    pub fn children(&self) -> &[Box<dyn HasUi>] {
+        &self.children
+    }
+
+    pub const fn children_mut(&mut self) -> &mut Vec<Box<dyn HasUi>> {
+        &mut self.children
+    }
+
+    pub const fn inner_options(&self) -> &T::Options {
+        &self.options
+    }
+
+    pub const fn inner_options_mut(&mut self) -> &mut T::Options {
+        &mut self.options
+    }
+
+    pub const fn inner_common_options(&self) -> &CommonWidgetOptions {
+        &self.commons
+    }
+
+    pub const fn inner_common_options_mut(&mut self) -> &mut CommonWidgetOptions {
+        &mut self.commons
+    }
+
+    pub fn apply(self, interface: &mut InterfaceSystem) -> WidgetId {
+        self.build_node(None, interface)
+    }
+}
+
 /// Generate text parameters.
 ///
 /// Available fields:
@@ -338,9 +464,11 @@ macro_rules! style_layout {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use ethel::Resolution;
 
-    use crate::{CommonWidgetOptions, InterfaceSystem, env::UiEnv};
+    use crate::{ButtonOptions, CommonWidgetOptions, InterfaceSystem, env::UiEnv};
 
     #[test]
     fn declare_text_string() {
@@ -404,5 +532,28 @@ mod tests {
             content crate::text_contents!("Hello ", AAA, " baboons");
             font "Times New Roman"
         };
+    }
+
+    #[test]
+    fn declare_with_stack() {
+        let root = UiPanel::new();
+
+        root.builder(|mut stack, options| {
+            stack.push(UiButton::from(ButtonOptions::labelled_literal(
+                "some button",
+            )));
+
+            stack.push(UiPanel::new().builder(|mut stack, options| {
+                stack.push(UiSlider::new().builder(|_, options| {
+                    options.with_text_literal("slideee").with_vertical(true)
+                }));
+                stack.push(
+                    UiButton::new()
+                        .builder(|_, options| options.with_label_literal("another button")),
+                );
+                options
+            }));
+            options
+        });
     }
 }

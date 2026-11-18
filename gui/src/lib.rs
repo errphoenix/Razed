@@ -44,7 +44,10 @@ use crate::{
 };
 
 #[allow(unused_imports)]
-pub use options::*;
+pub use options::{
+    ButtonOptions, CommonWidgetOptions, ElementOptions, FloatParams, HasOptions, ImageOptions,
+    PanelOptions, Slider, TextOptions,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct TaffyNodeId(pub(crate) NodeId);
