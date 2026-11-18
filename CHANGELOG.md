@@ -16,11 +16,23 @@
 
 - GUI: add option to orient slider widgets vertically
 
+- GUI: `<Widget>Options` builder structs for widget parameters
+
+- GUI: new 'Looks' systems to define broader widget appearance/styling
+
+- GUI: macro helpers to generate layout properties (various enums, relative/absolute values, points, rectangles...)
+
+- GUI: new hierarchical UI builder to define UI trees
+
 ### Changed
 
 - Updated `build.sh` build script to support additional builds
 
 - Profiler can now be enabled/disabled, rather than be running at all times
+
+- GUI: add `hidden` property to panel widgets
+
+- GUI: remove all color-related properties from widget options
 
 ### Fixed
 
