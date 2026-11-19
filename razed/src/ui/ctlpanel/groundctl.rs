@@ -44,7 +44,7 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution
                             .with_scroll_step(0.01)
                             .with_starting_value(Groundplane::DEFAULT_SCALE_NORMALIZED)
                             .with_sync_handle(DEBUG_CTL_GROUND_SCALE)
-                            .with_callback(slider_callback!(map DEBUG_CTL_GROUND_SCALE Groundplane::scale_from_normalized))
+                            .with_callback(slider_callback!(copy DEBUG_CTL_GROUND_SCALE))
                     })
             });
             stack.slider(|slider| {
@@ -65,7 +65,7 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution
                             .with_scroll_step(0.01)
                             .with_starting_value(Groundplane::DEFAULT_UVSCALE_NORMALIZED)
                             .with_sync_handle(DEBUG_CTL_GROUND_UVSCALE)
-                            .with_callback(slider_callback!(map DEBUG_CTL_GROUND_UVSCALE Groundplane::uvscale_from_normalized))
+                            .with_callback(slider_callback!(copy DEBUG_CTL_GROUND_UVSCALE))
                     })
             });
             props.with_floating(FloatGrabArea::top(20.0))

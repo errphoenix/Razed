@@ -1,4 +1,4 @@
-use gui::{ButtonCallback, button_callback, declare::UiPanel, slider_callback, text_contents};
+use gui::{button_callback, declare::UiPanel, slider_callback, text_contents};
 
 pub mod groundctl;
 pub mod profile;
@@ -138,7 +138,7 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution
                             ))
                             .with_starting_value(graphics::Gamma::DEFAULT_NORMALIZED)
                             .with_sync_handle(DEBUG_CTL_GRAPHICS_GAMMA)
-                            .with_callback(slider_callback!(map DEBUG_CTL_GRAPHICS_GAMMA graphics::Gamma::from_normalized))
+                            .with_callback(slider_callback!(copy DEBUG_CTL_GRAPHICS_GAMMA))
                     })
             });
 
@@ -184,61 +184,4 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution
         .apply(system);
     shade_mode_selector(system, this);
     this
-}
-
-pub const fn params_dbg_button(text: &'static str, cb: ButtonCallback) -> ButtonOptions {
-    params_dbg_button_with_text(
-        TextOptions {
-            contents: TextContents::from_node(TextNode::Static(text)),
-            never_invalidate: true,
-            font_name: TextOptions::DEFAULT_FONT,
-            font_size: TextOptions::DEFAULT_FONT_SIZE,
-            line_height: TextOptions::DEFAULT_LINE_HEIGHT,
-        },
-        cb,
-    )
-}
-
-pub const fn params_dbg_button_with_text(text: TextOptions, cb: ButtonCallback) -> ButtonOptions {
-    ButtonOptions { text, callback: cb }
-}
-
-pub fn dbg_toggle_button<const PROP: u64>(
-    system: &mut InterfaceSystem,
-    root: WidgetId,
-    label: &'static str,
-) -> (WidgetId, IndirectIndex) {
-    dbg_toggle_button_with(
-        system,
-        root,
-        label,
-        InteractableCallback::Once(|env, _time| {
-            if let Some(prop) = env.get_mut(&janus::StringHash::from_u64(PROP)) {
-                prop.invert();
-            }
-        }),
-    )
-}
-
-pub fn dbg_toggle_button_with(
-    system: &mut InterfaceSystem,
-    root: WidgetId,
-    label: &'static str,
-    cb: ButtonCallback,
-) -> (WidgetId, IndirectIndex) {
-    system
-        .create_element(ElementOptions::Button(
-            CommonWidgetOptions {
-                parent: Some(root),
-                layer: 5,
-                layout: LayoutOptions {
-                    align_self: ItemAlignment::Start,
-                    justify_self: ItemAlignment::Start,
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            params_dbg_button(label, cb),
-        ))
-        .unwrap()
 }

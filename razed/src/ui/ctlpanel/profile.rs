@@ -11,7 +11,7 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution
         .with_parent(root)
         .with_layout(LayoutOptions {
             padding: crate::ui::DEV_PANEL_PADDING,
-            layout_position: style_layout!(position-absolute 8.0, 900.0),
+            layout_position: style_layout!(position-absolute 8.0, 720.0),
             size: Some(style_layout!(510.0, 180.0)),
             ..Default::default()
         })
@@ -22,7 +22,9 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution
                 button.builder(|_, props| {
                     props
                         .with_label_literal("Start/Pause")
-                        .with_callback(button_callback!(toggle PROFILER_RUNNING))
+                        .with_callback(button_callback! { select PROFILER_ACTION =>
+                            PROFILER_RUNNING; ? crate::PROFILER_ACTION_PAUSE; : crate::PROFILER_ACTION_START
+                        })
                 })
             });
             stack.button(|button| {

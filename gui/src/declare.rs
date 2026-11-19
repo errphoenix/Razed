@@ -587,6 +587,16 @@ macro_rules! button_callback {
             env.insert($id, $value);
         })
     };
+    (select $id:ident => $cond:expr; ? $t:expr; : $f:expr) => {
+        $crate::ButtonCallback::Once(|env, _| {
+            if env.get_boolean(&$cond) {
+                env.insert($id, $t);
+            } else {
+                env.insert($id, $f);
+            }
+
+        })
+    };
     (toggle $id:ident) => {
         $crate::ButtonCallback::Once(|env, _| env.toggle_boolean(&$id))
     };

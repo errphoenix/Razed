@@ -1,9 +1,9 @@
-use ethel::{IndirectIndex, Resolution};
+use ethel::Resolution;
 use gui::{
     ButtonOptions, CommonWidgetOptions, ContainerLayout, ElementOptions, FloatGrabArea,
-    InteractableCallback, InterfaceSystem, ItemAlignment, LayoutOptions, PanelOptions, Point,
-    Rectangle, TextContents, TextNode, TextOptions, Value, WidgetId, declare::UiPanel,
-    env::EnvValue, style_layout,
+    InteractableCallback, InterfaceSystem, LayoutOptions, PanelOptions, Point, Rectangle,
+    TextContents, TextNode, TextOptions, Value, WidgetId, declare::UiPanel, env::EnvValue,
+    style_layout,
 };
 
 use env_names::*;
