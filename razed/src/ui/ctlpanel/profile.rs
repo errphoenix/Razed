@@ -1,7 +1,6 @@
 use ethel::Resolution;
 use gui::{
-    FloatGrabArea, InterfaceSystem, LayoutOptions, WidgetId, button_callback, declare::UiPanel,
-    style_layout, text_contents,
+    FloatGrabArea, InterfaceSystem, WidgetId, button_callback, declare::UiPanel, text_contents,
 };
 
 use crate::ui::env_names::{PROFILER_ACTION, PROFILER_FRAME_COUNT, PROFILER_RUNNING};
@@ -9,12 +8,9 @@ use crate::ui::env_names::{PROFILER_ACTION, PROFILER_FRAME_COUNT, PROFILER_RUNNI
 pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution) -> WidgetId {
     UiPanel::new(resolution)
         .with_parent(root)
-        .with_layout(LayoutOptions {
-            padding: crate::ui::DEV_PANEL_PADDING,
-            layout_position: style_layout!(position-absolute 8.0, 720.0),
-            size: Some(style_layout!(510.0, 180.0)),
-            ..Default::default()
-        })
+        .with_padding(crate::ui::DEV_PANEL_PADDING)
+        .with_offset((8.0,720.0))
+        .with_size((510.0,180.0))
         .builder(|mut stack, props| {
             stack.text_from(text_contents!("Profiler::running = ", PROFILER_RUNNING));
             stack.text_from(text_contents!("Profiler::frames = ", PROFILER_FRAME_COUNT));

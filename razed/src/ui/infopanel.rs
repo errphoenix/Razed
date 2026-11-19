@@ -8,21 +8,14 @@ pub use super::*;
 pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution) -> WidgetId {
     let panel = UiPanel::new(resolution)
         .with_parent(root)
-        .with_layout(LayoutOptions {
-            layout_position: style_layout!(position-absolute 8.0, 8.0),
-            size: Some(style_layout!(840.0, 420.0)),
-            padding: Some(style_layout!(sq 10.0)),
-            ..Default::default()
-        })
+        .with_offset((8.0, 8.0))
+        .with_size((840.0, 420.0))
+        .with_padding(10.0)
         .apply(system);
 
     let mut debug_text = |contents: TextContents| {
         UiText::new(resolution)
             .with_parent(panel)
-            .with_layout(LayoutOptions {
-                align_self: style_layout!(align - item - stretch),
-                ..Default::default()
-            })
             .builder(|_, props| props.with_contents(contents))
             .apply(system)
     };

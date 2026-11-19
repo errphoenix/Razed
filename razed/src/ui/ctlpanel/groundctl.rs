@@ -12,12 +12,9 @@ use crate::{
 pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution) -> WidgetId {
     UiPanel::new(resolution)
         .with_parent(root)
-        .with_layout(LayoutOptions {
-            padding: crate::ui::DEV_PANEL_PADDING,
-            layout_position: style_layout!(position-absolute 8.0, 900.0),
-            size: Some(style_layout!(510.0, 180.0)),
-            ..Default::default()
-        })
+        .with_padding(crate::ui::DEV_PANEL_PADDING)
+        .with_offset((8.0, 900.0))
+        .with_size((510.0, 180.0))
         .builder(|mut stack, props| {
             stack.button(|button| {
                 button.builder(|_, props| {

@@ -4,8 +4,8 @@ use ethel::Resolution;
 
 use crate::{
     ButtonOptions, CommonWidgetOptions, ComponentKind, HasOptions, ImageOptions, InterfaceSystem,
-    LayoutOptions, PanelOptions, Rectangle, TextContents, TextOptions, Value, WidgetId,
-    look::LookId, options::SliderOptions,
+    LayoutOptions, LayoutPosition, PanelOptions, Point, Rectangle, TextContents, TextOptions,
+    Value, WidgetId, look::LookId, options::SliderOptions,
 };
 
 pub trait HasUi: Debug {
@@ -191,6 +191,45 @@ impl<T: HasOptions + Debug> UiNode<T> {
 
     pub const fn with_layout(mut self, layout: LayoutOptions) -> Self {
         self.commons = self.commons.with_layout(layout);
+        self
+    }
+
+    pub fn with_offset(mut self, offset: impl Into<Point>) -> Self {
+        let offset = offset.into();
+        let layout = &mut self.commons.layout;
+        layout.layout_position = match layout.layout_position {
+            LayoutPosition::Relative => {
+                crate::style_layout!(position Some(offset.x), Some(offset.y))
+            }
+            LayoutPosition::Absolute { x, y } => {
+                let ref_x = self.reference_resolution.width;
+                let ref_y = self.reference_resolution.height;
+                let x = x.unwrap_or_default().sum(offset.x, ref_x);
+                let y = y.unwrap_or_default().sum(offset.y, ref_y);
+                crate::style_layout!(position Some(x), Some(y))
+            }
+        };
+        self
+    }
+
+    pub fn with_size(mut self, size: impl Into<Point>) -> Self {
+        let size = size.into();
+        let layout = &mut self.commons.layout;
+        layout.size = Some(size);
+        self
+    }
+
+    pub fn with_margin(mut self, margin: impl Into<Rectangle>) -> Self {
+        let margin = margin.into();
+        let layout = &mut self.commons.layout;
+        layout.margin = Some(margin);
+        self
+    }
+
+    pub fn with_padding(mut self, padding: impl Into<Rectangle>) -> Self {
+        let padding = padding.into();
+        let layout = &mut self.commons.layout;
+        layout.padding = Some(padding);
         self
     }
 
@@ -395,6 +434,9 @@ macro_rules! style_layout {
     };
 
     // position mode
+    (position $x:expr, $y:expr) => {
+        $crate::style::LayoutPosition::Absolute { x: $x, y: $y }
+    };
     (position-relative) => {
         $crate::style::LayoutPosition::Relative
     };
@@ -634,7 +676,11 @@ macro_rules! slider_callback {
     };
 }
 
-fn sum_rects(a: Rectangle, b: Rectangle, scaling_reference: Resolution) -> Rectangle {
+pub(crate) const fn sum_rects(
+    a: Rectangle,
+    b: Rectangle,
+    scaling_reference: Resolution,
+) -> Rectangle {
     Rectangle {
         left: sum_values(a.left, b.left, scaling_reference.width),
         top: sum_values(a.top, b.top, scaling_reference.height),
@@ -643,7 +689,7 @@ fn sum_rects(a: Rectangle, b: Rectangle, scaling_reference: Resolution) -> Recta
     }
 }
 
-fn sum_values(a: Value, b: Value, scaling_reference: f32) -> Value {
+pub(crate) const fn sum_values(a: Value, b: Value, scaling_reference: f32) -> Value {
     match a {
         Value::Absolute(a_px) => match b {
             Value::Absolute(b_px) => Value::Absolute(a_px + b_px),

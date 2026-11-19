@@ -16,19 +16,13 @@ use crate::{render::graphics, ui::env_names::*};
 pub mod ctlpanel;
 pub mod infopanel;
 
-pub const DEV_PANEL_PADDING: Option<Rectangle> = Some(style_layout!(6.0, 26.0, 6.0, 6.0));
+pub const DEV_PANEL_PADDING: Rectangle = style_layout!(6.0, 26.0, 6.0, 6.0);
 
 pub const COLORTINT_HOVER_INVARIANT: glam::Vec4 = glam::vec4(0f32, 0f32, 0f32, 1f32);
 
 pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
     let mut system = InterfaceSystem::new(resolution);
-    let root = UiPanel::new(resolution)
-        .with_layout(LayoutOptions {
-            layout_position: style_layout!(position - relative),
-            size: Some(style_layout!(splat 0.0)),
-            ..Default::default()
-        })
-        .apply(&mut system);
+    let root = UiPanel::new(resolution).with_size(0.0).apply(&mut system);
 
     infopanel::root(&mut system, root, resolution);
     ctlpanel::root(&mut system, root, resolution);

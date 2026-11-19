@@ -170,6 +170,60 @@ impl Value {
     pub const THREE_QUARTERS: Self = Self::Percentage(0.75);
     pub const FIFTH: Self = Self::Percentage(0.2);
     pub const THIRD: Self = Self::Percentage(0.3334);
+
+    pub fn sum(self, other: impl Into<Self>, scaling_reference: f32) -> Self {
+        crate::declare::sum_values(self, other.into(), scaling_reference)
+    }
+
+    pub const fn px(px: f32) -> Self {
+        Self::Absolute(px)
+    }
+
+    pub const fn perc(perc: f32) -> Self {
+        Self::Percentage(perc)
+    }
+
+    pub const fn absolute(px: f32) -> Self {
+        Self::Absolute(px)
+    }
+
+    pub const fn relative(perc: f32) -> Self {
+        Self::Percentage(perc)
+    }
+
+    pub const fn to_pixels(self, scaling_reference: f32) -> f32 {
+        self.try_to_pixels(Some(scaling_reference)).unwrap()
+    }
+
+    /// Returns `None` only if `self` is [`Value::Percentage`] and no
+    /// `scaling_reference` is given.
+    pub const fn try_to_pixels(self, scaling_reference: Option<f32>) -> Option<f32> {
+        match self {
+            Value::Absolute(px) => Some(px),
+            Value::Percentage(perc) => {
+                if let Some(scaling) = scaling_reference {
+                    Some(perc * scaling)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+}
+impl From<f32> for Value {
+    fn from(value: f32) -> Self {
+        Self::Absolute(value)
+    }
+}
+impl std::ops::Mul<f32> for Value {
+    type Output = Self;
+
+    fn mul(self, rhs: f32) -> Self::Output {
+        match self {
+            Self::Absolute(px) => Self::Absolute(px * rhs),
+            Self::Percentage(perc) => Self::Absolute(perc * rhs),
+        }
+    }
 }
 impl From<Value> for LengthPercentage {
     fn from(value: Value) -> Self {
@@ -210,6 +264,51 @@ impl Point {
     pub const fn new(x: Value, y: Value) -> Self {
         Self { x, y }
     }
+
+    pub const fn px(x: f32, y: f32) -> Self {
+        Self::new(Value::px(x), Value::px(y))
+    }
+
+    pub const fn perc(x: f32, y: f32) -> Self {
+        Self::new(Value::perc(x), Value::perc(y))
+    }
+
+    pub const fn splat(v: Value) -> Self {
+        Self::new(v, v)
+    }
+
+    pub const fn splat_px(px: f32) -> Self {
+        Self::splat(Value::px(px))
+    }
+
+    pub const fn splat_perc(perc: f32) -> Self {
+        Self::splat(Value::perc(perc))
+    }
+}
+impl From<f32> for Point {
+    fn from(value: f32) -> Self {
+        Self::px(value, value)
+    }
+}
+impl From<Value> for Point {
+    fn from(value: Value) -> Self {
+        Self::new(value, value)
+    }
+}
+impl From<glam::Vec2> for Point {
+    fn from(value: glam::Vec2) -> Self {
+        Self::px(value.x, value.y)
+    }
+}
+impl From<(f32, f32)> for Point {
+    fn from(value: (f32, f32)) -> Self {
+        Self::px(value.0, value.1)
+    }
+}
+impl From<[f32; 2]> for Point {
+    fn from(value: [f32; 2]) -> Self {
+        Self::px(value[0], value[1])
+    }
 }
 impl<T: From<Value>> From<Point> for Size<T> {
     fn from(value: Point) -> Self {
@@ -233,6 +332,24 @@ impl Rectangle {
     pub const MAX: Self = Self::new(Value::MAX, Value::MAX, Value::MAX, Value::MAX);
     pub const HALF: Self = Self::new(Value::HALF, Value::HALF, Value::HALF, Value::HALF);
 
+    pub const fn px(left: f32, top: f32, right: f32, bottom: f32) -> Self {
+        Self {
+            left: Value::px(left),
+            top: Value::px(top),
+            right: Value::px(right),
+            bottom: Value::px(bottom),
+        }
+    }
+
+    pub const fn perc(left: f32, top: f32, right: f32, bottom: f32) -> Self {
+        Self {
+            left: Value::perc(left),
+            top: Value::perc(top),
+            right: Value::perc(right),
+            bottom: Value::perc(bottom),
+        }
+    }
+
     pub const fn splat(value: Value) -> Self {
         Self {
             left: value,
@@ -242,6 +359,14 @@ impl Rectangle {
         }
     }
 
+    pub const fn splat_px(px: f32) -> Self {
+        Self::splat(Value::px(px))
+    }
+
+    pub const fn splat_perc(perc: f32) -> Self {
+        Self::splat(Value::perc(perc))
+    }
+
     pub const fn new(left: Value, top: Value, right: Value, bottom: Value) -> Self {
         Self {
             left,
@@ -249,6 +374,78 @@ impl Rectangle {
             right,
             bottom,
         }
+    }
+
+    pub const fn even(horiz: Value, vert: Value) -> Self {
+        Self::new(horiz, vert, horiz, vert)
+    }
+
+    pub const fn even_px(horiz: f32, vert: f32) -> Self {
+        Self::even(Value::px(horiz), Value::px(vert))
+    }
+
+    pub const fn even_perc(horiz: f32, vert: f32) -> Self {
+        Self::even(Value::perc(horiz), Value::perc(vert))
+    }
+}
+impl From<f32> for Rectangle {
+    fn from(value: f32) -> Self {
+        Self::splat_px(value)
+    }
+}
+impl From<Value> for Rectangle {
+    fn from(value: Value) -> Self {
+        Self::splat(value)
+    }
+}
+impl From<(f32, f32)> for Rectangle {
+    fn from((horiz, vert): (f32, f32)) -> Self {
+        Self::even_px(horiz, vert)
+    }
+}
+impl From<[f32; 2]> for Rectangle {
+    fn from([horiz, vert]: [f32; 2]) -> Self {
+        Self::even_px(horiz, vert)
+    }
+}
+impl From<glam::Vec2> for Rectangle {
+    fn from(p: glam::Vec2) -> Self {
+        Self::even_px(p.x, p.y)
+    }
+}
+impl From<(Value, Value)> for Rectangle {
+    fn from((horiz, vert): (Value, Value)) -> Self {
+        Self::even(horiz, vert)
+    }
+}
+impl From<Point> for Rectangle {
+    fn from(value: Point) -> Self {
+        Self::even(value.x, value.y)
+    }
+}
+impl From<(f32, f32, f32, f32)> for Rectangle {
+    fn from((left, top, right, bottom): (f32, f32, f32, f32)) -> Self {
+        Self::px(left, top, right, bottom)
+    }
+}
+impl From<[f32; 4]> for Rectangle {
+    fn from([left, top, right, bottom]: [f32; 4]) -> Self {
+        Self::px(left, top, right, bottom)
+    }
+}
+impl From<glam::Vec4> for Rectangle {
+    fn from(p: glam::Vec4) -> Self {
+        Self::px(p.x, p.y, p.z, p.w)
+    }
+}
+impl From<(Value, Value, Value, Value)> for Rectangle {
+    fn from((left, top, right, bottom): (Value, Value, Value, Value)) -> Self {
+        Self::new(left, top, right, bottom)
+    }
+}
+impl From<(Point, Point)> for Rectangle {
+    fn from((horiz, vert): (Point, Point)) -> Self {
+        Self::new(horiz.x, vert.x, horiz.y, vert.y)
     }
 }
 impl<T: From<Value>> From<Rectangle> for Rect<T> {

@@ -93,11 +93,9 @@ pub fn shade_mode_selector(system: &mut InterfaceSystem, root: WidgetId) -> Widg
 pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution) -> WidgetId {
     let this = UiPanel::new(resolution)
         .with_parent(root)
-        .with_layout(LayoutOptions {
-            layout_position: style_layout!(position-absolute 8.0, 500.0),
-            size: Some(style_layout!(420.0, 240.0)),
-            ..Default::default()
-        })
+        .with_offset((8.0, 500.0))
+        .with_size((420.0, 240.0))
+        .with_padding((0.0, 20.0, 0.0, 0.0))
         .builder(|mut stack, props| {
             stack.button(|button| {
                 button.builder(|_, props| {
@@ -122,61 +120,46 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution
             });
 
             stack.slider(|slider| {
-                slider
-                    .with_layout(LayoutOptions {
-                        padding: Some(style_layout!(horiz 0.0, vert 8.0)),
-                        ..Default::default()
-                    })
-                    .builder(|_, props| {
-                        props
-                            .with_text_contents(text_contents!(
-                                "graphics.gamma = ",
-                                |DEBUG_CTL_GRAPHICS_GAMMA: v_gamma| {
-                                    let norm = v_gamma.as_float().unwrap_or_default();
-                                    EnvValue::Float(Gamma::from_normalized(norm))
-                                }
-                            ))
-                            .with_starting_value(graphics::Gamma::DEFAULT_NORMALIZED)
-                            .with_sync_handle(DEBUG_CTL_GRAPHICS_GAMMA)
-                            .with_callback(slider_callback!(copy DEBUG_CTL_GRAPHICS_GAMMA))
-                    })
+                slider.with_padding((0.0, 8.0)).builder(|_, props| {
+                    props
+                        .with_text_contents(text_contents!(
+                            "graphics.gamma = ",
+                            |DEBUG_CTL_GRAPHICS_GAMMA: v_gamma| {
+                                let norm = v_gamma.as_float().unwrap_or_default();
+                                EnvValue::Float(Gamma::from_normalized(norm))
+                            }
+                        ))
+                        .with_starting_value(graphics::Gamma::DEFAULT_NORMALIZED)
+                        .with_sync_handle(DEBUG_CTL_GRAPHICS_GAMMA)
+                        .with_callback(slider_callback!(copy DEBUG_CTL_GRAPHICS_GAMMA))
+                })
             });
 
             stack.slider(|slider| {
-                slider
-                    .with_layout(LayoutOptions {
-                        padding: Some(style_layout!(horiz 0.0, vert 8.0)),
-                        ..Default::default()
-                    })
-                    .builder(|_, props| {
-                        props
-                            .with_text_contents(text_contents!(
-                                "shading.bias.roughness = ",
-                                DEBUG_CTL_SHADE_BIAS_ROUGHNESS
-                            ))
-                            .with_starting_value(0.0)
-                            .with_scroll_step(0.01)
-                            .with_sync_handle(DEBUG_CTL_SHADE_BIAS_ROUGHNESS)
-                            .with_callback(slider_callback!(copy DEBUG_CTL_SHADE_BIAS_ROUGHNESS))
-                    })
+                slider.with_padding((0.0, 8.0)).builder(|_, props| {
+                    props
+                        .with_text_contents(text_contents!(
+                            "shading.bias.roughness = ",
+                            DEBUG_CTL_SHADE_BIAS_ROUGHNESS
+                        ))
+                        .with_starting_value(0.0)
+                        .with_scroll_step(0.01)
+                        .with_sync_handle(DEBUG_CTL_SHADE_BIAS_ROUGHNESS)
+                        .with_callback(slider_callback!(copy DEBUG_CTL_SHADE_BIAS_ROUGHNESS))
+                })
             });
             stack.slider(|slider| {
-                slider
-                    .with_layout(LayoutOptions {
-                        padding: Some(style_layout!(horiz 0.0, vert 8.0)),
-                        ..Default::default()
-                    })
-                    .builder(|_, props| {
-                        props
-                            .with_text_contents(text_contents!(
-                                "shading.bias.metallic = ",
-                                DEBUG_CTL_SHADE_BIAS_METALLIC
-                            ))
-                            .with_starting_value(0.0)
-                            .with_scroll_step(0.01)
-                            .with_sync_handle(DEBUG_CTL_SHADE_BIAS_METALLIC)
-                            .with_callback(slider_callback!(copy DEBUG_CTL_SHADE_BIAS_METALLIC))
-                    })
+                slider.with_padding((0.0, 8.0)).builder(|_, props| {
+                    props
+                        .with_text_contents(text_contents!(
+                            "shading.bias.metallic = ",
+                            DEBUG_CTL_SHADE_BIAS_METALLIC
+                        ))
+                        .with_starting_value(0.0)
+                        .with_scroll_step(0.01)
+                        .with_sync_handle(DEBUG_CTL_SHADE_BIAS_METALLIC)
+                        .with_callback(slider_callback!(copy DEBUG_CTL_SHADE_BIAS_METALLIC))
+                })
             });
 
             props.with_floating(FloatGrabArea::top(20.0))
