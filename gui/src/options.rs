@@ -4,14 +4,16 @@ use ethel::TextureId;
 use janus::StringHash;
 
 use crate::{
-    ButtonCallback, FloatGrabArea, InteractableCallback, LayoutOptions, SliderCallback,
-    TextContents, WidgetId, look::LookId,
+    ButtonCallback, ComponentKind, FloatGrabArea, InteractableCallback, LayoutOptions,
+    SliderCallback, TextContents, WidgetId, look::LookId,
 };
 
 pub trait HasOptions {
     type Options: Default + Clone + Copy + Debug;
 
     fn complement_options(common: CommonWidgetOptions, this: Self::Options) -> ElementOptions;
+
+    fn archetype() -> ComponentKind;
 }
 
 #[derive(Debug)]
@@ -21,6 +23,10 @@ impl HasOptions for Panel {
 
     fn complement_options(common: CommonWidgetOptions, this: Self::Options) -> ElementOptions {
         ElementOptions::Panel(common, this)
+    }
+
+    fn archetype() -> ComponentKind {
+        ComponentKind::Panel(Default::default())
     }
 }
 
@@ -32,6 +38,13 @@ impl HasOptions for Button {
     fn complement_options(common: CommonWidgetOptions, this: Self::Options) -> ElementOptions {
         ElementOptions::Button(common, this)
     }
+
+    fn archetype() -> ComponentKind {
+        ComponentKind::Button {
+            handle: Default::default(),
+            text_handle: Default::default(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -41,6 +54,10 @@ impl HasOptions for Text {
 
     fn complement_options(common: CommonWidgetOptions, this: Self::Options) -> ElementOptions {
         ElementOptions::Text(common, this)
+    }
+
+    fn archetype() -> ComponentKind {
+        ComponentKind::Text(Default::default())
     }
 }
 
@@ -52,6 +69,10 @@ impl HasOptions for Image {
     fn complement_options(common: CommonWidgetOptions, this: Self::Options) -> ElementOptions {
         ElementOptions::Image(common, this)
     }
+
+    fn archetype() -> ComponentKind {
+        ComponentKind::Image(Default::default())
+    }
 }
 
 #[derive(Debug)]
@@ -61,6 +82,13 @@ impl HasOptions for Slider {
 
     fn complement_options(common: CommonWidgetOptions, this: Self::Options) -> ElementOptions {
         ElementOptions::Slider(common, this)
+    }
+
+    fn archetype() -> ComponentKind {
+        ComponentKind::Slider {
+            handle: Default::default(),
+            text_handle: Default::default(),
+        }
     }
 }
 
@@ -107,11 +135,11 @@ impl CommonWidgetOptions {
 }
 
 #[derive(Clone, Debug, Copy)]
-pub struct FloatParams {
+pub struct FloatPanelOptions {
     pub base_pos: Option<glam::Vec2>,
     pub grab_area: FloatGrabArea,
 }
-impl FloatParams {
+impl FloatPanelOptions {
     pub const DEFAULT_GRAB_SIZE: f32 = 16.0;
 
     pub const fn new() -> Self {
@@ -158,7 +186,7 @@ pub struct PanelOptions {
     pub hidden: bool,
     /// if present, any positional layout (flex, grid) is overriden with
     /// the absolute `base_pos` defined in [`FloatParams`]
-    pub floating: Option<FloatParams>,
+    pub floating: Option<FloatPanelOptions>,
 }
 impl PanelOptions {
     pub const fn new() -> Self {
@@ -172,18 +200,29 @@ impl PanelOptions {
         Self::new().with_hidden(true)
     }
 
-    pub const fn floating(grab: FloatGrabArea, base_offset: Option<glam::Vec2>) -> Self {
-        Self::new().with_floating(FloatParams {
+    pub const fn floating_at(grab: FloatGrabArea, base_offset: Option<glam::Vec2>) -> Self {
+        Self::new().with_floating_options(FloatPanelOptions {
             base_pos: base_offset,
             grab_area: grab,
         })
+    }
+
+    pub const fn floating(grab: FloatGrabArea) -> Self {
+        Self::floating_at(grab, None)
     }
 
     pub const fn with_hidden(self, hidden: bool) -> Self {
         Self { hidden, ..self }
     }
 
-    pub const fn with_floating(self, floating: FloatParams) -> Self {
+    pub const fn with_floating(self, grab_area: FloatGrabArea) -> Self {
+        self.with_floating_options(FloatPanelOptions {
+            base_pos: None,
+            grab_area,
+        })
+    }
+
+    pub const fn with_floating_options(self, floating: FloatPanelOptions) -> Self {
         Self {
             floating: Some(floating),
             ..self
@@ -392,6 +431,13 @@ impl SliderOptions {
     pub const fn with_text(self, text: TextOptions) -> Self {
         Self {
             text: Some(text),
+            ..self
+        }
+    }
+
+    pub const fn with_text_contents(self, text_contents: TextContents) -> Self {
+        Self {
+            text: Some(TextOptions::from_contents(text_contents)),
             ..self
         }
     }

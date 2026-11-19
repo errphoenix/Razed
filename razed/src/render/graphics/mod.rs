@@ -19,16 +19,16 @@ impl Gamma {
     pub const INV_MAX: f32 = 1.0 / Self::MAX;
     pub const DEFAULT_NORMALIZED: f32 = Self::DEFAULT * Self::INV_MAX;
 
-    pub const fn new_clamped(gamma: f32) -> Self {
-        Self(gamma.clamp(0f32, Self::MAX))
+    pub const fn from_normalized(normalized: f32) -> f32 {
+        if normalized < 0f32 {
+            Self::DEFAULT
+        } else {
+            normalized * Self::MAX
+        }
     }
 
-    pub const fn from_normalized(normalized: f32) -> Self {
-        if normalized < 0f32 {
-            Self(Self::DEFAULT)
-        } else {
-            Self::new_clamped(normalized * Self::MAX)
-        }
+    pub const fn new_clamped(gamma: f32) -> Self {
+        Self(gamma.clamp(0f32, Self::MAX))
     }
 
     pub const fn as_f32(&self) -> f32 {

@@ -1,11 +1,45 @@
 use std::fmt::Debug;
 
+use ethel::Resolution;
+
 use crate::{
-    CommonWidgetOptions, HasOptions, InterfaceSystem, LayoutOptions, WidgetId, look::LookId,
+    ButtonOptions, CommonWidgetOptions, ComponentKind, HasOptions, ImageOptions, InterfaceSystem,
+    LayoutOptions, PanelOptions, Rectangle, TextContents, TextOptions, Value, WidgetId,
+    look::LookId, options::SliderOptions,
 };
 
 pub trait HasUi: Debug {
     fn build_node(&self, parent: Option<WidgetId>, interface: &mut InterfaceSystem) -> WidgetId;
+
+    fn archetype(&self) -> ComponentKind;
+
+    fn additional_margin(&self) -> Option<Rectangle> {
+        None
+    }
+
+    fn additional_padding(&self) -> Option<Rectangle> {
+        None
+    }
+
+    fn is_panel(&self) -> bool {
+        matches!(self.archetype(), ComponentKind::Panel(..))
+    }
+
+    fn is_button(&self) -> bool {
+        matches!(self.archetype(), ComponentKind::Button { .. })
+    }
+
+    fn is_text(&self) -> bool {
+        matches!(self.archetype(), ComponentKind::Text(..))
+    }
+
+    fn is_image(&self) -> bool {
+        matches!(self.archetype(), ComponentKind::Image(..))
+    }
+
+    fn is_slider(&self) -> bool {
+        matches!(self.archetype(), ComponentKind::Slider { .. })
+    }
 }
 
 pub type UiPanel = UiNode<crate::options::Panel>;
@@ -15,19 +49,78 @@ pub type UiImage = UiNode<crate::options::Image>;
 pub type UiSlider = UiNode<crate::options::Slider>;
 
 #[derive(Debug)]
-pub struct UiNodeStack<'stack>(&'stack mut Vec<Box<dyn HasUi>>);
+pub struct UiNodeStack<'stack> {
+    reference_resolution: Resolution,
+    inner: &'stack mut Vec<Box<dyn HasUi>>,
+}
 impl UiNodeStack<'_> {
     pub fn push_mut(&mut self, node: impl HasUi + 'static) -> &mut Box<dyn HasUi> {
-        self.0.push_mut(Box::new(node))
+        self.inner.push_mut(Box::new(node))
     }
 
     pub fn push(&mut self, node: impl HasUi + 'static) {
         let _ = self.push_mut(node);
     }
+
+    pub fn panel(&mut self, panel_op: impl FnOnce(UiPanel) -> UiPanel) {
+        self.push(panel_op(UiPanel::new(self.reference_resolution)));
+    }
+
+    pub fn panel_from(&mut self, panel_options: PanelOptions) {
+        self.push(UiPanel::from(panel_options, self.reference_resolution));
+    }
+
+    pub fn button(&mut self, button_op: impl FnOnce(UiButton) -> UiButton) {
+        self.push(button_op(UiButton::new(self.reference_resolution)));
+    }
+
+    pub fn button_from(&mut self, button_options: ButtonOptions) {
+        self.push(UiButton::from(button_options, self.reference_resolution));
+    }
+
+    pub fn text(&mut self, text_op: impl FnOnce(UiText) -> UiText) {
+        self.push(text_op(UiText::new(self.reference_resolution)));
+    }
+
+    pub fn text_from(&mut self, contents: TextContents) {
+        self.text(|text| text.builder(|_, props| props.with_contents(contents)));
+    }
+
+    pub fn text_literal(&mut self, text_literal: &'static str) {
+        self.push(
+            UiText::new(self.reference_resolution)
+                .builder(|_, props| props.with_contents_literal(text_literal)),
+        );
+    }
+
+    pub fn text_from_options(&mut self, text_options: TextOptions) {
+        self.push(UiText::from(text_options, self.reference_resolution));
+    }
+
+    pub fn image(&mut self, image_op: impl FnOnce(UiImage) -> UiImage) {
+        self.push(image_op(UiImage::new(self.reference_resolution)));
+    }
+
+    pub fn image_from(&mut self, image_options: ImageOptions) {
+        self.push(UiImage::from(image_options, self.reference_resolution));
+    }
+
+    pub fn slider(&mut self, slider_op: impl FnOnce(UiSlider) -> UiSlider) {
+        self.push(slider_op(UiSlider::new(self.reference_resolution)));
+    }
+
+    pub fn slider_from(&mut self, slider_options: SliderOptions) {
+        self.push(UiSlider::from(slider_options, self.reference_resolution));
+    }
+
+    pub const fn reference_resolution(&self) -> Resolution {
+        self.reference_resolution
+    }
 }
 
 #[derive(Debug)]
 pub struct UiNode<T: HasOptions> {
+    reference_resolution: Resolution,
     commons: CommonWidgetOptions,
     options: T::Options,
     children: Vec<Box<dyn HasUi>>,
@@ -35,6 +128,7 @@ pub struct UiNode<T: HasOptions> {
 impl<T: HasOptions> Default for UiNode<T> {
     fn default() -> Self {
         Self {
+            reference_resolution: Resolution::default(),
             commons: CommonWidgetOptions::new(),
             options: Default::default(),
             children: Vec::new(),
@@ -47,6 +141,16 @@ impl<T: HasOptions + Debug> HasUi for UiNode<T> {
         if parent.is_some() {
             commons.parent = parent;
         }
+
+        if let Some(margin) = self.additional_margin() {
+            let current = commons.layout.margin.unwrap_or_default();
+            commons.layout.margin = Some(sum_rects(current, margin, self.reference_resolution));
+        }
+        if let Some(padding) = self.additional_padding() {
+            let current = commons.layout.padding.unwrap_or_default();
+            commons.layout.padding = Some(sum_rects(current, padding, self.reference_resolution));
+        }
+
         let options = T::complement_options(commons, self.options);
         let id = interface.create_element(options).unwrap().0;
         for child in &self.children {
@@ -54,15 +158,23 @@ impl<T: HasOptions + Debug> HasUi for UiNode<T> {
         }
         id
     }
+
+    fn archetype(&self) -> ComponentKind {
+        T::archetype()
+    }
 }
 impl<T: HasOptions + Debug> UiNode<T> {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(reference_resolution: Resolution) -> Self {
+        Self {
+            reference_resolution,
+            ..Default::default()
+        }
     }
 
-    pub fn from(options: T::Options) -> Self {
+    pub fn from(options: T::Options, reference_resolution: Resolution) -> Self {
         Self {
             options,
+            reference_resolution,
             ..Default::default()
         }
     }
@@ -91,7 +203,13 @@ impl<T: HasOptions + Debug> UiNode<T> {
         mut self,
         operation: F,
     ) -> Self {
-        self.options = operation(UiNodeStack(&mut self.children), self.options);
+        self.options = operation(
+            UiNodeStack {
+                reference_resolution: self.reference_resolution,
+                inner: &mut self.children,
+            },
+            self.options,
+        );
         self
     }
 
@@ -462,11 +580,84 @@ macro_rules! style_layout {
     (bottom $v:expr) => { $crate::style_layout!($crate::style_layout!(0.0), $crate::style_layout!(0.0), $crate::style_layout!(0.0), $v) };
 }
 
+#[macro_export]
+macro_rules! button_callback {
+    (set $id:ident $value:expr) => {
+        $crate::ButtonCallback::Once(|env, _| {
+            env.insert($id, $value);
+        })
+    };
+    (toggle $id:ident) => {
+        $crate::ButtonCallback::Once(|env, _| env.toggle_boolean(&$id))
+    };
+    (increment $id:ident $($by:expr)?) => {
+        $crate::ButtonCallback::Once(|env, _| {
+            let value = env.get_integer(&$id);
+            env.insert($id, value + 1 $(+ $by - 1)?);
+        })
+    };
+    (hold $id:ident $($factor:expr)?) => {
+        $crate::ButtonCallback::Repeating(|env, data| {
+            env.insert($id, data.seconds $(* $factor)?);
+        })
+    };
+}
+
+#[macro_export]
+macro_rules! slider_callback {
+    (copy $id:ident) => {
+        $crate::SliderCallback::Repeating(|env, value| {
+            env.insert($id, *value);
+        })
+    };
+    (map $id:ident $op:expr) => {
+        $crate::SliderCallback::Repeating(|env, value| {
+            let value = $op(*value);
+            env.insert($id, value);
+        })
+    };
+    (map $id:ident $min:expr, $max:expr) => {
+        $crate::SliderCallback::Repeating(|env, value| {
+            let value = ($min as f32) + (($max as f32 - $min as f32) * *value);
+            env.insert($id, value);
+        })
+    };
+}
+
+fn sum_rects(a: Rectangle, b: Rectangle, scaling_reference: Resolution) -> Rectangle {
+    Rectangle {
+        left: sum_values(a.left, b.left, scaling_reference.width),
+        top: sum_values(a.top, b.top, scaling_reference.height),
+        right: sum_values(a.right, b.right, scaling_reference.width),
+        bottom: sum_values(a.bottom, b.bottom, scaling_reference.height),
+    }
+}
+
+fn sum_values(a: Value, b: Value, scaling_reference: f32) -> Value {
+    match a {
+        Value::Absolute(a_px) => match b {
+            Value::Absolute(b_px) => Value::Absolute(a_px + b_px),
+            Value::Percentage(b_perc) => {
+                let a_perc = a_px / scaling_reference;
+                Value::Percentage(a_perc + b_perc)
+            }
+        },
+        Value::Percentage(a_perc) => match b {
+            Value::Absolute(b_px) => {
+                let b_perc = b_px / scaling_reference;
+                Value::Percentage(a_perc + b_perc)
+            }
+            Value::Percentage(b_perc) => Value::Percentage(a_perc + b_perc),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     use ethel::Resolution;
+    use janus::StringHash;
 
     use crate::{ButtonOptions, CommonWidgetOptions, InterfaceSystem, env::UiEnv};
 
@@ -536,24 +727,50 @@ mod tests {
 
     #[test]
     fn declare_with_stack() {
-        let root = UiPanel::new();
-
-        root.builder(|mut stack, options| {
-            stack.push(UiButton::from(ButtonOptions::labelled_literal(
-                "some button",
-            )));
-
-            stack.push(UiPanel::new().builder(|mut stack, options| {
-                stack.push(UiSlider::new().builder(|_, options| {
-                    options.with_text_literal("slideee").with_vertical(true)
-                }));
-                stack.push(
-                    UiButton::new()
-                        .builder(|_, options| options.with_label_literal("another button")),
-                );
-                options
-            }));
+        let resolution = Resolution::default();
+        let _ = UiPanel::new(resolution).builder(|mut stack, options| {
+            stack.button_from(ButtonOptions::labelled_literal("some button"));
+            stack.panel(|panel| {
+                panel.builder(|mut stack, options| {
+                    stack.slider(|slider| {
+                        slider.builder(|_, options| {
+                            options.with_text_literal("slideee").with_vertical(true)
+                        })
+                    });
+                    stack.button(|button| {
+                        button.builder(|_, options| options.with_label_literal("another button"))
+                    });
+                    options
+                })
+            });
             options
         });
+    }
+
+    #[test]
+    fn declare_callbacks() {
+        const ID: StringHash = janus::hash_string("test-id");
+
+        let _ = button_callback!(set ID 0.3);
+        let _ = button_callback!(toggle ID);
+        let _ = button_callback!(increment ID);
+        let _ = button_callback!(hold ID);
+        let _ = button_callback!(hold ID 0.5);
+
+        fn map_test_1(v: f32) -> f32 {
+            v + 0.5
+        }
+
+        struct Mapping;
+        impl Mapping {
+            fn map(v: f32) -> f32 {
+                v + 0.25
+            }
+        }
+
+        let _ = slider_callback!(copy ID);
+        let _ = slider_callback!(map ID -1.0, 1.0);
+        let _ = slider_callback!(map ID map_test_1);
+        let _ = slider_callback!(map ID Mapping::map);
     }
 }

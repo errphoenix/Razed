@@ -2,8 +2,8 @@ use taffy::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum ItemAlignment {
-    #[default]
     Auto,
+    #[default]
     Stretch,
     Baseline,
 
@@ -28,8 +28,8 @@ impl TryFrom<ItemAlignment> for taffy::AlignItems {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum ContentAlignment {
-    #[default]
     Auto,
+    #[default]
     Stretch,
 
     Start,
@@ -59,8 +59,8 @@ impl TryFrom<ContentAlignment> for taffy::AlignContent {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum Wrap {
-    #[default]
     DontWrap,
+    #[default]
     Wrap,
     Reverse,
 }
@@ -95,8 +95,8 @@ impl From<GridFlow> for taffy::GridAutoFlow {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum FlexDirection {
-    #[default]
     Row,
+    #[default]
     Column,
     RowReverse,
     ColumnReverse,

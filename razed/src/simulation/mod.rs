@@ -44,10 +44,10 @@ use ethel::{
 };
 use glam::Vec4Swizzles;
 use gui::{
-    InterfaceSystem, WidgetId,
+    InterfaceSystem,
     text::{GlyphAtlas, GlyphRaster},
 };
-use janus::{Cursor, DeltaTime, StringMap, sync::TriCell};
+use janus::{Cursor, DeltaTime, sync::TriCell};
 use physics::{force::ForcesRegistry, rigid::RbVelocity};
 
 pub type FragmentsSpatialHash = FxLsSpatialHash<IndirectIndex>;
@@ -114,7 +114,6 @@ pub struct State {
     perf_avg: PerfAverages,
 
     ui_system: InterfaceSystem,
-    ui_map: StringMap<(WidgetId, IndirectIndex)>,
 
     pub glyph_atlas: GlyphAtlas,
     pub glyph_pipe: Option<crossbeam::channel::Sender<GlyphRaster>>,
@@ -162,10 +161,9 @@ const CAMERA_PITCH_CLAMP: std::ops::Range<f32> =
 
 impl Default for State {
     fn default() -> Self {
-        let (ui_system, ui_map) = crate::ui::initialize_default(Resolution::default());
+        let ui_system = crate::ui::initialize_default(Resolution::default());
         Self {
             ui_system,
-            ui_map,
             first_frame: true,
             sim_control: SimCtl::default(),
             lattice: LatticeSystem::new(XpbdSolver::new(
@@ -193,7 +191,7 @@ impl Default for State {
             render_frame_time: Default::default(),
             perf_avg: Default::default(),
             glyph_pipe: None,
-            selected_material: 1,
+            selected_material: 2,
             attributes_shading_mode: None,
             render_stats_cpy: RenderStats::default(),
             damage_sys: DamageSystem::new(),
@@ -277,7 +275,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                     .get(&DEBUG_CTL_GRAPHICS_GAMMA)
                     .and_then(|v| v.as_float())
                 {
-                    let gamma = Gamma::from_normalized(gamma_n);
+                    let gamma = Gamma::new_clamped(Gamma::from_normalized(gamma_n));
                     render_params.gamma.set_and_advance(gamma).unwrap();
                 }
 
@@ -674,7 +672,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         }
         if self.damage_mode {
             const CLOUD_RADIUS: f32 = 8f32;
-            const CLOUD_DAMAGE: f32 = 4.0;
+            const CLOUD_DAMAGE: f32 = 15.0;
             const CLOUD_STRENGTH: f32 = 12.0; //MN
 
             if let Some(position) = self.mouse_world_pos {
@@ -763,12 +761,14 @@ impl State {
             }
             None
         });
-        self.mouse_world_pos = cell.map(|cell| HASH_RESOLUTION.approx_point(cell));
+        self.mouse_world_pos = cell.map(|cell| {
+            let c = HASH_RESOLUTION.approx_point(cell);
+            c - HASH_RESOLUTION.get() * 0.5
+        });
     }
 
     pub fn update_environment(&mut self) {
         use crate::ui::env_names::*;
-        use crate::ui::widget_names::*;
 
         {
             let profiler_action = {
@@ -874,31 +874,6 @@ impl State {
             );
             env.insert(SIM_CTL_SPEED, self.sim_control.speed);
         }
-
-        crate::ui::button_color_state(
-            &[(DEBUG_CTL_DISPLAY_VSYNC, DEBUG_CTL_DISPLAY_VSYNC_BUTTON)],
-            &self.ui_map,
-            &mut self.ui_system.buttons,
-            &self.ui_system.environment,
-        );
-        crate::ui::button_color_state(
-            &[(DEBUG_CTL_RENDER_LATTICE, DEBUG_CTL_RENDER_LATTICE_BUTTON)],
-            &self.ui_map,
-            &mut self.ui_system.buttons,
-            &self.ui_system.environment,
-        );
-        crate::ui::button_color_state(
-            &[(DEBUG_CTL_RENDER_CAGE, DEBUG_CTL_RENDER_CAGE_BUTTON)],
-            &self.ui_map,
-            &mut self.ui_system.buttons,
-            &self.ui_system.environment,
-        );
-        crate::ui::button_color_state(
-            &[(DEBUG_CTL_GROUND_DRAW, DEBUG_CTL_GROUND_DRAW_BUTTON)],
-            &self.ui_map,
-            &mut self.ui_system.buttons,
-            &self.ui_system.environment,
-        );
     }
 
     #[allow(unused)]

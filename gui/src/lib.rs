@@ -45,8 +45,8 @@ use crate::{
 
 #[allow(unused_imports)]
 pub use options::{
-    ButtonOptions, CommonWidgetOptions, ElementOptions, FloatParams, HasOptions, ImageOptions,
-    PanelOptions, Slider, TextOptions,
+    ButtonOptions, CommonWidgetOptions, ElementOptions, FloatPanelOptions, HasOptions,
+    ImageOptions, PanelOptions, Slider, TextOptions,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -188,6 +188,22 @@ pub enum FloatGrabArea {
 }
 impl FloatGrabArea {
     pub const DEFAULT_HEIGHT: f32 = 22f32;
+
+    pub const fn top(height: f32) -> Self {
+        Self::SectionHoriz { height }
+    }
+
+    pub const fn side(width: f32) -> Self {
+        Self::SectionVert { width }
+    }
+
+    pub const fn corner_square(side: f32) -> Self {
+        Self::corner(side, side)
+    }
+
+    pub const fn corner(width: f32, height: f32) -> Self {
+        Self::Corner { width, height }
+    }
 }
 impl Default for FloatGrabArea {
     fn default() -> Self {
@@ -1105,7 +1121,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         &mut self,
         id: WidgetId,
         hidden: bool,
-        float_params: Option<FloatParams>,
+        float_params: Option<FloatPanelOptions>,
     ) -> Result<IndirectIndex, WidgetError> {
         if let Some(commons_id) = self.commons.solve_indirect(id.0) {
             self.assert_null_archetype(commons_id)?;

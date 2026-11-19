@@ -1,91 +1,41 @@
-use ethel::{Column, IndirectIndex, Resolution};
+use ethel::{IndirectIndex, Resolution};
 use gui::{
     ButtonOptions, CommonWidgetOptions, ContainerLayout, ElementOptions, FloatGrabArea,
-    FloatParams, InteractableCallback, InterfaceSystem, ItemAlignment, LayoutOptions,
-    LayoutPosition, PanelOptions, Point, Rectangle, SliderOptions, TextContents, TextNode,
-    TextOptions, Value, WidgetId, env::EnvValue, style_layout,
+    InteractableCallback, InterfaceSystem, ItemAlignment, LayoutOptions, PanelOptions, Point,
+    Rectangle, TextContents, TextNode, TextOptions, Value, WidgetId, declare::UiPanel,
+    env::EnvValue, style_layout,
 };
-use janus::{StringHash, StringMap};
 
 use env_names::*;
 
 use crate::render::graphics::Gamma;
 
 #[allow(unused_imports)]
-use crate::{
-    render::graphics,
-    ui::{env_names::*, widget_names::*},
-};
+use crate::{render::graphics, ui::env_names::*};
 
 pub mod ctlpanel;
 pub mod infopanel;
 
+pub const DEV_PANEL_PADDING: Option<Rectangle> = Some(style_layout!(6.0, 26.0, 6.0, 6.0));
+
 pub const COLORTINT_HOVER_INVARIANT: glam::Vec4 = glam::vec4(0f32, 0f32, 0f32, 1f32);
 
-pub fn initialize_default(
-    resolution: Resolution,
-) -> (InterfaceSystem, StringMap<(WidgetId, IndirectIndex)>) {
+pub fn initialize_default(resolution: Resolution) -> InterfaceSystem {
     let mut system = InterfaceSystem::new(resolution);
-    let mut map = StringMap::default();
-    let root = system
-        .create_element(ElementParams::Panel(
-            CoreElementParams {
-                parent: None,
-                children: None,
-                layer: 5,
-                layout: LayoutOptions {
-                    container: style_layout!(container - block),
-                    align_self: style_layout!(align - item - stretch),
-                    justify_self: style_layout!(align - item - stretch),
-                    layout_position: style_layout!(position - relative),
-                    size: Some(style_layout!(splat 0.0)),
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            PanelOptions::default(),
-        ))
-        .unwrap()
-        .0;
+    let root = UiPanel::new(resolution)
+        .with_layout(LayoutOptions {
+            layout_position: style_layout!(position - relative),
+            size: Some(style_layout!(splat 0.0)),
+            ..Default::default()
+        })
+        .apply(&mut system);
 
-    infopanel::root(&mut system, root);
-    ctlpanel::root(&mut system, root, &mut map);
-    ctlpanel::groundctl::root(&mut system, root, &mut map);
-    ctlpanel::profile::root(&mut system, root);
+    infopanel::root(&mut system, root, resolution);
+    ctlpanel::root(&mut system, root, resolution);
+    ctlpanel::groundctl::root(&mut system, root, resolution);
+    ctlpanel::profile::root(&mut system, root, resolution);
 
-    (system, map)
-}
-
-pub(crate) fn button_color_state(
-    env_id_map: &[(StringHash, StringHash)],
-    ui_map: &StringMap<(WidgetId, IndirectIndex)>,
-    buttons: &mut InterfaceButtonRowTable,
-    env: &UiEnv,
-) {
-    env_id_map.iter().for_each(|(var, id)| {
-        if let Some(var) = env.get(var).and_then(|v| v.as_boolean()) {
-            if let Some((_, id)) = ui_map.get(id).copied() {
-                let did = buttons.solve_indirect(id).unwrap();
-                buttons.base_color[did.as_index()] =
-                    if var { glam::Vec3::Y } else { glam::Vec3::X };
-            }
-        }
-    });
-}
-
-pub mod widget_names {
-    use janus::StringHash;
-
-    pub const DEBUG_CTL_DISPLAY_VSYNC_BUTTON: StringHash =
-        janus::hash_string("__debug.control.display.vsync:button");
-
-    pub const DEBUG_CTL_RENDER_LATTICE_BUTTON: StringHash =
-        janus::hash_string("__debug.control.render.lattice:button");
-    pub const DEBUG_CTL_RENDER_CAGE_BUTTON: StringHash =
-        janus::hash_string("__debug.control.render.cage:button");
-
-    pub const DEBUG_CTL_GROUND_DRAW_BUTTON: StringHash =
-        janus::hash_string("__debug.control.ground.draw:button");
+    system
 }
 
 pub mod env_names {
@@ -148,38 +98,4 @@ pub mod env_names {
     pub const PROFILER_RUNNING: StringHash = janus::hash_string("profiler.running");
     pub const PROFILER_FRAME_COUNT: StringHash = janus::hash_string("profiler.frame_count");
     pub const PROFILER_ACTION: StringHash = janus::hash_string("profiler.running/toggle");
-}
-
-pub fn params_panel_dev_options(
-    parent: Option<WidgetId>,
-    layout_position: LayoutPosition,
-    size: Option<Point>,
-) -> ElementOptions {
-    ElementOptions::Panel(
-        CommonWidgetOptions {
-            parent,
-            layer: 5,
-            layout: LayoutOptions {
-                container: ContainerLayout::Flexbox {
-                    direction: style_layout!(flex - column),
-                    wrap: style_layout!(flex - wrap),
-                    justify_content: style_layout!(align - content - stretch),
-                    align_content: style_layout!(align - content - stretch),
-                    align_items: style_layout!(align - item - stretch),
-                },
-                padding: Some(style_layout!(6.0, 26.0, 6.0, 6.0)),
-                layout_position,
-                size,
-                ..Default::default()
-            },
-            ..Default::default()
-        },
-        PanelOptions {
-            floating: Some(FloatParams {
-                base_pos: None,
-                grab_area: FloatGrabArea::SectionHoriz { height: 20f32 },
-            }),
-            ..Default::default()
-        },
-    )
 }

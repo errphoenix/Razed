@@ -1,132 +1,90 @@
+use gui::{
+    declare::{UiPanel, UiText},
+    text_contents,
+};
+
 pub use super::*;
 
-pub fn root(system: &mut InterfaceSystem, root: WidgetId) -> WidgetId {
-    let root = system
-        .create_element(ElementOptions::Panel(
-            CommonWidgetOptions {
-                parent: Some(root),
-                layer: 5,
-                layout: LayoutOptions {
-                    container: ContainerLayout::Flexbox {
-                        direction: style_layout!(flex - column),
-                        wrap: style_layout!(flex - wrap),
-                        justify_content: style_layout!(align - content - stretch),
-                        align_content: style_layout!(align - content - stretch),
-                        align_items: style_layout!(align - item - stretch),
-                    },
-                    justify_self: style_layout!(align - item - start),
-                    align_self: style_layout!(align - item - start),
-                    layout_position: style_layout!(position-absolute 8.0, 8.0),
-                    size: Some(style_layout!(840.0, 420.0)),
-                    padding: Some(style_layout!(sq 10.0)),
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            Default::default(),
-        ))
-        .unwrap()
-        .0;
+pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution) -> WidgetId {
+    let panel = UiPanel::new(resolution)
+        .with_parent(root)
+        .with_layout(LayoutOptions {
+            layout_position: style_layout!(position-absolute 8.0, 8.0),
+            size: Some(style_layout!(840.0, 420.0)),
+            padding: Some(style_layout!(sq 10.0)),
+            ..Default::default()
+        })
+        .apply(system);
 
     let mut debug_text = |contents: TextContents| {
-        system
-            .create_element(ElementOptions::Text(
-                CommonWidgetOptions {
-                    parent: Some(root),
-                    layer: 5,
-                    layout: LayoutOptions {
-                        align_self: style_layout!(align - item - stretch),
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-                TextOptions {
-                    contents,
-                    font_size: 16f32,
-                    line_height: 18f32,
-                    ..Default::default()
-                },
-            ))
-            .unwrap();
+        UiText::new(resolution)
+            .with_parent(panel)
+            .with_layout(LayoutOptions {
+                align_self: style_layout!(align - item - stretch),
+                ..Default::default()
+            })
+            .builder(|_, props| props.with_contents(contents))
+            .apply(system)
     };
 
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("FPS = "),
-        TextNode::Variable(DEBUG_PERF_FPS_AVG),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("TPS = "),
-        TextNode::Variable(DEBUG_PERF_TPS_TOTAL),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("Frame::Duration.Simulation = "),
-        TextNode::Variable(DEBUG_PERF_LAST_SIMUL_FRAME_TIME_MILLIS),
-        TextNode::Static("ms"),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("Frame::Duration.Render = "),
-        TextNode::Variable(DEBUG_PERF_LAST_RENDER_FRAME_TIME_MILLIS),
-        TextNode::Static("ms"),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("World::Lattice.Nodes = "),
-        TextNode::Variable(DEBUG_COUNTER_LATTICE_NODES),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("World::Lattice.Constraints = "),
-        TextNode::Variable(DEBUG_COUNTER_LATTICE_CONSTRAINTS),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("World::Fragments = "),
-        TextNode::Variable(DEBUG_COUNTER_FRAGMENTS),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("World::Cages = "),
-        TextNode::Variable(DEBUG_COUNTER_CAGES),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("World::Debris "),
-        TextNode::Variable(DEBUG_COUNTER_DEBRIS),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("Sim::State = "),
-        TextNode::Variable(SIM_CTL_STATE),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("Sim::Speed = "),
-        TextNode::Variable(SIM_CTL_SPEED),
-    ]));
+    debug_text(text_contents!("FPS = ", DEBUG_PERF_FPS_AVG));
+    debug_text(text_contents!("TPS = ", DEBUG_PERF_TPS_TOTAL));
+    debug_text(text_contents!(
+        "Frame::Duration.Simulation = ",
+        DEBUG_PERF_LAST_SIMUL_FRAME_TIME_MILLIS,
+        "ms"
+    ));
+    debug_text(text_contents!(
+        "Frame::Duration.Render = ",
+        DEBUG_PERF_LAST_RENDER_FRAME_TIME_MILLIS,
+        "ms"
+    ));
 
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("GeomBank::VertexUse = "),
-        TextNode::Variable(DEBUG_RENDER_GBANK_VUSE_PERC),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("GeomBank::TrisUse = "),
-        TextNode::Variable(DEBUG_RENDER_GBANK_TUSE_PERC),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("GeomBank::TrisCount/w-cull = "),
-        TextNode::Variable(DEBUG_RENDER_GBANK_TRIS_COUNT),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("GeomBank::MemoryUse = "),
-        TextNode::VariableAnd {
-            env_id: DEBUG_RENDER_GBANK_MEMPRINT,
-            operation: |ev| {
-                let b = ev.as_integer().unwrap_or_default();
-                EnvValue::Float(b as f32 / 1024f32) // convert to kb
-            },
+    debug_text(text_contents!(
+        "World::Lattice.Nodes = ",
+        DEBUG_COUNTER_LATTICE_NODES,
+    ));
+    debug_text(text_contents!(
+        "World::Lattice.Constraints = ",
+        DEBUG_COUNTER_LATTICE_CONSTRAINTS,
+    ));
+    debug_text(text_contents!(
+        "World::Fragments = ",
+        DEBUG_COUNTER_FRAGMENTS,
+    ));
+    debug_text(text_contents!("World::Cages = ", DEBUG_COUNTER_CAGES,));
+    debug_text(text_contents!("World::Debris = ", DEBUG_COUNTER_DEBRIS,));
+
+    debug_text(text_contents!("Sim::State = ", SIM_CTL_STATE,));
+    debug_text(text_contents!("Sim::Speed = ", SIM_CTL_SPEED,));
+
+    debug_text(text_contents!(
+        "GeomBank::VertexUse = ",
+        DEBUG_RENDER_GBANK_VUSE_PERC,
+    ));
+    debug_text(text_contents!(
+        "GeomBank::TrisUse = ",
+        DEBUG_RENDER_GBANK_TUSE_PERC,
+    ));
+    debug_text(text_contents!(
+        "GeomBank::TrisCount/w-cull = ",
+        DEBUG_RENDER_GBANK_TRIS_COUNT,
+    ));
+    debug_text(text_contents!(
+        "GeomBank::MemoryUse = ",
+        |DEBUG_RENDER_GBANK_MEMPRINT: var| {
+            EnvValue::Float(var.as_integer().unwrap_or_default() as f32 / 1024.0)
         },
-        TextNode::Static(" KB"),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("GeomBank::Instances = "),
-        TextNode::Variable(DEBUG_RENDER_GBANK_INSTANCE_COUNT),
-    ]));
-    debug_text(TextContents::from_nodes(&[
-        TextNode::Static("GeomBank::InstanceLists = "),
-        TextNode::Variable(DEBUG_RENDER_GBANK_INSTANCELIST_COUNT),
-    ]));
-    root
+        " KB"
+    ));
+    debug_text(text_contents!(
+        "GeomBank::Instances = ",
+        DEBUG_RENDER_GBANK_INSTANCE_COUNT
+    ));
+    debug_text(text_contents!(
+        "GeomBank::InstanceLists = ",
+        DEBUG_RENDER_GBANK_INSTANCELIST_COUNT
+    ));
+
+    panel
 }

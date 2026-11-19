@@ -74,6 +74,14 @@ impl UiEnv {
     pub fn get_boolean(&self, id: &StringHash) -> bool {
         self.get_boolean_or(id, false)
     }
+
+    pub fn toggle_boolean(&mut self, id: &StringHash) {
+        if let Some(b) = self.get_mut(id).map(|v| v.as_boolean_mut()).flatten() {
+            b.toggle();
+            return;
+        }
+        self.insert(*id, true);
+    }
 }
 
 #[derive(Default, Clone, Debug, PartialEq, PartialOrd)]
@@ -234,6 +242,26 @@ impl From<i16> for EnvValue {
 }
 impl From<u16> for EnvValue {
     fn from(value: u16) -> Self {
+        Self::Integer(value as i32)
+    }
+}
+impl From<i64> for EnvValue {
+    fn from(value: i64) -> Self {
+        Self::Integer(value as i32)
+    }
+}
+impl From<u64> for EnvValue {
+    fn from(value: u64) -> Self {
+        Self::Integer(value as i32)
+    }
+}
+impl From<i8> for EnvValue {
+    fn from(value: i8) -> Self {
+        Self::Integer(value as i32)
+    }
+}
+impl From<u8> for EnvValue {
+    fn from(value: u8) -> Self {
         Self::Integer(value as i32)
     }
 }

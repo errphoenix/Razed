@@ -1,4 +1,4 @@
-use gui::{ButtonCallback, DEFAULT_GENERIC_COLOR, FloatGrabArea, FloatParams};
+use gui::{ButtonCallback, button_callback, declare::UiPanel, slider_callback, text_contents};
 
 pub mod groundctl;
 pub mod profile;
@@ -90,148 +90,100 @@ pub fn shade_mode_selector(system: &mut InterfaceSystem, root: WidgetId) -> Widg
     panel
 }
 
-pub fn root(system: &mut InterfaceSystem, root: WidgetId) -> WidgetId {
-    let root = system
-        .create_element(crate::ui::params_panel_dev_options(
-            Some(root),
-            style_layout!(position-absolute 8.0, 500.0),
-            Some(style_layout!(420.0, 240.0)),
-        ))
-        .unwrap()
-        .0;
+pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution) -> WidgetId {
+    let this = UiPanel::new(resolution)
+        .with_parent(root)
+        .with_layout(LayoutOptions {
+            layout_position: style_layout!(position-absolute 8.0, 500.0),
+            size: Some(style_layout!(420.0, 240.0)),
+            ..Default::default()
+        })
+        .builder(|mut stack, props| {
+            stack.button(|button| {
+                button.builder(|_, props| {
+                    props
+                        .with_label_literal("Toggle V-Sync")
+                        .with_callback(button_callback!(toggle DEBUG_CTL_DISPLAY_VSYNC))
+                })
+            });
+            stack.button(|button| {
+                button.builder(|_, props| {
+                    props
+                        .with_label_literal("Toggle Lattice Viz")
+                        .with_callback(button_callback!(toggle DEBUG_CTL_RENDER_LATTICE))
+                })
+            });
+            stack.button(|button| {
+                button.builder(|_, props| {
+                    props
+                        .with_label_literal("Toggle Cage Viz")
+                        .with_callback(button_callback!(toggle DEBUG_CTL_RENDER_CAGE))
+                })
+            });
 
-    dbg_toggle_button::<{ env_names::DEBUG_CTL_DISPLAY_VSYNC.as_u64() }>(
-        system,
-        root,
-        "Toggle: V-sync",
-    );
-    dbg_toggle_button::<{ env_names::DEBUG_CTL_RENDER_LATTICE.as_u64() }>(
-        system,
-        root,
-        "Viz: lattice",
-    );
-    dbg_toggle_button::<{ env_names::DEBUG_CTL_RENDER_CAGE.as_u64() }>(system, root, "Viz: cage");
+            stack.slider(|slider| {
+                slider
+                    .with_layout(LayoutOptions {
+                        padding: Some(style_layout!(horiz 0.0, vert 8.0)),
+                        ..Default::default()
+                    })
+                    .builder(|_, props| {
+                        props
+                            .with_text_contents(text_contents!(
+                                "graphics.gamma = ",
+                                |DEBUG_CTL_GRAPHICS_GAMMA: v_gamma| {
+                                    let norm = v_gamma.as_float().unwrap_or_default();
+                                    EnvValue::Float(Gamma::from_normalized(norm))
+                                }
+                            ))
+                            .with_starting_value(graphics::Gamma::DEFAULT_NORMALIZED)
+                            .with_sync_handle(DEBUG_CTL_GRAPHICS_GAMMA)
+                            .with_callback(slider_callback!(map DEBUG_CTL_GRAPHICS_GAMMA graphics::Gamma::from_normalized))
+                    })
+            });
 
-    // gamma slider
-    system
-        .create_element(ElementOptions::Slider(
-            CommonWidgetOptions {
-                parent: Some(root),
-                layer: 5,
-                layout: LayoutOptions {
-                    size: Some(Point::new(Value::Absolute(256.0), Value::Absolute(16.0))),
-                    padding: Some(Rectangle::new(
-                        Value::Absolute(0f32),
-                        Value::Absolute(8f32),
-                        Value::Absolute(0f32),
-                        Value::Absolute(8f32),
-                    )),
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            SliderOptions {
-                text: Some(TextOptions {
-                    contents: TextContents::from_nodes(&[
-                        TextNode::Static("graphics.gamma = "),
-                        TextNode::VariableAnd {
-                            env_id: DEBUG_CTL_GRAPHICS_GAMMA,
-                            operation: |value| {
-                                let gamma_norm = value.as_float().unwrap_or_default();
-                                let gamma_param = Gamma::from_normalized(gamma_norm);
-                                EnvValue::Float(gamma_param.as_f32())
-                            },
-                        },
-                    ]),
-                    ..Default::default()
-                }),
-                value_init: graphics::Gamma::DEFAULT_NORMALIZED,
-                value_sync_handle: Some(DEBUG_CTL_GRAPHICS_GAMMA),
-                callback: InteractableCallback::Repeating(|env, v| {
-                    env.insert(DEBUG_CTL_GRAPHICS_GAMMA, *v);
-                }),
+            stack.slider(|slider| {
+                slider
+                    .with_layout(LayoutOptions {
+                        padding: Some(style_layout!(horiz 0.0, vert 8.0)),
+                        ..Default::default()
+                    })
+                    .builder(|_, props| {
+                        props
+                            .with_text_contents(text_contents!(
+                                "shading.bias.roughness = ",
+                                DEBUG_CTL_SHADE_BIAS_ROUGHNESS
+                            ))
+                            .with_starting_value(0.0)
+                            .with_scroll_step(0.01)
+                            .with_sync_handle(DEBUG_CTL_SHADE_BIAS_ROUGHNESS)
+                            .with_callback(slider_callback!(copy DEBUG_CTL_SHADE_BIAS_ROUGHNESS))
+                    })
+            });
+            stack.slider(|slider| {
+                slider
+                    .with_layout(LayoutOptions {
+                        padding: Some(style_layout!(horiz 0.0, vert 8.0)),
+                        ..Default::default()
+                    })
+                    .builder(|_, props| {
+                        props
+                            .with_text_contents(text_contents!(
+                                "shading.bias.metallic = ",
+                                DEBUG_CTL_SHADE_BIAS_METALLIC
+                            ))
+                            .with_starting_value(0.0)
+                            .with_scroll_step(0.01)
+                            .with_sync_handle(DEBUG_CTL_SHADE_BIAS_METALLIC)
+                            .with_callback(slider_callback!(copy DEBUG_CTL_SHADE_BIAS_METALLIC))
+                    })
+            });
 
-                ..Default::default()
-            },
-        ))
-        .unwrap();
-
-    shade_mode_selector(system, root);
-
-    // roughness bias
-    system
-        .create_element(ElementOptions::Slider(
-            CommonWidgetOptions {
-                parent: Some(root),
-                layer: 5,
-                layout: LayoutOptions {
-                    size: Some(Point::new(Value::Absolute(256.0), Value::Absolute(16.0))),
-                    padding: Some(Rectangle::new(
-                        Value::Absolute(0f32),
-                        Value::Absolute(8f32),
-                        Value::Absolute(0f32),
-                        Value::Absolute(8f32),
-                    )),
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            SliderOptions {
-                text: Some(TextOptions {
-                    contents: text_contents!(
-                        "shading.bias.roughness =",
-                        DEBUG_CTL_SHADE_BIAS_ROUGHNESS
-                    ),
-                    ..Default::default()
-                }),
-                scroll_step: 0.01,
-                value_init: 0f32,
-                value_sync_handle: Some(DEBUG_CTL_SHADE_BIAS_ROUGHNESS),
-                callback: InteractableCallback::Repeating(|env, v| {
-                    env.insert(DEBUG_CTL_SHADE_BIAS_ROUGHNESS, *v);
-                }),
-                ..Default::default()
-            },
-        ))
-        .unwrap();
-    // metallic bias
-    system
-        .create_element(ElementOptions::Slider(
-            CommonWidgetOptions {
-                parent: Some(root),
-                layer: 5,
-                layout: LayoutOptions {
-                    size: Some(Point::new(Value::Absolute(256.0), Value::Absolute(16.0))),
-                    padding: Some(Rectangle::new(
-                        Value::Absolute(0f32),
-                        Value::Absolute(8f32),
-                        Value::Absolute(0f32),
-                        Value::Absolute(8f32),
-                    )),
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            SliderOptions {
-                text: Some(TextOptions {
-                    contents: text_contents!(
-                        "shading.bias.metallic =",
-                        DEBUG_CTL_SHADE_BIAS_METALLIC
-                    ),
-                    ..Default::default()
-                }),
-                scroll_step: 0.01,
-                value_init: 0f32,
-                value_sync_handle: Some(DEBUG_CTL_SHADE_BIAS_METALLIC),
-                callback: InteractableCallback::Repeating(|env, v| {
-                    env.insert(DEBUG_CTL_SHADE_BIAS_METALLIC, *v);
-                }),
-                ..Default::default()
-            },
-        ))
-        .unwrap();
-
-    root
+            props.with_floating(FloatGrabArea::top(20.0))
+        })
+        .apply(system);
+    shade_mode_selector(system, this);
+    this
 }
 
 pub const fn params_dbg_button(text: &'static str, cb: ButtonCallback) -> ButtonOptions {

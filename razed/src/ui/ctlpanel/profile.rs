@@ -1,104 +1,38 @@
+use ethel::Resolution;
 use gui::{
-    CommonWidgetOptions, ElementOptions, InterfaceSystem, LayoutOptions, TextContents, TextNode,
-    TextOptions, WidgetId, env::EnvValue, style_layout,
+    FloatGrabArea, InterfaceSystem, LayoutOptions, WidgetId, button_callback, declare::UiPanel,
+    style_layout, text_contents,
 };
 
-use crate::{
-    PROFILER_ACTION_PAUSE, PROFILER_ACTION_START,
-    ui::env_names::{PROFILER_ACTION, PROFILER_FRAME_COUNT, PROFILER_RUNNING},
-};
+use crate::ui::env_names::{PROFILER_ACTION, PROFILER_FRAME_COUNT, PROFILER_RUNNING};
 
-pub fn root(system: &mut InterfaceSystem, root: WidgetId) -> WidgetId {
-    let root = system
-        .create_element(crate::ui::params_panel_dev_options(
-            Some(root),
-            style_layout!(position-absolute 8.0, 750.0),
-            Some(style_layout!(240.0, 160.0)),
-        ))
-        .unwrap()
-        .0;
-
-    system
-        .create_element(ElementOptions::Text(
-            CommonWidgetOptions {
-                parent: Some(root),
-                layer: 5,
-                layout: LayoutOptions {
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            TextOptions {
-                contents: TextContents::from_nodes(&[
-                    TextNode::Static("Profiler::running = "),
-                    TextNode::Variable(PROFILER_RUNNING),
-                ]),
-                // font_name: todo!(),
-                // color: todo!(),
-                // font_size: todo!(),
-                // line_height: todo!(),
-                never_invalidate: true,
-                ..Default::default()
-            },
-        ))
-        .unwrap();
-    system
-        .create_element(ElementOptions::Text(
-            CommonWidgetOptions {
-                parent: Some(root),
-                layer: 5,
-                layout: LayoutOptions {
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            TextOptions {
-                contents: TextContents::from_nodes(&[
-                    TextNode::Static("Profiler::frames = "),
-                    TextNode::Variable(PROFILER_FRAME_COUNT),
-                ]),
-                // font_name: todo!(),
-                // color: todo!(),
-                // font_size: todo!(),
-                // line_height: todo!(),
-                never_invalidate: true,
-                ..Default::default()
-            },
-        ))
-        .unwrap();
-
-    super::dbg_toggle_button_with(
-        system,
-        root,
-        "Start/Pause",
-        gui::InteractableCallback::Once(|env, _| {
-            let state = env.get_boolean(&PROFILER_RUNNING);
-            if let Some(prop) = env
-                .get_mut(&PROFILER_ACTION)
-                .and_then(EnvValue::as_integer_mut)
-            {
-                let next_action = if state {
-                    PROFILER_ACTION_PAUSE
-                } else {
-                    PROFILER_ACTION_START
-                };
-                *prop |= next_action as i32;
-            }
-        }),
-    );
-    super::dbg_toggle_button_with(
-        system,
-        root,
-        "Dump",
-        gui::InteractableCallback::Once(|env, _| {
-            if let Some(prop) = env
-                .get_mut(&PROFILER_ACTION)
-                .and_then(EnvValue::as_integer_mut)
-            {
-                *prop |= crate::PROFILER_ACTION_DUMP as i32;
-            }
-        }),
-    );
-
-    root
+pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution) -> WidgetId {
+    UiPanel::new(resolution)
+        .with_parent(root)
+        .with_layout(LayoutOptions {
+            padding: crate::ui::DEV_PANEL_PADDING,
+            layout_position: style_layout!(position-absolute 8.0, 900.0),
+            size: Some(style_layout!(510.0, 180.0)),
+            ..Default::default()
+        })
+        .builder(|mut stack, props| {
+            stack.text_from(text_contents!("Profiler::running = ", PROFILER_RUNNING));
+            stack.text_from(text_contents!("Profiler::frames = ", PROFILER_FRAME_COUNT));
+            stack.button(|button| {
+                button.builder(|_, props| {
+                    props
+                        .with_label_literal("Start/Pause")
+                        .with_callback(button_callback!(toggle PROFILER_RUNNING))
+                })
+            });
+            stack.button(|button| {
+                button.builder(|_, props| {
+                    props.with_label_literal("Dump").with_callback(
+                        button_callback!(set PROFILER_ACTION crate::PROFILER_ACTION_DUMP),
+                    )
+                })
+            });
+            props.with_floating(FloatGrabArea::top(20.0))
+        })
+        .apply(system)
 }

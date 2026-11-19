@@ -1,136 +1,74 @@
-use ethel::IndirectIndex;
+use ethel::Resolution;
 use gui::{
-    CommonWidgetOptions, ElementOptions, InteractableCallback, InterfaceSystem, LayoutOptions,
-    Point, Rectangle, SliderOptions, TextContents, TextNode, TextOptions, Value, WidgetId,
-    env::EnvValue, style_layout,
+    FloatGrabArea, InterfaceSystem, LayoutOptions, TextOptions, WidgetId, button_callback,
+    declare::UiPanel, env::EnvValue, slider_callback, style_layout, text_contents,
 };
-use janus::StringMap;
 
 use crate::{
     render::graphics::Groundplane,
-    ui::{
-        env_names::{self, DEBUG_CTL_GROUND_SCALE, DEBUG_CTL_GROUND_UVSCALE},
-        widget_names::DEBUG_CTL_GROUND_DRAW_BUTTON,
-    },
+    ui::env_names::{DEBUG_CTL_GROUND_DRAW, DEBUG_CTL_GROUND_SCALE, DEBUG_CTL_GROUND_UVSCALE},
 };
 
-pub fn root(
-    system: &mut InterfaceSystem,
-    root: WidgetId,
-    map: &mut StringMap<(WidgetId, IndirectIndex)>,
-) -> WidgetId {
-    let root = system
-        .create_element(crate::ui::params_panel_dev_options(
-            Some(root),
-            style_layout!(position-absolute 8.0, 900.0),
-            Some(style_layout!(510.0, 180.0)),
-        ))
-        .unwrap()
-        .0;
-
-    let dbg_button_drawground = super::dbg_toggle_button::<
-        { env_names::DEBUG_CTL_GROUND_DRAW.as_u64() },
-    >(system, root, "Toggle Ground");
-    map.insert(DEBUG_CTL_GROUND_DRAW_BUTTON, dbg_button_drawground);
-
-    // ground scale
-    {
-        system
-            .create_element(ElementOptions::Slider(
-                CommonWidgetOptions {
-                    parent: Some(root),
-                    layer: 5,
-                    layout: LayoutOptions {
-                        size: Some(Point::new(Value::Absolute(360.0), Value::Absolute(16.0))),
-                        padding: Some(Rectangle::new(
-                            Value::Absolute(0f32),
-                            Value::Absolute(8f32),
-                            Value::Absolute(0f32),
-                            Value::Absolute(8f32),
-                        )),
+pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution) -> WidgetId {
+    UiPanel::new(resolution)
+        .with_parent(root)
+        .with_layout(LayoutOptions {
+            padding: crate::ui::DEV_PANEL_PADDING,
+            layout_position: style_layout!(position-absolute 8.0, 900.0),
+            size: Some(style_layout!(510.0, 180.0)),
+            ..Default::default()
+        })
+        .builder(|mut stack, props| {
+            stack.button(|button| {
+                button.builder(|_, props| {
+                    props
+                        .with_label_literal("Toggle Ground")
+                        .with_callback(button_callback!(toggle DEBUG_CTL_GROUND_DRAW))
+                })
+            });
+            stack.slider(|slider| {
+                slider
+                    .with_layout(LayoutOptions {
+                        padding: Some(style_layout!(horiz 0.0, vert 8.0)),
                         ..Default::default()
-                    },
-                    ..Default::default()
-                },
-                SliderOptions {
-                    text: Some(TextOptions {
-                        contents: TextContents::from_nodes(&[
-                            TextNode::Static("geom.ground.scale = "),
-                            TextNode::VariableAnd {
-                                env_id: DEBUG_CTL_GROUND_SCALE,
-                                operation: |value| {
-                                    let norm = value.as_float().unwrap_or_default();
-                                    let v = Groundplane::scale_from_normalized(norm);
-                                    EnvValue::Float(v)
-                                },
-                            },
-                        ]),
+                    })
+                    .builder(|_, props| {
+                        props
+                            .with_text(TextOptions::from_contents(text_contents!(
+                                "geom.ground.scale= ",
+                                |DEBUG_CTL_GROUND_SCALE: v_norm| {
+                                    let norm = v_norm.as_float().unwrap_or_default();
+                                    EnvValue::Float(Groundplane::scale_from_normalized(norm))
+                                }
+                            )))
+                            .with_scroll_step(0.01)
+                            .with_starting_value(Groundplane::DEFAULT_SCALE_NORMALIZED)
+                            .with_sync_handle(DEBUG_CTL_GROUND_SCALE)
+                            .with_callback(slider_callback!(map DEBUG_CTL_GROUND_SCALE Groundplane::scale_from_normalized))
+                    })
+            });
+            stack.slider(|slider| {
+                slider
+                    .with_layout(LayoutOptions {
+                        padding: Some(style_layout!(horiz 0.0, vert 8.0)),
                         ..Default::default()
-                    }),
-
-                    scroll_step: 0.01,
-                    value_init: Groundplane::DEFAULT_SCALE_NORMALIZED,
-                    value_sync_handle: Some(DEBUG_CTL_GROUND_SCALE),
-                    callback: InteractableCallback::Repeating(|env, v| {
-                        env.insert(DEBUG_CTL_GROUND_SCALE, *v);
-                    }),
-
-                    ..Default::default()
-                },
-            ))
-            .unwrap();
-    }
-    // ground UV scale
-    {
-        system
-            .create_element(ElementOptions::Slider(
-                CommonWidgetOptions {
-                    parent: Some(root),
-                    layer: 5,
-                    layout: LayoutOptions {
-                        size: Some(Point::new(Value::Absolute(360.0), Value::Absolute(16.0))),
-                        margin: Some(Rectangle {
-                            top: Value::Absolute(12f32),
-                            ..Default::default()
-                        }),
-                        padding: Some(Rectangle::new(
-                            Value::Absolute(0f32),
-                            Value::Absolute(8f32),
-                            Value::Absolute(0f32),
-                            Value::Absolute(8f32),
-                        )),
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-                SliderOptions {
-                    text: Some(TextOptions {
-                        contents: TextContents::from_nodes(&[
-                            TextNode::Static("geom.ground.uv-scale = "),
-                            TextNode::VariableAnd {
-                                env_id: DEBUG_CTL_GROUND_UVSCALE,
-                                operation: |value| {
-                                    let norm = value.as_float().unwrap_or_default();
-                                    let v = Groundplane::uvscale_from_normalized(norm);
-                                    EnvValue::Float(norm * v)
-                                },
-                            },
-                        ]),
-                        ..Default::default()
-                    }),
-
-                    scroll_step: 0.01,
-                    value_init: Groundplane::DEFAULT_UVSCALE_NORMALIZED,
-                    value_sync_handle: Some(DEBUG_CTL_GROUND_UVSCALE),
-                    callback: InteractableCallback::Repeating(|env, v| {
-                        env.insert(DEBUG_CTL_GROUND_UVSCALE, *v);
-                    }),
-
-                    ..Default::default()
-                },
-            ))
-            .unwrap();
-    }
-
-    root
+                    })
+                    .builder(|_, props| {
+                        props
+                            .with_text(TextOptions::from_contents(text_contents!(
+                                "geom.ground.uv-scale= ",
+                                |DEBUG_CTL_GROUND_UVSCALE: v_norm| {
+                                    let norm = v_norm.as_float().unwrap_or_default();
+                                    EnvValue::Float(Groundplane::uvscale_from_normalized(norm))
+                                }
+                            )))
+                            .with_scroll_step(0.01)
+                            .with_starting_value(Groundplane::DEFAULT_UVSCALE_NORMALIZED)
+                            .with_sync_handle(DEBUG_CTL_GROUND_UVSCALE)
+                            .with_callback(slider_callback!(map DEBUG_CTL_GROUND_UVSCALE Groundplane::uvscale_from_normalized))
+                    })
+            });
+            props.with_floating(FloatGrabArea::top(20.0))
+        })
+        .apply(system)
 }
