@@ -183,6 +183,7 @@ ethel::shader_glsl_compute! {
         };
         lib {
             rendrs::pack::PACK_OCTAHEDRON_DECODE;
+            rendrs::geometry::rasterize::RASTER_ID_COMPONENT_G_REPR;
             rendrs::geometry::rasterize::LIB_UTIL_DEPTH_WORLDPOS;
             rendrs::geometry::rasterize::LIB_UTIL_FRAMESPACE_GET_TANFRAME;
             rendrs::geometry::rasterize::LIB_UTIL_FRAMESPACE_GET_BWEIGHTS;
@@ -220,11 +221,14 @@ ethel::shader_glsl_compute! {
             // full 32 bits for triangle index
             const uint Tid = G.x - 1;
 
-            // 16 bits for optional instance id
+            // 21 bits for optional instance id
             // 1  bit  for 'is instanced' flag
-            // 15 bits for material id
-            #define G_MASK_15B 0x7fff
-            const uint Mid = G.y & G_MASK_15B;
+            // 10 bits for material id
+            //
+            // see RASTER_ID_COMPONENT_G_REPR
+            const uint Mid = RasterG_GetMaterialID(G.y);
+            // const bool is_inst = RasterG_GetInstanceFlag(G.y);
+            // const uint inst_id = RasterG_GetInstanceID(G.y);
 
             const MaterialLocation maLocation = materials[Mid];
             const uint[3] I = GetTriangleIndices(Tid);

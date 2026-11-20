@@ -123,6 +123,7 @@ ethel::shader_glsl_compute! {
             rendrs::pack::PACK_OCTAHEDRON_DECODE;
             rendrs::geometry::rasterize::LIB_UTIL_FRAMESPACE_GET_TANFRAME;
             rendrs::geometry::rasterize::LIB_UTIL_FRAMESPACE_GET_BWEIGHTS;
+            rendrs::geometry::rasterize::RASTER_ID_COMPONENT_G_REPR;
         };
 
         src() {
@@ -161,14 +162,14 @@ ethel::shader_glsl_compute! {
                     break;
                 case 4:
                     // material ID output
-                    // 16 bits for optional instance id
+                    // 21 bits for optional instance id
                     // 1  bit  for 'is instanced' flag
-                    // 15 bits for material id
-                    #define G_MASK_15B 0x7fff
-                    const uint G = S_raster_in.y;
-                    const uint G16br = G & 0x0000ffffu;
-                    const bool is_inst = bool(G16br >> 15);
-                    const uint Mid = G16br & G_MASK_15B;
+                    // 10 bits for material id
+                    //
+                    // see RASTER_ID_COMPONENT_G_REPR
+                    const uint Mid = RasterG_GetMaterialID(S_raster_in.y);
+                    const bool is_inst = RasterG_GetInstanceFlag(S_raster_in.y);
+                    // const uint inst_id = RasterG_GetInstanceID(S_raster_in.y);
                     v_output.rgb = vec3(
                         float(Mid        & 255u) / 255.0,
                         float((Mid >> 8) & 255u) / 255.0,
