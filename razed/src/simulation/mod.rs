@@ -14,6 +14,7 @@ use std::{
 };
 
 use crate::{
+    FragmentMeshVolumes,
     data::{FrameDataBuffers, Overlays},
     procedural::{VoxelGrid, VoxelGridOptions},
     render::{
@@ -148,6 +149,7 @@ pub struct State {
     selection: Option<IndirectIndex>,
     dead_fragments: Vec<IndirectIndex>,
 
+    pub frag_volumes: FragmentMeshVolumes,
     pub frag_meshmap: FxSpatialHash<ethel::mesh::Id>,
 
     selected_material: u32,
@@ -187,6 +189,7 @@ impl Default for State {
             frag_map: Default::default(),
             selection: Default::default(),
             dead_fragments: Default::default(),
+            frag_volumes: Default::default(),
             frag_meshmap: Default::default(),
             local_keyev_buf: Default::default(),
             textures_metadata_registry: AssetMetadataRegistry::new(),
@@ -1089,6 +1092,8 @@ impl State {
                      mass,
                      mesh_id,
                  }| {
+
+                    let volume = self.frag_volumes.get(mesh_id).unwrap();
                     self.debris.data_mut().insert((
                         0.0,
                         position,
@@ -1099,7 +1104,7 @@ impl State {
                         mass,
                         glam::Mat3::IDENTITY,
                         glam::Mat3::IDENTITY,
-                        ::physics::Sphere::new(0.5),
+                        volume,
                         MotionAccumulator::default(),
                         mesh_id,
                     ));

@@ -1,17 +1,9 @@
-use std::num::NonZeroU32;
-
-use ethel::{
-    AssetHandle, FxSpatialHash, MeshStaging, SpatialHash, SpatialResolution, StartupHandler,
-};
+use ethel::{AssetHandle, StartupHandler};
 use gui::text::{GlyphAtlas, GlyphAtlasTexture};
 use janus::{DisplayParameters, Setup};
 use rendrs::GeometryBank;
 
-use razed::{
-    data::FrameDataBuffers,
-    procedural::{CubeVoronoi, voxel_grid},
-    render::{CommonMeshMetadata, RenderGroup},
-};
+use razed::{StartupMeshData, data::FrameDataBuffers, render::RenderGroup};
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 const DISPLAY_PARAMS: DisplayParameters = DisplayParameters::fullscreen("Razed");
@@ -62,23 +54,14 @@ fn main() {
     let textures_metadata_registry = textures_master_registry.create_metadata_registry();
     let texture_pipe = textures_master_registry.command_pipe();
 
-    let mut mesh_stage = ethel::mesh::MeshStaging::new();
-    let fragment_mesh_mapping = {
-        let group = generate_fragment_meshes(glam::Vec3::splat(3.0), mesh_stage);
-        mesh_stage = group.voronoi.stager;
-        group.mapping
-    };
+    let StartupMeshData {
+        stager: mesh_stager,
+        fragment_mesh_volumes,
+        fragment_mesh_mapping,
+        common_meta: mesh_common_meta,
+    } = razed::setup_mesh_data();
 
-    // debug sphere
-    let mesh_id_sphere;
-    let mesh_meta_sphere;
-    {
-        let mesh = polys::generate_sphere(1.0, NonZeroU32::new(32).unwrap());
-        mesh_id_sphere = mesh.stage(&mut mesh_stage);
-        mesh_meta_sphere = mesh_stage.metadata().last().copied().unwrap();
-    }
-
-    start_handler.with_mesh_data(mesh_stage);
+    start_handler.with_mesh_data(mesh_stager);
     start_handler.with_mesh_layouts(
         razed::data::LayoutMeshStorageStatic::create(),
         razed::data::LayoutMeshStorageTris::create(),
@@ -106,32 +89,30 @@ fn main() {
             let (raster_tx, raster_rx) = crossbeam::channel::unbounded();
 
             renderer.handler_init_callback(|handle| {
+                handle.common_mesh_data = mesh_common_meta;
+                handle.geometry_bank = GeometryBank::new();
+
                 handle.textures_master_registry = textures_master_registry;
-
-                handle.common_mesh_data = CommonMeshMetadata {
-                    meta_sphere: mesh_meta_sphere,
-                    id_sphere: mesh_id_sphere,
-                };
-
-                let texture = handle
-                    .glyph_atlas_texture
-                    .create_atlas_texture(GLYPH_ATLAS_SIZE as i32);
-                // special gpu-only asset which must never be touched
-                let glyph_asset_handle = AssetHandle::from_gpu_resource(
-                    GlyphAtlasTexture::resource_id(),
-                    texture,
-                    &handle.textures_master_registry,
-                );
-                handle
-                    .textures_master_registry
-                    .add_handle(glyph_asset_handle);
-
                 handle.glyph_pipe = Some(raster_rx);
 
-                handle.geometry_bank = GeometryBank::new();
+                // register glyph atlas texture as gpu-only asset entry
+                {
+                    let texture = handle
+                        .glyph_atlas_texture
+                        .create_atlas_texture(GLYPH_ATLAS_SIZE as i32);
+                    let glyph_asset_handle = AssetHandle::from_gpu_resource(
+                        GlyphAtlasTexture::resource_id(),
+                        texture,
+                        &handle.textures_master_registry,
+                    );
+                    handle
+                        .textures_master_registry
+                        .add_handle(glyph_asset_handle);
+                }
             });
             state.handler_init_callback(|handle| {
                 handle.frag_meshmap = fragment_mesh_mapping;
+                handle.frag_volumes = fragment_mesh_volumes;
 
                 handle.textures_metadata_registry = textures_metadata_registry;
                 handle.texture_registry_pipe.set_pipe(texture_pipe);
@@ -148,56 +129,4 @@ fn main() {
     );
 
     janus::run(ctx);
-}
-
-#[derive(Debug)]
-struct FragmentGroup {
-    #[allow(unused)]
-    pub cubic_area: glam::Vec3,
-    pub voronoi: CubeVoronoi,
-    pub mapping: FxSpatialHash<ethel::mesh::Id>,
-}
-
-fn generate_fragment_meshes(cubic_area: glam::Vec3, mesh_stage: MeshStaging) -> FragmentGroup {
-    const FRAG_UNIT: f32 = 1.0;
-    const MAX_SHIFT: f32 = 0.8;
-    const SEEK_RANGE: f32 = 2.0;
-
-    let mut grid = voxel_grid(cubic_area.x, cubic_area.y, cubic_area.z, FRAG_UNIT);
-
-    grid.repopulate_defaults();
-    let count = grid.count();
-
-    // CubicVoronoiGenerator is guaranteed to process the seeds and meshes by
-    // the same order they are in the given seeds collection.
-    // we can use this to map the meshes by the generator to a local cell
-    // coordinate.
-    let mut seeds = Vec::with_capacity(count);
-    let mut cells = Vec::with_capacity(count);
-    for &voxel in grid.voxels().elements() {
-        seeds.push(voxel + FRAG_UNIT * 0.5);
-        cells.push(grid.quantize_point(voxel));
-    }
-
-    let prev_head = mesh_stage.metadata().len();
-    let voronoi = razed::procedural::cubic_voronoi(
-        &seeds,
-        cubic_area,
-        glam::Vec3::splat(FRAG_UNIT),
-        MAX_SHIFT,
-        SEEK_RANGE,
-        mesh_stage,
-    );
-
-    let mut mapping = FxSpatialHash::with_capacity(SpatialResolution::new(FRAG_UNIT), cells.len());
-    cells.drain(..).enumerate().for_each(|(i, cell)| {
-        let mesh_id = unsafe { ethel::mesh::Id::from_value((i + prev_head) as u32) };
-        mapping.put(cell, mesh_id);
-    });
-
-    FragmentGroup {
-        cubic_area,
-        voronoi,
-        mapping,
-    }
 }
