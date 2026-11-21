@@ -57,10 +57,10 @@ fn main() {
         razed::render::geometry::ComputeShaderFragmentsInstancedGeomSubmit,
         razed::render::geometry::ComputeShaderFragmentsInstancedGeomSubmitVariants::Default
     );
-    // precompile_shader_compute!(
-    //     razed::render::geometry::ComputeShaderDebrisGeomSubmit,
-    //     razed::render::geometry::ComputeShaderDebrisGeomSubmitVariants::Default
-    // );
+    precompile_shader_compute!(
+        razed::render::geometry::ComputeShaderFragmentsDeformedGeomSubmit,
+        razed::render::geometry::ComputeShaderFragmentsDeformedGeomSubmitVariants::Default
+    );
     precompile_shader_compute!(
         razed::render::geometry::ComputeShaderPlaneGeomSubmit,
         razed::render::geometry::ComputeShaderPlaneGeomSubmitVariants::Default

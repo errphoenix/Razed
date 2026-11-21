@@ -61,17 +61,17 @@ ethel::typed_part_tribuffer! {
         enum Bind_Pose: FRAGMENTS_ALLOC => {
             type glam::Vec4;
             bind 0;
-            shader render::geometry::G_FRAGS_SSBOI_BIND_POSE;
+            shader render::geometry::G_FRAGMENTS_DEFORMED_SSBOI_BIND_POSE;
         };
         enum Mesh_Id: FRAGMENTS_ALLOC => {
             type ethel::mesh::Id;
             bind 1;
-            shader render::geometry::G_FRAGS_SSBOI_MESH_ID;
+            shader render::geometry::G_FRAGMENTS_DEFORMED_SSBOI_MESH_ID;
         };
         enum Cage_Id: FRAGMENTS_ALLOC => {
             type IndirectIndex;
             bind 2;
-            shader render::geometry::G_FRAGS_SSBOI_CAGE_ID;
+            shader render::geometry::G_FRAGMENTS_DEFORMED_SSBOI_CAGE_ID;
         };
     }
 }

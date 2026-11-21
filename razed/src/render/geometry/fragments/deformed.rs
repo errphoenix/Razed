@@ -18,11 +18,12 @@ pub fn geom_fragments_deformed_pass_with_shader(
     shader: ComputeShaderFragmentsDeformedGeomSubmit,
 ) -> FragmentsDeformedGeomPass {
     FragmentsDeformedGeomPass::new(shader, [], [], |section, shader, ctx, out| {
-        let frag_count = ctx.frag_count;
         let FragmentsDeformedGeomCtx {
+            frag_count,
             cages_data,
             cages_map,
             fragments_data,
+            map,
             view_data,
             dev_material,
             //material_registry,
@@ -31,17 +32,18 @@ pub fn geom_fragments_deformed_pass_with_shader(
 
         let section = section.as_index();
 
-        cages_data.bind_ssbo_points(Some(G_FRAGS_SSBOI_CAGES_LPOINTS));
-        cages_data.bind_ssbo_points_bind(Some(G_FRAGS_SSBOI_CAGES_LPOINTS_BIND));
-        cages_map.bind_shader_storage(section, G_FRAGS_SSBOI_IMAP_CAGES, 0);
+        cages_data.bind_ssbo_points(Some(G_FRAGMENTS_DEFORMED_SSBOI_CAGES_LPOINTS));
+        cages_data.bind_ssbo_points_bind(Some(G_FRAGMENTS_DEFORMED_SSBOI_CAGES_LPOINTS_BIND));
+        cages_map.bind_shader_storage(section, G_FRAGMENTS_DEFORMED_SSBOI_IMAP_CAGES, 0);
         fragments_data.bind_ssbo_all(section);
+        map.bind_shader_storage(section, G_FRAGMENTS_DEFORMED_SSBOI_MAP, 0);
 
         shader.uniform_camera_forward_vec3(view_data.view_dir);
         shader.uniform_camera_position_vec3(view_data.view_pos);
         shader.uniform_dev_material_uint(*dev_material);
 
         let mut i = 0;
-        while i < frag_count {
+        while i < *frag_count {
             out.write(DomainData::new(0, i, 64));
             i += 1;
         }
@@ -50,33 +52,37 @@ pub fn geom_fragments_deformed_pass_with_shader(
 }
 
 macro_rules! ssbo_binding {
-    (POD_BindPose) => {
+    (Bind_Pose) => {
         5
     };
-    (POD_MeshID) => {
+    (Mesh_ID) => {
         6
     };
-    (POD_CageID) => {
+    (Cage_ID) => {
         7
     };
 
-    (POD_Cages_LPoints) => {
+    (Cages_LPoints) => {
         8
     };
-    (POD_Cages_LPoints_Bind) => {
+    (Cages_LPoints_Bind) => {
         9
     };
     (IMap_Cages) => {
         12
     };
+    (Map) => {
+        13
+    };
 }
 
-pub const G_FRAGS_SSBOI_BIND_POSE: u32 = ssbo_binding!(POD_BindPose);
-pub const G_FRAGS_SSBOI_MESH_ID: u32 = ssbo_binding!(POD_MeshID);
-pub const G_FRAGS_SSBOI_CAGE_ID: u32 = ssbo_binding!(POD_CageID);
-pub const G_FRAGS_SSBOI_CAGES_LPOINTS: u32 = ssbo_binding!(POD_Cages_LPoints);
-pub const G_FRAGS_SSBOI_CAGES_LPOINTS_BIND: u32 = ssbo_binding!(POD_Cages_LPoints_Bind);
-pub const G_FRAGS_SSBOI_IMAP_CAGES: u32 = ssbo_binding!(IMap_Cages);
+pub const G_FRAGMENTS_DEFORMED_SSBOI_BIND_POSE: u32 = ssbo_binding!(Bind_Pose);
+pub const G_FRAGMENTS_DEFORMED_SSBOI_MESH_ID: u32 = ssbo_binding!(Mesh_ID);
+pub const G_FRAGMENTS_DEFORMED_SSBOI_CAGE_ID: u32 = ssbo_binding!(Cage_ID);
+pub const G_FRAGMENTS_DEFORMED_SSBOI_CAGES_LPOINTS: u32 = ssbo_binding!(Cages_LPoints);
+pub const G_FRAGMENTS_DEFORMED_SSBOI_CAGES_LPOINTS_BIND: u32 = ssbo_binding!(Cages_LPoints_Bind);
+pub const G_FRAGMENTS_DEFORMED_SSBOI_IMAP_CAGES: u32 = ssbo_binding!(IMap_Cages);
+pub const G_FRAGMENTS_DEFORMED_SSBOI_MAP: u32 = ssbo_binding!(Map);
 
 rendrs::geometry_submission_job! {
     FragmentsDeformed => {
@@ -101,12 +107,13 @@ rendrs::geometry_submission_job! {
             shader_commons::ETH_MESH_SSBO_STATIC // bind 10
             shader_commons::ETH_MESH_SSBO_TRIS   // bind 11
 
-            G_FRAGS_SSBO_BINDPOSE
-            G_FRAGS_SSBO_MESHID
-            G_FRAGS_SSBO_CAGEID
-            G_FRAGS_SSBO_CAGES_LPOINTS
-            G_FRAGS_SSBO_CAGES_LPOINTS_BIND
-            G_FRAGS_SSBO_IMAP_CAGES
+            G_FRAGMENTS_DEFORMED_SSBO_BIND_POSE
+            G_FRAGMENTS_DEFORMED_SSBO_MESH_ID
+            G_FRAGMENTS_DEFORMED_SSBO_CAGE_ID
+            G_FRAGMENTS_DEFORMED_SSBO_CAGES_LPOINTS
+            G_FRAGMENTS_DEFORMED_SSBO_CAGES_LPOINTS_BIND
+            G_FRAGMENTS_DEFORMED_SSBO_IMAP_CAGES
+            G_FRAGMENTS_DEFORMED_SSBO_MAP
         }
         lib {
             shader_commons::LIB_MAT3_COFACTOR
@@ -128,6 +135,7 @@ rendrs::geometry_submission_job! {
             cages_data: CagePartitionedBuffer, for 'ctx;
             cages_map: TriBuffer<DirectIndex>, for 'ctx;
             fragments_data: FragmentsPartitionedTriBuffer, for 'ctx;
+            map: &'ctx TriBuffer<u32>;
 
             view_data: ViewData;
 
@@ -138,11 +146,9 @@ rendrs::geometry_submission_job! {
         }
 
         "
-        // todo: decouple; geom_id is stored in triangle,
-        // should be global, not frag-specific. oka for now
-        uint fragment_id = rendrs_GeometryID + 1;
+        uint fragment_id = fd_map[rendrs_GeometryID];
 
-        uint mesh_id = pod_mesh_id[fragment_id];
+        uint mesh_id = fd_mesh_id[fragment_id];
         MeshMetadata metadata = eth_meshmeta[mesh_id];
         uint local_thread = rendrs_DomainThreadID;
 
@@ -154,15 +160,15 @@ rendrs::geometry_submission_job! {
         if (local_thread == 0) {
             sm_vert_base = AllocVertex(m_vert_length);
 
-            IndirectIndex cage_id = pod_cage_id[fragment_id];
-            DirectIndex cage_did  = imap_cages[cage_id.index];
+            IndirectIndex cage_id = fd_cage_id[fragment_id];
+            DirectIndex cage_did  = fd_imap_cages[cage_id.index];
             uint cage_index       = cage_did.index;
 
             for (uint i = 0; i < 8; ++i) {
-                sm_cage_lpoint0[i] = pod_cages_localpoints_bind[cage_index][i].xyz;
-                sm_cage_lpoint1[i] = pod_cages_localpoints[cage_index][i].xyz;
+                sm_cage_lpoint0[i] = fd_cages_localpoints_bind[cage_index][i].xyz;
+                sm_cage_lpoint1[i] = fd_cages_localpoints[cage_index][i].xyz;
             }
-            sm_cage_pose = pod_bind_pose[fragment_id].xyz;
+            sm_cage_pose = fd_bind_pose[fragment_id].xyz;
 
             // bind-time basis orthogonal matrix
             mat3 B = mat3(
@@ -297,33 +303,38 @@ rendrs::geometry_submission_job! {
     }
 }
 
-pub const G_FRAGS_SSBO_BINDPOSE: GlslStorage = ethel::shader_glsl_ssbo! {
-    buf POD_BindPose => {
-        [dyn_array vec4: pod_bind_pose]
+pub const G_FRAGMENTS_DEFORMED_SSBO_BIND_POSE: GlslStorage = ethel::shader_glsl_ssbo! {
+    buf Bind_Pose => {
+        [dyn_array vec4: fd_bind_pose]
     }
 };
-pub const G_FRAGS_SSBO_MESHID: GlslStorage = ethel::shader_glsl_ssbo! {
-    buf POD_MeshID => {
-        [dyn_array uint: pod_mesh_id]
+pub const G_FRAGMENTS_DEFORMED_SSBO_MESH_ID: GlslStorage = ethel::shader_glsl_ssbo! {
+    buf Mesh_ID => {
+        [dyn_array uint: fd_mesh_id]
     }
 };
-pub const G_FRAGS_SSBO_CAGEID: GlslStorage = ethel::shader_glsl_ssbo! {
-    buf POD_CageID => {
-        [dyn_array IndirectIndex: pod_cage_id]
+pub const G_FRAGMENTS_DEFORMED_SSBO_CAGE_ID: GlslStorage = ethel::shader_glsl_ssbo! {
+    buf Cage_ID => {
+        [dyn_array IndirectIndex: fd_cage_id]
     }
 };
-pub const G_FRAGS_SSBO_CAGES_LPOINTS: GlslStorage = ethel::shader_glsl_ssbo! {
-    buf POD_Cages_LPoints => {
-        [dyn_array vec4: pod_cages_localpoints => each 8]
+pub const G_FRAGMENTS_DEFORMED_SSBO_CAGES_LPOINTS: GlslStorage = ethel::shader_glsl_ssbo! {
+    buf Cages_LPoints => {
+        [dyn_array vec4: fd_cages_localpoints => each 8]
     }
 };
-pub const G_FRAGS_SSBO_CAGES_LPOINTS_BIND: GlslStorage = ethel::shader_glsl_ssbo! {
-    buf POD_Cages_LPoints_Bind => {
-        [dyn_array vec4: pod_cages_localpoints_bind => each 8]
+pub const G_FRAGMENTS_DEFORMED_SSBO_CAGES_LPOINTS_BIND: GlslStorage = ethel::shader_glsl_ssbo! {
+    buf Cages_LPoints_Bind => {
+        [dyn_array vec4: fd_cages_localpoints_bind => each 8]
     }
 };
-pub const G_FRAGS_SSBO_IMAP_CAGES: GlslStorage = ethel::shader_glsl_ssbo! {
+pub const G_FRAGMENTS_DEFORMED_SSBO_IMAP_CAGES: GlslStorage = ethel::shader_glsl_ssbo! {
     buf IMap_Cages => {
-        [dyn_array DirectIndex: imap_cages]
+        [dyn_array DirectIndex: fd_imap_cages]
+    }
+};
+pub const G_FRAGMENTS_DEFORMED_SSBO_MAP: GlslStorage = ethel::shader_glsl_ssbo! {
+    buf Map => {
+        [dyn_array uint : fi_map]
     }
 };

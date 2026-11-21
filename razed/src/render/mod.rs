@@ -36,8 +36,9 @@ use crate::{
             draw_sphere::{DebugDrawSphere, DebugDrawSphereCtx, ShaderDebugDrawSphere},
         },
         geometry::{
-            ComputeShaderFragmentsInstancedGeomSubmit, ComputeShaderPlaneGeomSubmit,
-            FragmentsInstancedData, FragmentsInstancedGeomCtx, PlaneGeomCtx,
+            ComputeShaderFragmentsDeformedGeomSubmit, ComputeShaderFragmentsInstancedGeomSubmit,
+            ComputeShaderPlaneGeomSubmit, FragmentsDeformedGeomCtx, FragmentsInstancedData,
+            FragmentsInstancedGeomCtx, PlaneGeomCtx,
         },
         graphics::{Materials, RenderStats, materials},
         post::{
@@ -152,7 +153,7 @@ pub struct RenderPipeline {
 
     // geometry composition
     geom_fragments_instanced: geometry::FragmentsInstancedGeomPass,
-    //geom_debris: geometry::DebrisGeomPass,
+    geom_fragments_deformed: geometry::FragmentsDeformedGeomPass,
     geom_groundplane: geometry::PlaneGeomPass,
 
     // geometry rasterization & attrib. interpolation
@@ -184,9 +185,12 @@ pub struct RenderPipeline {
 }
 impl RenderPipeline {
     fn revalidate(&mut self, render_pool: &RenderPool) {
+        // tasks
+        self.task_deform_cages.revalidate(render_pool);
+
         // geometry composition
         self.geom_fragments_instanced.revalidate(render_pool);
-        //self.geom_debris.revalidate(render_pool);
+        self.geom_fragments_deformed.revalidate(render_pool);
         self.geom_groundplane.revalidate(render_pool);
 
         // geometry rasterization & attrib. interpolation
@@ -413,7 +417,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 .task_deform_cages
                 .execute(section, render_pool, &ctx);
         }
-        janus::gl::barrier_shader_storage();
 
         self.geometry_bank.bind_vertex_buffers();
         self.geometry_bank.bind_triangle_buffers();
@@ -438,30 +441,32 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         let dev_material = frame_data.debug_material_index.get();
 
-        // geometry composition pass - fragments (deformed) - todo
-        // {
-        //     let frag_count = frame_data.fragment_geom_count.get();
-        //     let cages_data = &frame_data.cages;
-        //     let cages_map = &frame_data.cage_map;
-        //     let fragments_data = &frame_data.fragments;
-        //     let view_data = self.view_data;
-        //     let material_registry = self.materials.locations();
+        // geometry composition pass - fragments (deformed)
+        {
+            let count = frame_data.fragment_count_deforming.get();
+            let cages_data = &frame_data.cages;
+            let cages_map = &frame_data.cage_map;
+            let fragments_data = &frame_data.fragments;
+            let map_deforming = &frame_data.fragments_map_deforming;
+            let view_data = self.view_data;
+            let material_registry = self.materials.locations();
 
-        //     self.pipeline().geom_fragments.execute(
-        //         section,
-        //         render_pool,
-        //         &FragmentsGeomCtx {
-        //             _marker: std::marker::PhantomData,
-        //             frag_count,
-        //             cages_data,
-        //             cages_map,
-        //             fragments_data,
-        //             view_data,
-        //             dev_material,
-        //             material_registry,
-        //         },
-        //     );
-        // }
+            self.pipeline().geom_fragments_deformed.execute(
+                section,
+                render_pool,
+                &FragmentsDeformedGeomCtx {
+                    _marker: std::marker::PhantomData,
+                    frag_count: count,
+                    cages_data,
+                    cages_map,
+                    fragments_data,
+                    map: map_deforming,
+                    view_data,
+                    dev_material,
+                    material_registry,
+                },
+            );
+        }
 
         // todo
         const FRAGMENTS_INSTANCED_MESH_BASE: u32 = 0;
@@ -492,13 +497,39 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             );
         }
 
-        unsafe {
-            janus::gl::MemoryBarrier(
-                janus::gl::SHADER_STORAGE_BARRIER_BIT
-                    | janus::gl::ATOMIC_COUNTER_BARRIER_BIT
-                    | janus::gl::ELEMENT_ARRAY_BARRIER_BIT,
+        // geometry composition pass - debris (instanced)
+        {
+            let count = frame_data.debris_geom_count.get();
+            let data = &frame_data.debris;
+            let view_data = self.view_data;
+            let material_registry = self.materials.locations();
+
+            println!("{count}");
+
+            self.pipeline().geom_fragments_instanced.execute(
+                section,
+                render_pool,
+                &FragmentsInstancedGeomCtx {
+                    _marker: std::marker::PhantomData,
+                    instances_count: count,
+                    data: FragmentsInstancedData::Debris(data),
+                    map: None,
+                    inst_mesh_base: FRAGMENTS_INSTANCED_MESH_BASE,
+                    inst_mesh_count: FRAGMENTS_INSTANCED_MESH_COUNT,
+                    view_data,
+                    dev_material,
+                    material_registry,
+                },
             );
         }
+
+        // unsafe {
+        //     janus::gl::MemoryBarrier
+        //         janus::gl::SHADER_STORAGE_BARRIER_BIT
+        //             | janus::gl::ATOMIC_COUNTER_BARRIER_BIT
+        //             | janus::gl::ELEMENT_ARRAY_BARRIER_BIT,
+        //     );
+        // }
 
         {
             let gcounters = self.geometry_bank.get_gcounters();
@@ -543,12 +574,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             );
         }
 
-        unsafe {
-            janus::gl::MemoryBarrier(
-                janus::gl::SHADER_IMAGE_ACCESS_BARRIER_BIT | janus::gl::TEXTURE_FETCH_BARRIER_BIT,
-            );
-        }
-
         rendrs::framebuffer::bind_default();
 
         self.pipeline().attr_interp.execute(
@@ -558,12 +583,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             self.view_data.proj_mat,
             self.view_data.view_mat,
         );
-
-        unsafe {
-            janus::gl::MemoryBarrier(
-                janus::gl::SHADER_IMAGE_ACCESS_BARRIER_BIT | janus::gl::TEXTURE_FETCH_BARRIER_BIT,
-            );
-        }
 
         let render_doptions = frame_data.debug_render_options.get();
 
@@ -615,8 +634,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 .post_draw_skybox
                 .execute(section, render_pool, &());
         }
-
-        janus::gl::barrier_shader_image();
 
         // tonemapping + gamma correction vfx pass
         {
@@ -805,19 +822,12 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 let source = std::fs::read(sourcepath).unwrap();
                 ComputeShaderFragmentsInstancedGeomSubmit::from_spirv(&source)
             };
-
-            // let geom_fragments_shader = unsafe {
-            //     let name = ComputeShaderFragmentsInstancedGeomSubmit::HASHED_NAME;
-            //     let sourcepath = format!("target/shaders/spirv/{name:#x}-default.comp");
-            //     let source = std::fs::read(sourcepath).unwrap();
-            //     ComputeShaderFragmentsGeomSubmit::from_spirv(&source)
-            // };
-            // let geom_debris_shader = unsafe {
-            //     let name = ComputeShaderDebrisGeomSubmit::HASHED_NAME;
-            //     let sourcepath = format!("target/shaders/spirv/{name:#x}-default.comp");
-            //     let source = std::fs::read(sourcepath).unwrap();
-            //     ComputeShaderDebrisGeomSubmit::from_spirv(&source)
-            // };
+            let geom_fragments_deformed_shader = unsafe {
+                let name = ComputeShaderFragmentsDeformedGeomSubmit::HASHED_NAME;
+                let sourcepath = format!("target/shaders/spirv/{name:#x}-default.comp");
+                let source = std::fs::read(sourcepath).unwrap();
+                ComputeShaderFragmentsDeformedGeomSubmit::from_spirv(&source)
+            };
             let geom_plane_shader = unsafe {
                 let name = ComputeShaderPlaneGeomSubmit::HASHED_NAME;
                 let sourcepath = format!("target/shaders/spirv/{name:#x}-default.comp");
@@ -828,6 +838,9 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             self.pipeline = Some(RenderPipeline {
                 task_deform_cages: task::deform_cages_pass(&self.shaders.task_deform_cages),
 
+                geom_fragments_deformed: geometry::geom_fragments_deformed_pass_with_shader(
+                    geom_fragments_deformed_shader,
+                ),
                 geom_fragments_instanced: geometry::geom_fragments_instanced_pass_with_shader(
                     geom_fragments_instanced_shader,
                 ),

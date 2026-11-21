@@ -132,7 +132,7 @@ rendrs::geometry_submission_job! {
             dev_material: u32;
 
             // currently unused
-            material_registry: MaterialLocationRegistry, for 'ctx;
+            material_registry: &'ctx MaterialLocationRegistry;
         }
 
         "
