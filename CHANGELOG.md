@@ -34,6 +34,13 @@
 
 - GUI: remove all color-related properties from widget options
 
+- Modify geometry submission path for fragments:  
+  Fragments that are not actively deforming are rendered through instancing, like debris.  
+  Fragments are only submitted as dynamic geometry if their deformation displacement is above a certain 
+  threshold.  
+  This severely improves performance: as it greatly reduces vertex fetching cost during dynamic geometry 
+  rasterization.
+
 ### Fixed
 
 - Crash during debris simulation due to missing check(s)
