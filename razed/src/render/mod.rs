@@ -36,8 +36,8 @@ use crate::{
             draw_sphere::{DebugDrawSphere, DebugDrawSphereCtx, ShaderDebugDrawSphere},
         },
         geometry::{
-            ComputeShaderDebrisGeomSubmit, ComputeShaderFragmentsGeomSubmit,
-            ComputeShaderPlaneGeomSubmit, DebrisGeomCtx, FragmentsGeomCtx, PlaneGeomCtx,
+            ComputeShaderFragmentsInstancedGeomSubmit, ComputeShaderPlaneGeomSubmit,
+            FragmentsInstancedData, FragmentsInstancedGeomCtx, PlaneGeomCtx,
         },
         graphics::{Materials, RenderStats, materials},
         post::{
@@ -151,8 +151,8 @@ pub struct RenderPipeline {
     task_deform_cages: TaskDeformCagesPass,
 
     // geometry composition
-    geom_fragments: geometry::FragmentsGeomPass,
-    geom_debris: geometry::DebrisGeomPass,
+    geom_fragments_instanced: geometry::FragmentsInstancedGeomPass,
+    //geom_debris: geometry::DebrisGeomPass,
     geom_groundplane: geometry::PlaneGeomPass,
 
     // geometry rasterization & attrib. interpolation
@@ -185,8 +185,8 @@ pub struct RenderPipeline {
 impl RenderPipeline {
     fn revalidate(&mut self, render_pool: &RenderPool) {
         // geometry composition
-        self.geom_fragments.revalidate(render_pool);
-        self.geom_debris.revalidate(render_pool);
+        self.geom_fragments_instanced.revalidate(render_pool);
+        //self.geom_debris.revalidate(render_pool);
         self.geom_groundplane.revalidate(render_pool);
 
         // geometry rasterization & attrib. interpolation
@@ -438,50 +438,54 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         let dev_material = frame_data.debug_material_index.get();
 
-        // geometry composition pass - fragments
+        // geometry composition pass - fragments (deformed) - todo
+        // {
+        //     let frag_count = frame_data.fragment_geom_count.get();
+        //     let cages_data = &frame_data.cages;
+        //     let cages_map = &frame_data.cage_map;
+        //     let fragments_data = &frame_data.fragments;
+        //     let view_data = self.view_data;
+        //     let material_registry = self.materials.locations();
+
+        //     self.pipeline().geom_fragments.execute(
+        //         section,
+        //         render_pool,
+        //         &FragmentsGeomCtx {
+        //             _marker: std::marker::PhantomData,
+        //             frag_count,
+        //             cages_data,
+        //             cages_map,
+        //             fragments_data,
+        //             view_data,
+        //             dev_material,
+        //             material_registry,
+        //         },
+        //     );
+        // }
+
+        // todo
+        const FRAGMENTS_INSTANCED_MESH_BASE: u32 = 0;
+        const FRAGMENTS_INSTANCED_MESH_COUNT: u32 = 27;
+
+        // geometry composition pass - fragments (instanced)
         {
-            let frag_count = frame_data.fragment_geom_count.get();
-            let cages_data = &frame_data.cages;
-            let cages_map = &frame_data.cage_map;
-            let fragments_data = &frame_data.fragments;
+            let count = frame_data.fragment_count_instanced.get();
+            let data = &frame_data.fragments;
+            let map = &frame_data.fragments_map_instanced;
             let view_data = self.view_data;
             let material_registry = self.materials.locations();
 
-            self.pipeline().geom_fragments.execute(
+            self.pipeline().geom_fragments_instanced.execute(
                 section,
                 render_pool,
-                &FragmentsGeomCtx {
+                &FragmentsInstancedGeomCtx {
                     _marker: std::marker::PhantomData,
-                    frag_count,
-                    cages_data,
-                    cages_map,
-                    fragments_data,
+                    instances_count: count,
+                    data: FragmentsInstancedData::Fragments(data),
+                    map: Some(map),
+                    inst_mesh_base: FRAGMENTS_INSTANCED_MESH_BASE,
+                    inst_mesh_count: FRAGMENTS_INSTANCED_MESH_COUNT,
                     view_data,
-                    dev_material,
-                    material_registry,
-                },
-            );
-        }
-
-        // geometry composition pass - debris
-        {
-            let debris_count = frame_data.debris_geom_count.get();
-            let debris_data = &frame_data.debris;
-            let view_data = self.view_data;
-            let inst_mesh_base = 0; //todo
-            let inst_mesh_count = 27; //todo
-            let material_registry = self.materials.locations();
-
-            self.pipeline().geom_debris.execute(
-                section,
-                render_pool,
-                &DebrisGeomCtx {
-                    _marker: std::marker::PhantomData,
-                    debris_count,
-                    debris_data,
-                    view_data,
-                    inst_mesh_base,
-                    inst_mesh_count,
                     dev_material,
                     material_registry,
                 },
@@ -795,18 +799,25 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                 )
             };
 
-            let geom_fragments_shader = unsafe {
-                let name = ComputeShaderFragmentsGeomSubmit::HASHED_NAME;
+            let geom_fragments_instanced_shader = unsafe {
+                let name = ComputeShaderFragmentsInstancedGeomSubmit::HASHED_NAME;
                 let sourcepath = format!("target/shaders/spirv/{name:#x}-default.comp");
                 let source = std::fs::read(sourcepath).unwrap();
-                ComputeShaderFragmentsGeomSubmit::from_spirv(&source)
+                ComputeShaderFragmentsInstancedGeomSubmit::from_spirv(&source)
             };
-            let geom_debris_shader = unsafe {
-                let name = ComputeShaderDebrisGeomSubmit::HASHED_NAME;
-                let sourcepath = format!("target/shaders/spirv/{name:#x}-default.comp");
-                let source = std::fs::read(sourcepath).unwrap();
-                ComputeShaderDebrisGeomSubmit::from_spirv(&source)
-            };
+
+            // let geom_fragments_shader = unsafe {
+            //     let name = ComputeShaderFragmentsInstancedGeomSubmit::HASHED_NAME;
+            //     let sourcepath = format!("target/shaders/spirv/{name:#x}-default.comp");
+            //     let source = std::fs::read(sourcepath).unwrap();
+            //     ComputeShaderFragmentsGeomSubmit::from_spirv(&source)
+            // };
+            // let geom_debris_shader = unsafe {
+            //     let name = ComputeShaderDebrisGeomSubmit::HASHED_NAME;
+            //     let sourcepath = format!("target/shaders/spirv/{name:#x}-default.comp");
+            //     let source = std::fs::read(sourcepath).unwrap();
+            //     ComputeShaderDebrisGeomSubmit::from_spirv(&source)
+            // };
             let geom_plane_shader = unsafe {
                 let name = ComputeShaderPlaneGeomSubmit::HASHED_NAME;
                 let sourcepath = format!("target/shaders/spirv/{name:#x}-default.comp");
@@ -817,8 +828,11 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             self.pipeline = Some(RenderPipeline {
                 task_deform_cages: task::deform_cages_pass(&self.shaders.task_deform_cages),
 
-                geom_fragments: geometry::geom_fragments_pass_with_shader(geom_fragments_shader),
-                geom_debris: geometry::geom_debris_pass_with_shader(geom_debris_shader),
+                geom_fragments_instanced: geometry::geom_fragments_instanced_pass_with_shader(
+                    geom_fragments_instanced_shader,
+                ),
+                // geom_fragments: geometry::geom_fragments_pass_with_shader(geom_fragments_shader),
+                // geom_debris: geometry::geom_debris_pass_with_shader(geom_debris_shader),
                 geom_groundplane: geometry::geom_plane_pass_with_shader(geom_plane_shader),
 
                 geom_rasterize: rendrs::geometry::GeomRasterizePass::new(

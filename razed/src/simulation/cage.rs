@@ -7,6 +7,7 @@ use ethel::{
     Cell, Column, DirectIndex, FxSpatialHash, IndirectIndex, SparseSlot, SpatialHash,
     StorageSection, state::data::IndexArrayColumn, state::data::table::TableView,
 };
+use glam::Vec4Swizzles;
 use janus::sync::TriVec;
 
 use crate::{
@@ -91,6 +92,7 @@ pub struct CageSystem {
 
     gpu_map: IndexArrayColumn<()>,
 
+    deformation_change: Vec<f32>,
     deformation_feedback: Vec<OffsetRotation>,
 
     /// mapping of lattice node point ID to cage ID attached to the node
@@ -330,6 +332,28 @@ impl CageSystem {
             weight_sum: lattice_weights_sum,
             lattice_barycenter,
         }
+    }
+
+    pub fn poll_deltas(&mut self) {
+        let size = self.deformation_feedback.len();
+        self.deformation_change.resize(size, 0.0);
+
+        self.deformation_feedback
+            .iter()
+            .zip(&mut self.deformation_change)
+            .for_each(|(fb, d)| *d = fb.offset.xyz().length_squared());
+    }
+
+    pub fn get_delta(&self, id: IndirectIndex) -> Option<f32> {
+        if let Some(did) = self.gpu_map.solve_indirect(id) {
+            Some(self.deformation_change[did.as_index()])
+        } else {
+            None
+        }
+    }
+
+    pub fn deltas(&self) -> &[f32] {
+        &self.deformation_change
     }
 }
 

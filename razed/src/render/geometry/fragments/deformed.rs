@@ -8,16 +8,18 @@ use crate::{
     render::{ViewData, shader_commons},
 };
 
-pub fn geom_fragments_pass() -> FragmentsGeomPass {
-    geom_fragments_pass_with_shader(ComputeShaderFragmentsGeomSubmit::new_compiled())
+pub fn geom_fragments_deformed_pass() -> FragmentsDeformedGeomPass {
+    geom_fragments_deformed_pass_with_shader(
+        ComputeShaderFragmentsDeformedGeomSubmit::new_compiled(),
+    )
 }
 
-pub fn geom_fragments_pass_with_shader(
-    shader: ComputeShaderFragmentsGeomSubmit,
-) -> FragmentsGeomPass {
-    FragmentsGeomPass::new(shader, [], [], |section, shader, ctx, out| {
+pub fn geom_fragments_deformed_pass_with_shader(
+    shader: ComputeShaderFragmentsDeformedGeomSubmit,
+) -> FragmentsDeformedGeomPass {
+    FragmentsDeformedGeomPass::new(shader, [], [], |section, shader, ctx, out| {
         let frag_count = ctx.frag_count;
-        let FragmentsGeomCtx {
+        let FragmentsDeformedGeomCtx {
             cages_data,
             cages_map,
             fragments_data,
@@ -31,7 +33,7 @@ pub fn geom_fragments_pass_with_shader(
 
         cages_data.bind_ssbo_points(Some(G_FRAGS_SSBOI_CAGES_LPOINTS));
         cages_data.bind_ssbo_points_bind(Some(G_FRAGS_SSBOI_CAGES_LPOINTS_BIND));
-        cages_map.bind_shader_storage(section, G_FRAGS_SSBO_BIND_IMAP_CAGES, 0);
+        cages_map.bind_shader_storage(section, G_FRAGS_SSBOI_IMAP_CAGES, 0);
         fragments_data.bind_ssbo_all(section);
 
         shader.uniform_camera_forward_vec3(view_data.view_dir);
@@ -74,10 +76,10 @@ pub const G_FRAGS_SSBOI_MESH_ID: u32 = ssbo_binding!(POD_MeshID);
 pub const G_FRAGS_SSBOI_CAGE_ID: u32 = ssbo_binding!(POD_CageID);
 pub const G_FRAGS_SSBOI_CAGES_LPOINTS: u32 = ssbo_binding!(POD_Cages_LPoints);
 pub const G_FRAGS_SSBOI_CAGES_LPOINTS_BIND: u32 = ssbo_binding!(POD_Cages_LPoints_Bind);
-pub const G_FRAGS_SSBO_BIND_IMAP_CAGES: u32 = ssbo_binding!(IMap_Cages);
+pub const G_FRAGS_SSBOI_IMAP_CAGES: u32 = ssbo_binding!(IMap_Cages);
 
 rendrs::geometry_submission_job! {
-    Fragments => {
+    FragmentsDeformed => {
         source {
             vertex => super::VertexBuffers;
             triangle => super::TriangleBuffers;

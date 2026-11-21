@@ -18,6 +18,7 @@ use crate::{
     procedural::{VoxelGrid, VoxelGridOptions},
     render::{
         RenderGroup,
+        geometry::FragmentDomains,
         graphics::{DebugRenderOptions, Gamma, Groundplane, RenderStats},
         shading::attributes::ShadingAttributesMode,
     },
@@ -127,6 +128,8 @@ pub struct State {
     #[allow(unused, reason = "currently unused, might be discarded")]
     mesh_ids: Vec<ethel::mesh::Id>, // generic objects mesh ids imap
 
+    fragment_domains: FragmentDomains,
+
     phys_forces_reg: ForcesRegistry,
     lattice: LatticeSystem,
     cage: CageSystem,
@@ -176,6 +179,7 @@ impl Default for State {
             ),
             profiler: Profiler::default(),
             lattice_bind_pose: Default::default(),
+            fragment_domains: Default::default(),
             cage: Default::default(),
             fragments: Default::default(),
             debris: Default::default(),
@@ -333,12 +337,16 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 
             // setup geometry data
             {
-                let fragment_count = self.fragments.data().len() - 1;
+                let fragment_count_instanced = self.fragment_domains.instanced().len();
+                let fragment_count_deforming = self.fragment_domains.deforming().len();
                 let debris_count = self.debris.total_debris_count();
 
                 let _ = storage
-                    .fragment_geom_count
-                    .set_and_advance(fragment_count as u32);
+                    .fragment_count_instanced
+                    .set_and_advance(fragment_count_instanced as u32);
+                let _ = storage
+                    .fragment_count_deforming
+                    .set_and_advance(fragment_count_deforming as u32);
                 let _ = storage
                     .debris_geom_count
                     .set_and_advance(debris_count as u32);
@@ -411,6 +419,25 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                     .store(cage_map.len() as u32, Ordering::Release);
 
                 self.cage.clear_op_buffers();
+            }
+
+            // fragment domain maps upload
+            {
+                let instanced = &storage.fragments_map_instanced;
+                let deforming = &storage.fragments_map_deforming;
+                // SAFETY: triple-buffer section index is valid
+                unsafe {
+                    instanced.blit_section(
+                        section.as_index(),
+                        self.fragment_domains.instanced(),
+                        0,
+                    );
+                    deforming.blit_section(
+                        section.as_index(),
+                        self.fragment_domains.deforming(),
+                        0,
+                    );
+                }
             }
 
             // fragments upload
@@ -736,6 +763,11 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         self.profiler.capture_duration("debris_hash", || {
             self.debris.hash_debris();
         });
+
+        self.cage.poll_deltas();
+
+        let fragments = FragmentsRowTableView::from(self.fragments.data());
+        self.fragment_domains.map_domains(&fragments, &self.cage);
     }
 }
 impl State {

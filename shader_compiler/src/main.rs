@@ -54,13 +54,13 @@ fn main() {
     let _ = std::fs::create_dir_all(SHADERS_SOURCE_SPIRV_DIR);
 
     precompile_shader_compute!(
-        razed::render::geometry::ComputeShaderFragmentsGeomSubmit,
-        razed::render::geometry::ComputeShaderFragmentsGeomSubmitVariants::Default
+        razed::render::geometry::ComputeShaderFragmentsInstancedGeomSubmit,
+        razed::render::geometry::ComputeShaderFragmentsInstancedGeomSubmitVariants::Default
     );
-    precompile_shader_compute!(
-        razed::render::geometry::ComputeShaderDebrisGeomSubmit,
-        razed::render::geometry::ComputeShaderDebrisGeomSubmitVariants::Default
-    );
+    // precompile_shader_compute!(
+    //     razed::render::geometry::ComputeShaderDebrisGeomSubmit,
+    //     razed::render::geometry::ComputeShaderDebrisGeomSubmitVariants::Default
+    // );
     precompile_shader_compute!(
         razed::render::geometry::ComputeShaderPlaneGeomSubmit,
         razed::render::geometry::ComputeShaderPlaneGeomSubmitVariants::Default

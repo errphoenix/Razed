@@ -161,10 +161,12 @@ pub struct Overlays {
 
 #[derive(Debug, Default)]
 pub struct FrameDataBuffers {
-    // count of fragment geom entities
-    pub fragment_geom_count: TriCell<u32>,
-    // count of debris geom entities
+    pub fragment_count_deforming: TriCell<u32>,
+    pub fragment_count_instanced: TriCell<u32>,
     pub debris_geom_count: TriCell<u32>,
+
+    pub fragments_map_instanced: TriBuffer<u32>,
+    pub fragments_map_deforming: TriBuffer<u32>,
 
     pub fragments: FragmentsPartitionedTriBuffer,
     pub debris: DebrisPartitionedTriBuffer,
@@ -199,8 +201,11 @@ pub struct FrameDataBuffers {
 impl FrameDataBuffers {
     pub fn new() -> Self {
         Self {
-            fragment_geom_count: TriCell::new(0),
+            fragment_count_deforming: TriCell::new(0),
+            fragment_count_instanced: TriCell::new(0),
             debris_geom_count: TriCell::new(0),
+            fragments_map_instanced: TriBuffer::zeroed(crate::data::FRAGMENTS_ALLOC),
+            fragments_map_deforming: TriBuffer::zeroed(crate::data::FRAGMENTS_ALLOC),
 
             fragments: FragmentsPartitionedTriBuffer::new(),
             debris: DebrisPartitionedTriBuffer::new(),
