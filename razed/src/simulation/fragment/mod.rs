@@ -5,9 +5,11 @@ use ethel::{
     state::data::table::TableView,
 };
 use glam::Vec4Swizzles;
+use physics::Sphere;
 use rustc_hash::FxHashSet;
 
 use crate::{
+    FragmentMeshVolumes,
     procedural::VoxelGrid,
     simulation::{
         FragmentsSpatialHash,
@@ -44,6 +46,7 @@ ethel::table_spec! {
         mesh_id: ethel::mesh::Id;
 
         held_force: glam::Vec3;
+        volume: Sphere;
     }
 }
 
@@ -284,6 +287,16 @@ impl FragmentSystem {
         });
     }
 
+    pub fn bind_volumes(&mut self, volumes: &FragmentMeshVolumes) {
+        self.uninitialised.iter().for_each(|uninit| {
+            if let UninitFragmentStage::Unfinished { indirect: id } = uninit.stage {
+                let mesh = uninit.mesh_id;
+                let did = self.data.solve_indirect(id).unwrap();
+                self.data.volume[did.as_index()] = volumes.get(mesh).unwrap_or_default();
+            }
+        });
+    }
+
     /// Binds all currently uninitialised fragments to `lattice` through
     /// `lattice_hash` spatial info.
     ///
@@ -368,6 +381,7 @@ impl FragmentSystem {
                 1.0, // todo: damage and integrity
                 fragment_mesh,
                 glam::Vec3::ZERO,
+                Sphere::default(),
             ));
             frag.stage = UninitFragmentStage::Unfinished { indirect: handle };
 

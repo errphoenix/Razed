@@ -1092,7 +1092,6 @@ impl State {
                      mass,
                      mesh_id,
                  }| {
-
                     let volume = self.frag_volumes.get(mesh_id).unwrap();
                     self.debris.data_mut().insert((
                         0.0,
@@ -1272,6 +1271,7 @@ impl State {
         self.fragments.generate(origin, &grid, &frag_meshmap);
 
         self.fragments.bind_lattice(&lattice_hash, &lattice);
+        self.fragments.bind_volumes(&self.frag_volumes);
         self.fragments
             .create_deformation_cages(&lattice_hash, &lattice, &mut self.cage);
     }
