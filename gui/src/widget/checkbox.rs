@@ -3,7 +3,7 @@ use janus::StringHash;
 
 use crate::{
     CommonWidgetOptions, ComponentKind, ElementOptions, HasOptions, InterfaceSystem, Point,
-    WidgetError, WidgetId,
+    Property, WidgetError, WidgetId,
     declare::{UiCheckbox, UiNodeStack},
 };
 
@@ -123,5 +123,10 @@ impl UiNodeStack<'_> {
 
     pub fn checkbox_synced(&mut self, handle: StringHash) {
         self.checkbox_from(CheckboxOptions::synced(handle));
+    }
+
+    pub fn checkbox_prop<const PROP_ID: u64>(&mut self, prop: Property<bool, PROP_ID>) {
+        let name = Property::<bool, PROP_ID>::name();
+        self.checkbox_from(CheckboxOptions::synced(name).with_value(*prop.get()));
     }
 }

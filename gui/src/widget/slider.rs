@@ -3,7 +3,7 @@ use janus::StringHash;
 
 use crate::{
     CommonWidgetOptions, ComponentKind, ElementOptions, HasOptions, InteractableCallback,
-    InterfaceSystem, WidgetError, WidgetId,
+    InterfaceSystem, Property, WidgetError, WidgetId,
     declare::{UiNodeStack, UiSlider},
 };
 
@@ -78,6 +78,18 @@ impl SliderOptions {
             value_init: 0f32,
             value_sync_handle: None,
             callback: InteractableCallback::None,
+            vertical: false,
+        }
+    }
+
+    pub const fn from_prop<const PROP_ID: u64>(prop: Property<f32, PROP_ID>) -> Self {
+        Self {
+            value_init: *prop.get(),
+            value_sync_handle: Some(Property::<f32, PROP_ID>::name()),
+            callback: SliderCallback::Repeating(|env, value| {
+                env.insert(Property::<f32, PROP_ID>::name(), *value);
+            }),
+            scroll_step: Self::DEFAULT_SCROLL_STEP,
             vertical: false,
         }
     }

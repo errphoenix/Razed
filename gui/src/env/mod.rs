@@ -1,7 +1,11 @@
+pub mod props;
+
 use std::fmt::Write;
 
 use ethel::assets::CachedStringHash;
 use janus::StringHash;
+
+pub use props::*;
 
 #[derive(Debug, Default)]
 pub struct UiEnv {
@@ -278,5 +282,70 @@ impl From<usize> for EnvValue {
 impl From<f32> for EnvValue {
     fn from(value: f32) -> Self {
         Self::Float(value)
+    }
+}
+impl From<EnvValue> for () {
+    fn from(_: EnvValue) -> Self {
+        ()
+    }
+}
+impl From<EnvValue> for bool {
+    fn from(value: EnvValue) -> Self {
+        value.as_boolean().unwrap_or_default()
+    }
+}
+impl From<EnvValue> for i32 {
+    fn from(value: EnvValue) -> Self {
+        value.as_integer().unwrap_or_default()
+    }
+}
+impl From<EnvValue> for u32 {
+    fn from(value: EnvValue) -> Self {
+        value.as_integer().map(|i| i as Self).unwrap_or_default()
+    }
+}
+impl From<EnvValue> for i16 {
+    fn from(value: EnvValue) -> Self {
+        value.as_integer().map(|i| i as Self).unwrap_or_default()
+    }
+}
+impl From<EnvValue> for u16 {
+    fn from(value: EnvValue) -> Self {
+        value.as_integer().map(|i| i as Self).unwrap_or_default()
+    }
+}
+impl From<EnvValue> for i64 {
+    fn from(value: EnvValue) -> Self {
+        value.as_integer().map(|i| i as Self).unwrap_or_default()
+    }
+}
+impl From<EnvValue> for u64 {
+    fn from(value: EnvValue) -> Self {
+        value.as_integer().map(|i| i as Self).unwrap_or_default()
+    }
+}
+impl From<EnvValue> for i8 {
+    fn from(value: EnvValue) -> Self {
+        value.as_integer().map(|i| i as Self).unwrap_or_default()
+    }
+}
+impl From<EnvValue> for u8 {
+    fn from(value: EnvValue) -> Self {
+        value.as_integer().map(|i| i as Self).unwrap_or_default()
+    }
+}
+impl From<EnvValue> for isize {
+    fn from(value: EnvValue) -> Self {
+        value.as_integer().map(|i| i as Self).unwrap_or_default()
+    }
+}
+impl From<EnvValue> for usize {
+    fn from(value: EnvValue) -> Self {
+        value.as_integer().map(|i| i as Self).unwrap_or_default()
+    }
+}
+impl From<EnvValue> for f32 {
+    fn from(value: EnvValue) -> Self {
+        value.as_float().unwrap_or_default()
     }
 }

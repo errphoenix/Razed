@@ -31,11 +31,11 @@ use taffy::prelude::*;
 
 use crate::{
     draw::{BatchingLayerCompositor, InterfaceAggregator, InterfaceObject, Quad},
-    env::UiEnv,
     look::{LookId, LooksManager},
     text::{FontMetrics, GlyphAtlas, TextComposer, font::FontLibrary},
 };
 
+pub use crate::env::*;
 pub use crate::widget::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
