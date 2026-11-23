@@ -1,7 +1,16 @@
-use std::{
-    fmt::{Debug, Write},
-    sync::RwLock,
-};
+pub mod declare;
+pub mod draw;
+pub mod env;
+pub mod look;
+pub mod render;
+pub mod style;
+pub mod text;
+pub mod widget;
+
+#[cfg(feature = "animation")]
+pub mod animation;
+
+use std::{fmt::Debug, sync::RwLock};
 
 use cosmic_text::FontSystem;
 use ethel::{
@@ -13,23 +22,7 @@ use ethel::{
     },
 };
 
-use janus::{
-    StringHash,
-    context::DeltaTime,
-    input::{Cursor, KeyEvent},
-};
-
-pub mod declare;
-pub mod draw;
-pub mod env;
-pub mod look;
-pub mod options;
-pub mod render;
-pub mod style;
-pub mod text;
-
-#[cfg(feature = "animation")]
-pub mod animation;
+use janus::{context::DeltaTime, input::KeyEvent};
 
 use rendrs::batch::Batch;
 pub use style::*;
@@ -38,284 +31,23 @@ use taffy::prelude::*;
 
 use crate::{
     draw::{BatchingLayerCompositor, InterfaceAggregator, InterfaceObject, Quad},
-    env::{EnvValue, UiEnv},
+    env::UiEnv,
     look::{LookId, LooksManager},
-    text::{FontMetrics, GlyphAtlas, TextComposer, TextMeasurement, font::FontLibrary},
+    text::{FontMetrics, GlyphAtlas, TextComposer, font::FontLibrary},
 };
 
-#[allow(unused_imports)]
-pub use options::{
-    ButtonOptions, CommonWidgetOptions, ElementOptions, FloatPanelOptions, HasOptions,
-    ImageOptions, PanelOptions, Slider, TextOptions,
-};
+pub use crate::widget::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct TaffyNodeId(pub(crate) NodeId);
-
 impl TaffyNodeId {
     pub fn is_null(self) -> bool {
         self.0 == NodeId::new(0)
     }
 }
-
 impl Default for TaffyNodeId {
     fn default() -> Self {
         Self(NodeId::new(0))
-    }
-}
-
-#[derive(Clone, Copy, Default, Debug)]
-pub struct InteractionTime {
-    pub seconds: f32,
-    pub frames: u32,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-pub struct TextContents(pub [TextNode; Self::NODE_COUNT]);
-impl TextContents {
-    pub const NODE_COUNT: usize = 18;
-
-    pub const fn literal(string: &'static str) -> Self {
-        Self::from_node(TextNode::Static(string))
-    }
-
-    pub const fn from_node(node: TextNode) -> Self {
-        let mut nodes = [TextNode::Empty; Self::NODE_COUNT];
-        nodes[0] = node;
-        Self(nodes)
-    }
-
-    pub const fn from_array(array: [TextNode; Self::NODE_COUNT]) -> Self {
-        Self(array)
-    }
-
-    pub fn from_nodes(input_nodes: &[TextNode]) -> Self {
-        let mut nodes = [TextNode::Empty; Self::NODE_COUNT];
-        input_nodes
-            .iter()
-            .take(Self::NODE_COUNT)
-            .enumerate()
-            .for_each(|(i, node)| {
-                nodes[i] = *node;
-            });
-        Self(nodes)
-    }
-
-    pub fn resolve(&self, env: &UiEnv, out: &mut String) {
-        for node in &self.0 {
-            match node {
-                TextNode::Static(literal) => out.write_str(literal).unwrap(),
-                TextNode::Variable(string_hash) => {
-                    if let Some(value) = env.get(string_hash) {
-                        value.write(out).unwrap()
-                    }
-                }
-                TextNode::VariableAnd { env_id, operation } => {
-                    if let Some(value) = env.get(env_id) {
-                        let value = operation(value);
-                        value.write(out).unwrap()
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default, Hash)]
-pub enum TextNode {
-    #[default]
-    Empty,
-    Static(&'static str),
-    /// Variable, dynamic String text content polled from the
-    /// [`environment`](env::UiEnv).
-    Variable(StringHash),
-    VariableAnd {
-        env_id: StringHash,
-        operation: fn(&EnvValue) -> EnvValue,
-    },
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-pub struct InteractionData {
-    pub hovered: bool,
-    pub pressed: bool,
-    pub hover_time: InteractionTime,
-    pub press_time: InteractionTime,
-}
-
-ethel::table_spec! {
-    struct InterfaceCommon {
-        archetype: ComponentKind;
-        look: LookId;
-
-        parent: WidgetId;
-        taffy_id: TaffyNodeId;
-
-        layout_options: LayoutOptions;
-        layer: u32;
-
-        // feedback values from taffy tree after evaluation
-        feedback_anchor: glam::Vec2; // top left corner
-        feedback_bounds: Box2d;
-
-        interaction_data: InteractionData;
-    }
-}
-ethel::table_spec! {
-    struct InterfacePanel {
-        root_rvid: WidgetId;
-
-        hidden: bool;
-
-        // index in InterfaceFloatData table
-        floating: Option<IndirectIndex>;
-    }
-}
-ethel::table_spec! {
-    struct InterfaceFloatData {
-        grab_area: FloatGrabArea;
-        offset: glam::Vec2;
-        state: FloatState;
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
-pub enum FloatGrabArea {
-    SectionHoriz { height: f32 },
-    SectionVert { width: f32 },
-    Corner { width: f32, height: f32 },
-}
-impl FloatGrabArea {
-    pub const DEFAULT_HEIGHT: f32 = 22f32;
-
-    pub const fn top(height: f32) -> Self {
-        Self::SectionHoriz { height }
-    }
-
-    pub const fn side(width: f32) -> Self {
-        Self::SectionVert { width }
-    }
-
-    pub const fn corner_square(side: f32) -> Self {
-        Self::corner(side, side)
-    }
-
-    pub const fn corner(width: f32, height: f32) -> Self {
-        Self::Corner { width, height }
-    }
-}
-impl Default for FloatGrabArea {
-    fn default() -> Self {
-        Self::SectionHoriz {
-            height: Self::DEFAULT_HEIGHT,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Default)]
-pub enum FloatState {
-    #[default]
-    Idle,
-    Active,
-    Released,
-}
-
-ethel::table_spec! {
-    struct InterfaceText {
-        contents: TextContents;
-        cached_text: StringHash;
-        font_name: &'static str;
-        metrics: FontMetrics;
-        measure: TextMeasurement;
-    }
-}
-ethel::table_spec! {
-    struct InterfaceImage {
-        tint: glam::Vec3;
-        tint_opacity: f32;
-        texture: TextureId;
-    }
-}
-ethel::table_spec! {
-    struct InterfaceButton {
-        // handle in text table
-        text_id: IndirectIndex;
-        callback: ButtonCallback;
-    }
-}
-ethel::table_spec! {
-    struct InterfaceSlider {
-        // handle in text table, if has label
-        text_id: Option<IndirectIndex>;
-
-        scroll_step: f32;
-        value_cache: f32;
-        // if the slider value may be affected by external systems, its value
-        // will be polled every frame from the environment before other updates
-        value_sync: Option<StringHash>;
-        callback: SliderCallback;
-
-        vertical: bool;
-    }
-}
-
-pub type ButtonCallback = InteractableCallback<InteractionTime>;
-pub type SliderCallback = InteractableCallback<f32>;
-
-#[derive(Clone, Copy, Debug, Default)]
-pub enum InteractableCallback<T: Clone + Copy + Debug + Default> {
-    #[default]
-    None,
-    Once(fn(&mut UiEnv, &mut T)),
-    Repeating(fn(&mut UiEnv, &mut T)),
-}
-
-#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct WidgetId(pub IndirectIndex);
-impl std::fmt::Display for WidgetId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.as_int())
-    }
-}
-impl WidgetId {
-    pub const fn new(index: IndirectIndex) -> Self {
-        Self(index)
-    }
-
-    pub const fn is_null(self) -> bool {
-        self.0.as_int() == 0
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
-pub enum ComponentKind {
-    #[default]
-    Null,
-    Panel(IndirectIndex),
-    Text(IndirectIndex),
-    Image(IndirectIndex),
-    Button {
-        handle: IndirectIndex,
-        /// text root id
-        text_handle: WidgetId,
-    },
-    Slider {
-        handle: IndirectIndex,
-        /// text root id, if has a label
-        text_handle: Option<WidgetId>,
-    },
-}
-impl std::fmt::Display for ComponentKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ComponentKind::Null => write!(f, "null"),
-            ComponentKind::Panel(_) => write!(f, "panel"),
-            ComponentKind::Text(_) => write!(f, "text"),
-            ComponentKind::Image(_) => write!(f, "image"),
-            ComponentKind::Button { .. } => write!(f, "button"),
-            ComponentKind::Slider { .. } => write!(f, "slider"),
-        }
     }
 }
 
@@ -651,91 +383,6 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         }
     }
 
-    /// Process floating events and interactions.
-    ///
-    /// # Returns
-    /// Returns the ID of the element that may require layout
-    /// re-evaluation (with [`Self::evaluate_layout_node`]), if any.
-    pub fn process_floating(&mut self, cursor: &Cursor) -> Option<WidgetId> {
-        let panels_count = self.panels.len();
-        let float_ids = &self.panels.floating;
-
-        let (x, y, dx, dy) = {
-            let c = cursor.current_f32();
-            let d = cursor.delta_f32();
-            (c.0, c.1, d.0, d.1)
-        };
-
-        for i in (1..panels_count).rev() {
-            if let Some(float_id) = float_ids[i]
-                && let Some(fdid) = self.floating.solve_indirect(float_id)
-            {
-                let fdid = fdid.as_index();
-                let roots = &self.panels.root_rvid;
-                let float_bounds = &self.floating.grab_area;
-                let float_offset = &mut self.floating.offset;
-                let float_state = &mut self.floating.state;
-
-                let root = self.commons.solve_indirect(roots[i].0).unwrap();
-                let layouts = &mut self.commons.layout_options;
-                let interact = self.commons.interaction_data[root.as_index()];
-
-                match float_state[fdid] {
-                    FloatState::Idle => {
-                        if interact.pressed && self.grabbing.is_none() {
-                            let bounds = {
-                                let p_bounds = self.commons.feedback_bounds[root.as_index()];
-                                let (min, max) = (p_bounds.min, p_bounds.max);
-                                let (min, max) = match float_bounds[fdid] {
-                                    FloatGrabArea::SectionHoriz { height } => {
-                                        (min, glam::vec2(max.x, min.y + height))
-                                    }
-                                    FloatGrabArea::SectionVert { width } => {
-                                        (min, glam::vec2(min.x + width, max.y))
-                                    }
-                                    FloatGrabArea::Corner { width, height } => {
-                                        (min, min + glam::vec2(width, height))
-                                    }
-                                };
-                                Box2d::new(min, max)
-                            };
-
-                            if bounds.contains(x, y) {
-                                self.grabbing = Some(float_id);
-                                float_state[fdid] = FloatState::Active;
-                            }
-                        }
-                    }
-                    FloatState::Active => {
-                        if let Some(grab_id) = self.grabbing
-                            && grab_id == float_id
-                        {
-                            float_offset[fdid] += glam::vec2(dx, dy);
-                        } else {
-                            float_state[fdid] = FloatState::Released;
-                        }
-                    }
-                    FloatState::Released => {
-                        let layout = &mut layouts[root.as_index()];
-                        let p_anchor = self.commons.feedback_anchor[root.as_index()];
-
-                        let offset = &mut float_offset[fdid];
-                        layout.layout_position = LayoutPosition::Absolute {
-                            x: Some(Value::Absolute(p_anchor.x + offset.x)),
-                            y: Some(Value::Absolute(p_anchor.y + offset.y)),
-                        };
-
-                        *offset = glam::Vec2::ZERO;
-                        float_state[fdid] = FloatState::Idle;
-
-                        return Some(roots[i]);
-                    }
-                }
-            }
-        }
-        None
-    }
-
     pub fn process_widget_states(&mut self, delta: DeltaTime) {
         let delta = delta.as_f32();
         let count = self.commons.len();
@@ -1066,26 +713,6 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         self.impl_evaluate_layout(TaffyNodeId(self.root_node.tree_id), force);
     }
 
-    pub fn invalidate_text_changes(&mut self) {
-        self.text_dynamic_list
-            .retain(|&w_id| self.commons.solve_indirect(w_id.0).is_some());
-
-        for w_id in &self.text_dynamic_list {
-            let root = self.commons.solve_indirect(w_id.0).unwrap();
-            if let ComponentKind::Text(text_id) = self.commons.archetype[root.as_index()] {
-                let tdid = self.texts.solve_indirect(text_id).unwrap().as_index();
-                self.text_resolve_buf.clear();
-                self.texts.contents[tdid].resolve(&self.environment, &mut self.text_resolve_buf);
-                let current = janus::hash_string(&self.text_resolve_buf);
-                if self.texts.cached_text[tdid] != current {
-                    let taffy_id = self.commons.taffy_id[root.as_index()];
-                    self.layout.mark_dirty(taffy_id.0).unwrap();
-                    self.texts.cached_text[tdid] = current;
-                }
-            }
-        }
-    }
-
     pub fn bind_system_fonts(&mut self) {
         self.text_composer.set_font_system(FontSystem::new());
     }
@@ -1107,177 +734,6 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         if let Some(commons_id) = self.commons.solve_indirect(id.0) {
             let taffy_id = self.commons.taffy_id[commons_id.as_index()];
             self.layout.mark_dirty(taffy_id.0).expect("never fails");
-        }
-    }
-
-    /// Make a core element into a panel element.
-    ///
-    /// This requires the core element's `id`.
-    ///
-    /// # Returns
-    /// Returns the `IndirectIndex` of the panel data.
-    /// Or returns `None` if the given core `id` is invalid.
-    pub fn make_panel(
-        &mut self,
-        id: WidgetId,
-        hidden: bool,
-        float_params: Option<FloatPanelOptions>,
-    ) -> Result<IndirectIndex, WidgetError> {
-        if let Some(commons_id) = self.commons.solve_indirect(id.0) {
-            self.assert_null_archetype(commons_id)?;
-
-            let float_id = float_params.map(|params| {
-                if let Some(base_pos) = params.base_pos {
-                    let cdid = commons_id.as_index();
-                    self.commons.feedback_anchor[cdid] = base_pos;
-                    let layout = &mut self.commons.layout_options[cdid];
-                    layout.layout_position = LayoutPosition::Absolute {
-                        x: Some(Value::Absolute(base_pos.x)),
-                        y: Some(Value::Absolute(base_pos.y)),
-                    };
-                }
-
-                self.floating
-                    .insert((params.grab_area, glam::Vec2::ZERO, FloatState::Idle))
-            });
-
-            let panel_element = (id, hidden, float_id);
-            let panel_id = self.panels.insert(panel_element);
-            self.commons.archetype[commons_id.as_index()] = ComponentKind::Panel(panel_id);
-            Ok(panel_id)
-        } else {
-            Err(WidgetError::InvalidWidgetHandle(id.0.as_int()))
-        }
-    }
-
-    /// Make a core element into a text element.
-    ///
-    /// This requires the core element's `id`.
-    ///
-    /// # Returns
-    /// Returns the `IndirectIndex` of the text data.
-    /// Or returns `None` if the given core `id` is invalid.
-    pub fn make_text(
-        &mut self,
-        id: WidgetId,
-        contents: TextContents,
-        font_name: &'static str,
-        metrics: FontMetrics,
-        never_invalidate: bool,
-    ) -> Result<IndirectIndex, WidgetError> {
-        if let Some(commons_id) = self.commons.solve_indirect(id.0) {
-            self.assert_null_archetype(commons_id)?;
-            let text_element = (
-                contents,
-                StringHash::default(),
-                font_name,
-                metrics,
-                TextMeasurement::default(),
-            );
-            let text_id = self.texts.insert(text_element);
-            self.commons.archetype[commons_id.as_index()] = ComponentKind::Text(text_id);
-            if !never_invalidate {
-                self.text_dynamic_list.push(id);
-            }
-
-            Ok(text_id)
-        } else {
-            Err(WidgetError::InvalidWidgetHandle(id.0.as_int()))
-        }
-    }
-
-    /// Make a core element into an image element.
-    ///
-    /// This requires the core element's `id`.
-    ///
-    /// # Returns
-    /// Returns the `IndirectIndex` of the image data.
-    /// Or returns `None` if the given core `id` is invalid.
-    pub fn make_image(
-        &mut self,
-        id: WidgetId,
-        tint: glam::Vec3,
-        tint_opacity: f32,
-        texture: TextureId,
-    ) -> Result<IndirectIndex, WidgetError> {
-        if let Some(commons_id) = self.commons.solve_indirect(id.0) {
-            self.assert_null_archetype(commons_id)?;
-            let image_element = (tint, tint_opacity, texture);
-            let image_id = self.images.insert(image_element);
-            self.commons.archetype[commons_id.as_index()] = ComponentKind::Image(image_id);
-            Ok(image_id)
-        } else {
-            Err(WidgetError::InvalidWidgetHandle(id.0.as_int()))
-        }
-    }
-
-    /// Make a core element into a button element.
-    ///
-    /// This, other than the core element's `root_id`, also requires the
-    /// `text_id` of a text element, created with [`Self::create_text`].
-    ///
-    /// # Returns
-    /// Returns the `IndirectIndex` of the button data.
-    /// Or returns `None` if the given core `root_id` is invalid.
-    pub fn make_button(
-        &mut self,
-        root_id: WidgetId,
-        text_root_id: WidgetId,
-        text_id: IndirectIndex,
-        callback: ButtonCallback,
-    ) -> Result<IndirectIndex, WidgetError> {
-        if let Some(commons_id) = self.commons.solve_indirect(root_id.0) {
-            self.assert_null_archetype(commons_id)?;
-            let button_element = (text_id, callback);
-            let button_id = self.buttons.insert(button_element);
-            self.commons.archetype[commons_id.as_index()] = ComponentKind::Button {
-                handle: button_id,
-                text_handle: text_root_id,
-            };
-            Ok(button_id)
-        } else {
-            Err(WidgetError::InvalidWidgetHandle(root_id.0.as_int()))
-        }
-    }
-
-    pub fn make_slider(
-        &mut self,
-        root_id: WidgetId,
-        text_ids: Option<(WidgetId, IndirectIndex)>,
-        scroll_step: f32,
-        value_init: f32,
-        value_sync: Option<StringHash>,
-        callback: SliderCallback,
-        vertical: bool,
-    ) -> Result<IndirectIndex, WidgetError> {
-        if let Some(commons_id) = self.commons.solve_indirect(root_id.0) {
-            self.assert_null_archetype(commons_id)?;
-
-            let value_cache = if let Some(sync_v) = value_sync {
-                self.environment
-                    .get(&sync_v)
-                    .and_then(|v| v.as_float())
-                    .unwrap_or(value_init)
-            } else {
-                value_init
-            };
-
-            let slider_element = (
-                text_ids.map(|(_, id)| id),
-                scroll_step,
-                value_cache,
-                value_sync,
-                callback,
-                vertical,
-            );
-            let slider_id = self.sliders.insert(slider_element);
-            self.commons.archetype[commons_id.as_index()] = ComponentKind::Slider {
-                handle: slider_id,
-                text_handle: text_ids.map(|(rid, _)| rid),
-            };
-            Ok(slider_id)
-        } else {
-            Err(WidgetError::InvalidWidgetHandle(root_id.0.as_int()))
         }
     }
 

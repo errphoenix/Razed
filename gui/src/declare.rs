@@ -3,9 +3,8 @@ use std::fmt::Debug;
 use ethel::Resolution;
 
 use crate::{
-    ButtonOptions, CommonWidgetOptions, ComponentKind, HasOptions, ImageOptions, InterfaceSystem,
-    LayoutOptions, LayoutPosition, PanelOptions, Point, Rectangle, TextContents, TextOptions,
-    Value, WidgetId, look::LookId, options::SliderOptions,
+    CommonWidgetOptions, ComponentKind, HasOptions, InterfaceSystem, LayoutOptions, LayoutPosition,
+    Point, Rectangle, Value, WidgetId, look::LookId,
 };
 
 pub trait HasUi: Debug {
@@ -42,16 +41,16 @@ pub trait HasUi: Debug {
     }
 }
 
-pub type UiPanel = UiNode<crate::options::Panel>;
-pub type UiButton = UiNode<crate::options::Button>;
-pub type UiText = UiNode<crate::options::Text>;
-pub type UiImage = UiNode<crate::options::Image>;
-pub type UiSlider = UiNode<crate::options::Slider>;
+pub type UiPanel = UiNode<crate::Panel>;
+pub type UiButton = UiNode<crate::Button>;
+pub type UiText = UiNode<crate::Text>;
+pub type UiImage = UiNode<crate::Image>;
+pub type UiSlider = UiNode<crate::Slider>;
 
 #[derive(Debug)]
 pub struct UiNodeStack<'stack> {
-    reference_resolution: Resolution,
-    inner: &'stack mut Vec<Box<dyn HasUi>>,
+    pub(crate) reference_resolution: Resolution,
+    pub(crate) inner: &'stack mut Vec<Box<dyn HasUi>>,
 }
 impl UiNodeStack<'_> {
     pub fn push_mut(&mut self, node: impl HasUi + 'static) -> &mut Box<dyn HasUi> {
@@ -60,57 +59,6 @@ impl UiNodeStack<'_> {
 
     pub fn push(&mut self, node: impl HasUi + 'static) {
         let _ = self.push_mut(node);
-    }
-
-    pub fn panel(&mut self, panel_op: impl FnOnce(UiPanel) -> UiPanel) {
-        self.push(panel_op(UiPanel::new(self.reference_resolution)));
-    }
-
-    pub fn panel_from(&mut self, panel_options: PanelOptions) {
-        self.push(UiPanel::from(panel_options, self.reference_resolution));
-    }
-
-    pub fn button(&mut self, button_op: impl FnOnce(UiButton) -> UiButton) {
-        self.push(button_op(UiButton::new(self.reference_resolution)));
-    }
-
-    pub fn button_from(&mut self, button_options: ButtonOptions) {
-        self.push(UiButton::from(button_options, self.reference_resolution));
-    }
-
-    pub fn text(&mut self, text_op: impl FnOnce(UiText) -> UiText) {
-        self.push(text_op(UiText::new(self.reference_resolution)));
-    }
-
-    pub fn text_from(&mut self, contents: TextContents) {
-        self.text(|text| text.builder(|_, props| props.with_contents(contents)));
-    }
-
-    pub fn text_literal(&mut self, text_literal: &'static str) {
-        self.push(
-            UiText::new(self.reference_resolution)
-                .builder(|_, props| props.with_contents_literal(text_literal)),
-        );
-    }
-
-    pub fn text_from_options(&mut self, text_options: TextOptions) {
-        self.push(UiText::from(text_options, self.reference_resolution));
-    }
-
-    pub fn image(&mut self, image_op: impl FnOnce(UiImage) -> UiImage) {
-        self.push(image_op(UiImage::new(self.reference_resolution)));
-    }
-
-    pub fn image_from(&mut self, image_options: ImageOptions) {
-        self.push(UiImage::from(image_options, self.reference_resolution));
-    }
-
-    pub fn slider(&mut self, slider_op: impl FnOnce(UiSlider) -> UiSlider) {
-        self.push(slider_op(UiSlider::new(self.reference_resolution)));
-    }
-
-    pub fn slider_from(&mut self, slider_options: SliderOptions) {
-        self.push(UiSlider::from(slider_options, self.reference_resolution));
     }
 
     pub const fn reference_resolution(&self) -> Resolution {
@@ -279,144 +227,6 @@ impl<T: HasOptions + Debug> UiNode<T> {
     pub fn apply(self, interface: &mut InterfaceSystem) -> WidgetId {
         self.build_node(None, interface)
     }
-}
-
-/// Generate text parameters.
-///
-/// Available fields:
-/// - `content` of type [`TextContents`] - the string to display.
-///
-///    Alternatively, the type can be of `&'static str` as a shortcut for
-///    a static literal string.
-/// - `font` of type `&'static str` - the name of the font (defaults to
-///   `Arial`)
-/// - `color` of type [`glam::Vec4`] - the foreground color
-/// - `size` of type `f32` - the font size in pixels
-/// - `height` of type `f32` - the line height of the text in pixels
-/// - `always_invalidate` field - whether the text should re-layout every frame
-///
-///   Note: re-layouting text may be expensive, this option should not be
-///   used unless necessary, if drastic content changes may require it.
-///
-/// The above fields can be defined in any order, and are optional.
-///
-/// Any non-defined field will default to the value as according to
-/// [`crate::TextParams::default`].
-///
-/// [`TextContents`]: crate::TextContents
-#[macro_export]
-macro_rules! wd_text {
-    (@prop $out:ident; content $v:literal $(; $($t:tt)*)?) => {
-        $out.contents = $crate::TextContents::literal($v);
-        $($crate::wd_text!(@prop $out; $($t:tt)*);)?
-    };
-    (@prop $out:ident; content $v:expr $(; $($t:tt)*)?) => {
-        $out.contents = $v;
-        $($crate::wd_text!(@prop $out; $($t:tt)*);)?
-    };
-    (@prop $out:ident; font $v:expr $(; $($t:tt)*)?) => {
-        $out.font_name = $v;
-        $($crate::wd_text!(@prop $out; $($t:tt)*);)?
-    };
-    (@prop $out:ident; color $v:expr $(; $($t:tt)*)?) => {
-        $out.color = $v;
-        $($crate::wd_text!(@prop $out; $($t:tt)*);)?
-    };
-    (@prop $out:ident; size $v:expr $(; $($t:tt)*)?) => {
-        $out.font_size = $v;
-        $($crate::wd_text!(@prop $out; $($t:tt)*);)?
-    };
-    (@prop $out:ident; height $v:expr $(; $($t:tt)*)?) => {
-        $out.line_height = $v;
-        $($crate::wd_text!(@prop $out; $($t:tt)*);)?
-    };
-    (@prop $out:ident; always_invalidate $(; $($t:tt)*)?) => {
-        $out.never_invalidate = false;
-        $($crate::wd_text!(@prop $out; $($t:tt)*);)?
-    };
-    (@prop $out:ident; $($t:tt)*) => {};
-
-    ($sys:ident, $core:expr => $($t:tt)*) => { $sys.create_element($crate::ElementOptions::Text($core, $crate::wd_text!($($t)*))) };
-    ($($t:tt)*) => {{
-        let mut params = $crate::TextOptions::default();
-        $crate::wd_text!(@prop params; $($t)*);
-        params
-    }};
-}
-
-/// Generate inner text contents string.
-///
-/// The string is composed from a series of nodes, described below.
-/// Nodes must be listed sequentially, separated by a comma.
-///
-/// A maximum of [`18`](crate::TextContents::NODE_COUNT) nodes is supported.
-///
-/// Available nodes:
-/// * Static - a literal string: `"Hello world"`
-/// * Variable - polled every frame from the UI environment by the given ID
-/// * Custom Variable - like `Variable`, but the value is captured to return
-///   another:
-///
-///   `|VAR_NAME : var| { /* do something with `var`, and return another `EnvValue` */ }`
-#[macro_export]
-macro_rules! text_contents {
-    (@node $i:ident, $a:ident; ) => {};
-    (@node $i:ident, $a:ident; $str:literal $(, $($o:tt)*)?) => {
-        $a[$i] = $crate::TextNode::Static($str);
-        $({
-            #[allow(unused)]
-            {
-                $i += 1;
-            }
-            $crate::text_contents!(@node $i, $a; $($o)*);
-        })?
-    };
-    (@node $i:ident, $a:ident; $var:ident $(, $($o:tt)*)?) => {
-        $a[$i] = $crate::TextNode::Variable($var);
-        $({
-            #[allow(unused)]
-            {
-                $i += 1;
-            }
-            $crate::text_contents!(@node $i, $a; $($o)*);
-        })?
-    };
-    (@node $i:ident, $a:ident; |$var:ident| $opfn:ident $(, $($o:tt)*)?) => {
-        $a[$i] = $crate::TextNode::VariableAnd {
-            env_id: $var,
-            operation: $opfn,
-        };
-        $({
-            #[allow(unused)]
-            {
-                $i += 1;
-            }
-            $crate::text_contents!(@node $i, $a; $($o)*);
-        })?
-    };
-    (@node $i:ident, $a:ident; |$var:ident: $vname:ident| $op:block $(, $($o:tt)*)?) => {
-        $a[$i] = $crate::TextNode::VariableAnd {
-            env_id: $var,
-            #[allow(unused)]
-            operation: |$vname| $op,
-        };
-        $({
-            #[allow(unused)]
-            {
-                $i += 1;
-            }
-            $crate::text_contents!(@node $i, $a; $($o)*);
-        })?
-    };
-
-    ($($t:tt)*) => {{
-        #[allow(unused)]
-        let mut index = 0;
-        #[allow(unused)]
-        let mut array = [$crate::TextNode::Empty; $crate::TextContents::NODE_COUNT];
-        $crate::text_contents!(@node index, array; $($t)*);
-        $crate::TextContents::from_array(array)
-    }};
 }
 
 #[macro_export]
@@ -622,60 +432,6 @@ macro_rules! style_layout {
     (bottom $v:expr) => { $crate::style_layout!($crate::style_layout!(0.0), $crate::style_layout!(0.0), $crate::style_layout!(0.0), $v) };
 }
 
-#[macro_export]
-macro_rules! button_callback {
-    (set $id:ident $value:expr) => {
-        $crate::ButtonCallback::Once(|env, _| {
-            env.insert($id, $value);
-        })
-    };
-    (select $id:ident => $cond:expr; ? $t:expr; : $f:expr) => {
-        $crate::ButtonCallback::Once(|env, _| {
-            if env.get_boolean(&$cond) {
-                env.insert($id, $t);
-            } else {
-                env.insert($id, $f);
-            }
-
-        })
-    };
-    (toggle $id:ident) => {
-        $crate::ButtonCallback::Once(|env, _| env.toggle_boolean(&$id))
-    };
-    (increment $id:ident $($by:expr)?) => {
-        $crate::ButtonCallback::Once(|env, _| {
-            let value = env.get_integer(&$id);
-            env.insert($id, value + 1 $(+ $by - 1)?);
-        })
-    };
-    (hold $id:ident $($factor:expr)?) => {
-        $crate::ButtonCallback::Repeating(|env, data| {
-            env.insert($id, data.seconds $(* $factor)?);
-        })
-    };
-}
-
-#[macro_export]
-macro_rules! slider_callback {
-    (copy $id:ident) => {
-        $crate::SliderCallback::Repeating(|env, value| {
-            env.insert($id, *value);
-        })
-    };
-    (map $id:ident $op:expr) => {
-        $crate::SliderCallback::Repeating(|env, value| {
-            let value = $op(*value);
-            env.insert($id, value);
-        })
-    };
-    (map $id:ident $min:expr, $max:expr) => {
-        $crate::SliderCallback::Repeating(|env, value| {
-            let value = ($min as f32) + (($max as f32 - $min as f32) * *value);
-            env.insert($id, value);
-        })
-    };
-}
-
 pub(crate) const fn sum_rects(
     a: Rectangle,
     b: Rectangle,
@@ -807,11 +563,11 @@ mod tests {
     fn declare_callbacks() {
         const ID: StringHash = janus::hash_string("test-id");
 
-        let _ = button_callback!(set ID 0.3);
-        let _ = button_callback!(toggle ID);
-        let _ = button_callback!(increment ID);
-        let _ = button_callback!(hold ID);
-        let _ = button_callback!(hold ID 0.5);
+        let _ = crate::button_callback!(set ID 0.3);
+        let _ = crate::button_callback!(toggle ID);
+        let _ = crate::button_callback!(increment ID);
+        let _ = crate::button_callback!(hold ID);
+        let _ = crate::button_callback!(hold ID 0.5);
 
         fn map_test_1(v: f32) -> f32 {
             v + 0.5
@@ -824,9 +580,9 @@ mod tests {
             }
         }
 
-        let _ = slider_callback!(copy ID);
-        let _ = slider_callback!(map ID -1.0, 1.0);
-        let _ = slider_callback!(map ID map_test_1);
-        let _ = slider_callback!(map ID Mapping::map);
+        let _ = crate::slider_callback!(copy ID);
+        let _ = crate::slider_callback!(map ID -1.0, 1.0);
+        let _ = crate::slider_callback!(map ID map_test_1);
+        let _ = crate::slider_callback!(map ID Mapping::map);
     }
 }
