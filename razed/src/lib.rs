@@ -48,7 +48,7 @@ impl FragmentMeshVolumes {
         self.0[mesh.as_int() as usize] = volume;
     }
 
-    pub fn get(&mut self, mesh: MeshId) -> Option<Sphere> {
+    pub fn get(&self, mesh: MeshId) -> Option<Sphere> {
         self.0.get(mesh.as_int() as usize).copied()
     }
 }
