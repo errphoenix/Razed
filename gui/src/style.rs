@@ -1,5 +1,7 @@
 use taffy::prelude::*;
 
+use crate::style_layout;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum ItemAlignment {
     Auto,
@@ -528,7 +530,7 @@ impl LayoutOptions {
             aspect_ratio: None,
             overflow_x: Overflow::Clip,
             overflow_y: Overflow::Clip,
-            margin: None,
+            margin: Some(style_layout!(top 2.5)),
             padding: None,
             grid_row: GridLine::Single(0),
             grid_column: GridLine::Single(0),

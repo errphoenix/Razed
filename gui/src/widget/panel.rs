@@ -1,4 +1,4 @@
-use ethel::{Column, IndirectIndex};
+use ethel::{Column, IndirectIndex, Resolution};
 use janus::Cursor;
 
 use crate::{
@@ -295,7 +295,11 @@ pub struct Panel;
 impl HasOptions for Panel {
     type Options = PanelOptions;
 
-    fn complement_options(common: CommonWidgetOptions, this: Self::Options) -> ElementOptions {
+    fn complement_options(
+        common: CommonWidgetOptions,
+        this: Self::Options,
+        _: Resolution,
+    ) -> ElementOptions {
         ElementOptions::Panel(common, this)
     }
 

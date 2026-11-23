@@ -77,6 +77,13 @@ pub struct Look {
     pub text_color: Rgb,
     pub text_scaling: f32,
 
+    pub checkbox_border: Rgb,
+    pub checkbox_border_width: f32,
+    pub checkbox_background: Rgb,
+    pub checkbox_background_hover: Rgb,
+    pub checkbox_check: Rgb,
+    pub checkbox_scaling: f32,
+
     pub slider_knob: Rgb,
     pub slider_knob_hover: Rgb,
     pub slider_knob_press: Rgb,
@@ -101,6 +108,7 @@ impl Look {
             panel_border: rgb!(0x0u32),
             panel_border_hover: rgb!(0x0u32),
             panel_border_press: rgb!(0x0u32),
+
             button_background: rgb!(0x0u32),
             button_background_hover: rgb!(uniform 76),
             button_background_press: rgb!(uniform 114),
@@ -111,8 +119,17 @@ impl Look {
             button_border: rgb!(0x0u32),
             button_border_hover: rgb!(0x0u32),
             button_border_press: rgb!(0x0u32),
+
             text_color: rgb!(0xffffff),
             text_scaling: 1.0,
+
+            checkbox_border: rgb!(0x0),
+            checkbox_border_width: 2.0,
+            checkbox_background: rgb!(0xaaaaaa),
+            checkbox_background_hover: rgb!(0x80808a),
+            checkbox_check: rgb!(0x32dc24),
+            checkbox_scaling: 1.0,
+
             slider_knob: rgb!(0x0u32),
             slider_knob_hover: rgb!(uniform 76),
             slider_knob_press: rgb!(uniform 114),

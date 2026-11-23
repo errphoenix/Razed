@@ -1,4 +1,6 @@
 pub mod button;
+pub mod checkbox;
+
 pub mod image;
 pub mod panel;
 pub mod slider;
@@ -6,6 +8,9 @@ pub mod text;
 
 pub use button::{
     Button, ButtonCallback, ButtonOptions, InterfaceButtonRowTable, InterfaceButtonRowTableView,
+};
+pub use checkbox::{
+    Checkbox, CheckboxOptions, InterfaceCheckboxRowTable, InterfaceCheckboxRowTableView,
 };
 pub use image::{Image, ImageOptions, InterfaceImageRowTable, InterfaceImageRowTableView};
 pub use panel::{
@@ -21,7 +26,7 @@ pub use text::{
 };
 
 use crate::{Box2d, LayoutOptions, TaffyNodeId, env::UiEnv, look::LookId};
-use ethel::IndirectIndex;
+use ethel::{IndirectIndex, Resolution};
 
 #[derive(Clone, Copy, Default, Debug)]
 pub struct InteractionTime {
@@ -57,11 +62,9 @@ pub enum ComponentKind {
         /// text root id
         text_handle: WidgetId,
     },
-    Slider {
-        handle: IndirectIndex,
-        /// text root id, if has a label
-        text_handle: Option<WidgetId>,
-    },
+    Slider(IndirectIndex),
+    Checkbox(IndirectIndex),
+
 }
 impl std::fmt::Display for ComponentKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -71,7 +74,9 @@ impl std::fmt::Display for ComponentKind {
             ComponentKind::Text(_) => write!(f, "text"),
             ComponentKind::Image(_) => write!(f, "image"),
             ComponentKind::Button { .. } => write!(f, "button"),
-            ComponentKind::Slider { .. } => write!(f, "slider"),
+            ComponentKind::Slider(_) => write!(f, "slider"),
+            ComponentKind::Checkbox(_) => write!(f, "checkbox"),
+
         }
     }
 }
@@ -157,7 +162,11 @@ impl CommonWidgetOptions {
 pub trait HasOptions {
     type Options: Default + Clone + Copy + std::fmt::Debug;
 
-    fn complement_options(common: CommonWidgetOptions, this: Self::Options) -> ElementOptions;
+    fn complement_options(
+        common: CommonWidgetOptions,
+        this: Self::Options,
+        reference_resolution: Resolution,
+    ) -> ElementOptions;
 
     fn archetype() -> ComponentKind;
 }
@@ -169,6 +178,7 @@ pub enum ElementOptions {
     Text(CommonWidgetOptions, TextOptions),
     Image(CommonWidgetOptions, ImageOptions),
     Slider(CommonWidgetOptions, SliderOptions),
+    Checkbox(CommonWidgetOptions, CheckboxOptions),
 }
 impl ElementOptions {
     pub const fn panel(core: CommonWidgetOptions, panel: PanelOptions) -> Self {
@@ -191,6 +201,10 @@ impl ElementOptions {
         Self::Slider(core, slider)
     }
 
+    pub const fn checkbox(core: CommonWidgetOptions, checkbox: CheckboxOptions) -> Self {
+        Self::Checkbox(core, checkbox)
+    }
+
     pub fn common_options(&self) -> &CommonWidgetOptions {
         match self {
             ElementOptions::Panel(core_element_params, _) => core_element_params,
@@ -198,6 +212,7 @@ impl ElementOptions {
             ElementOptions::Text(core_element_params, _) => core_element_params,
             ElementOptions::Image(core_element_params, _) => core_element_params,
             ElementOptions::Slider(core_element_params, _) => core_element_params,
+            ElementOptions::Checkbox(core_element_params, _) => core_element_params,
         }
     }
 }

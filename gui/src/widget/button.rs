@@ -1,4 +1,4 @@
-use ethel::{Column, IndirectIndex};
+use ethel::{Column, IndirectIndex, Resolution};
 
 use crate::{
     CommonWidgetOptions, ComponentKind, ElementOptions, HasOptions, InteractableCallback,
@@ -92,7 +92,11 @@ pub struct Button;
 impl HasOptions for Button {
     type Options = ButtonOptions;
 
-    fn complement_options(common: CommonWidgetOptions, this: Self::Options) -> ElementOptions {
+    fn complement_options(
+        common: CommonWidgetOptions,
+        this: Self::Options,
+        _: Resolution,
+    ) -> ElementOptions {
         ElementOptions::Button(common, this)
     }
 

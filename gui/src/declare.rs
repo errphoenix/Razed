@@ -46,6 +46,7 @@ pub type UiButton = UiNode<crate::Button>;
 pub type UiText = UiNode<crate::Text>;
 pub type UiImage = UiNode<crate::Image>;
 pub type UiSlider = UiNode<crate::Slider>;
+pub type UiCheckbox = UiNode<crate::Checkbox>;
 
 #[derive(Debug)]
 pub struct UiNodeStack<'stack> {
@@ -99,7 +100,7 @@ impl<T: HasOptions + Debug> HasUi for UiNode<T> {
             commons.layout.padding = Some(sum_rects(current, padding, self.reference_resolution));
         }
 
-        let options = T::complement_options(commons, self.options);
+        let options = T::complement_options(commons, self.options, self.reference_resolution);
         let id = interface.create_element(options).unwrap().0;
         for child in &self.children {
             child.build_node(Some(id), interface);
@@ -445,6 +446,14 @@ pub(crate) const fn sum_rects(
     }
 }
 
+#[allow(unused)]
+pub(crate) const fn sum_points(a: Point, b: Point, scaling_reference: Resolution) -> Point {
+    Point {
+        x: sum_values(a.x, b.x, scaling_reference.width),
+        y: sum_values(a.y, b.y, scaling_reference.height),
+    }
+}
+
 pub(crate) const fn sum_values(a: Value, b: Value, scaling_reference: f32) -> Value {
     match a {
         Value::Absolute(a_px) => match b {
@@ -544,11 +553,7 @@ mod tests {
             stack.button_from(ButtonOptions::labelled_literal("some button"));
             stack.panel(|panel| {
                 panel.builder(|mut stack, options| {
-                    stack.slider(|slider| {
-                        slider.builder(|_, options| {
-                            options.with_text_literal("slideee").with_vertical(true)
-                        })
-                    });
+                    stack.slider(|slider| slider.builder(|_, options| options.with_vertical(true)));
                     stack.button(|button| {
                         button.builder(|_, options| options.with_label_literal("another button"))
                     });

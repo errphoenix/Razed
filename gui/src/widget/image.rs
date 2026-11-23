@@ -1,4 +1,4 @@
-use ethel::{Column, IndirectIndex, TextureId};
+use ethel::{Column, IndirectIndex, Resolution, TextureId};
 
 use crate::{
     CommonWidgetOptions, ComponentKind, ElementOptions, HasOptions, InterfaceSystem, WidgetError,
@@ -93,7 +93,11 @@ pub struct Image;
 impl HasOptions for Image {
     type Options = ImageOptions;
 
-    fn complement_options(common: CommonWidgetOptions, this: Self::Options) -> ElementOptions {
+    fn complement_options(
+        common: CommonWidgetOptions,
+        this: Self::Options,
+        _: Resolution,
+    ) -> ElementOptions {
         ElementOptions::Image(common, this)
     }
 

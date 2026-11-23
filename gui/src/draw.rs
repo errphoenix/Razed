@@ -11,9 +11,9 @@ use janus::{
 use rendrs::batch::{Batch, BatchGroupIndex, BatchManager, BatchUnitIndex};
 
 use crate::{
-    FloatState, InterfaceButtonRowTableView, InterfaceCommonRowTableView,
-    InterfaceFloatDataRowTableView, InterfaceImageRowTableView, InterfacePanelRowTableView,
-    InterfaceSliderRowTableView, InterfaceTextRowTableView,
+    FloatState, InterfaceButtonRowTableView, InterfaceCheckboxRowTableView,
+    InterfaceCommonRowTableView, InterfaceFloatDataRowTableView, InterfaceImageRowTableView,
+    InterfacePanelRowTableView, InterfaceSliderRowTableView, InterfaceTextRowTableView,
     env::UiEnv,
     look::{LooksManager, Rgb},
     text::{GlyphAtlas, TextComposer},
@@ -29,6 +29,7 @@ pub struct InterfaceAggregator<'t> {
     pub images: InterfaceImageRowTableView<'t>,
     pub buttons: InterfaceButtonRowTableView<'t>,
     pub sliders: InterfaceSliderRowTableView<'t>,
+    pub checkboxes: InterfaceCheckboxRowTableView<'t>,
     pub text_resolve_buf: &'t mut String,
     pub looks: &'t LooksManager,
 }
@@ -59,9 +60,13 @@ impl InterfaceAggregator<'_> {
                 crate::ComponentKind::Text(indirect_index) => {
                     self.gather_text(index, indirect_index, text_composer, glyph_atlas, buffer);
                 }
-                crate::ComponentKind::Slider { handle, .. } => {
+                crate::ComponentKind::Slider(handle) => {
                     self.gather_slider(index, handle, buffer);
                 }
+                crate::ComponentKind::Checkbox(handle) => {
+                    self.gather_checkbox(index, handle, buffer);
+                }
+                _ => {}
             };
         }
     }
@@ -334,7 +339,7 @@ impl InterfaceAggregator<'_> {
         const TRACK_THICKNESS: f32 = 0.1; //10% of cross axis
 
         let bounds_size = bounds.size();
-        let knob_size = (bounds_size * cross_axis).max_element();
+        let knob_size = (bounds_size * cross_axis).max_element() * 0.35;
         let track_size = (bounds_size * knob_axis) + (cross_axis * knob_size * TRACK_THICKNESS);
         let oriented_value = if is_vertical { 1.0 - value } else { value };
         let knob_posx = ((bounds_size * knob_axis).max_element() - knob_size) * oriented_value;
@@ -353,6 +358,68 @@ impl InterfaceAggregator<'_> {
             attachment: None,
             layer,
         });
+    }
+
+    fn gather_checkbox(
+        &self,
+        common_handle: usize,
+        checkbox_index: IndirectIndex,
+        out: &mut Vec<InterfaceObject>,
+    ) {
+        let look_id = self.commons.look[common_handle];
+
+        let look = self.looks.get(look_id);
+        let cb_bg_base = look.checkbox_background;
+        let cb_bg_hover = look.checkbox_background_hover;
+        let cb_border = look.checkbox_border;
+        let cb_border_width = look.checkbox_border_width;
+        let cb_check = look.checkbox_check;
+
+        let interact = self.commons.interaction_data[common_handle];
+        let checked = self.checkboxes.value(checkbox_index);
+
+        let background = if interact.hovered {
+            cb_bg_hover
+        } else {
+            cb_bg_base
+        };
+
+        let bounds = self.commons.feedback_bounds[common_handle];
+        let layer = self.commons.layer[common_handle];
+
+        // border
+        out.push(InterfaceObject {
+            position: bounds.min,
+            size: bounds.size(),
+            color: cb_border.into(),
+            attachment: None,
+            layer,
+        });
+        // overlay background
+        let border_margin = glam::Vec2::splat(cb_border_width);
+        let inner_pos = bounds.min + border_margin;
+        let inner_size = bounds.size() - border_margin * 2.0;
+        out.push(InterfaceObject {
+            position: inner_pos,
+            size: inner_size,
+            color: background.into(),
+            attachment: None,
+            layer,
+        });
+        // inner check
+        if *checked {
+            const CHECK_WIDTH_BG_RELATIVE: f32 = 0.6;
+            let inner_margin = inner_size * (1.0 - CHECK_WIDTH_BG_RELATIVE);
+            let check_pos = inner_pos + inner_margin * 0.5;
+            let check_size = inner_size * CHECK_WIDTH_BG_RELATIVE;
+            out.push(InterfaceObject {
+                position: check_pos,
+                size: check_size,
+                color: cb_check.into(),
+                attachment: None,
+                layer,
+            });
+        }
     }
 }
 

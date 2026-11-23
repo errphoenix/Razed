@@ -30,6 +30,8 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution
                     )
                 })
             });
+            stack.checkbox_value(true);
+            stack.checkbox_value(false);
             props.with_floating(FloatGrabArea::top(20.0))
         })
         .apply(system)

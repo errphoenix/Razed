@@ -1,7 +1,7 @@
 use ethel::Resolution;
 use gui::{
-    FloatGrabArea, InterfaceSystem, LayoutOptions, TextOptions, WidgetId, button_callback,
-    declare::UiPanel, env::EnvValue, slider_callback, style_layout, text_contents,
+    FloatGrabArea, InterfaceSystem, LayoutOptions, WidgetId, button_callback, declare::UiPanel,
+    env::EnvValue, slider_callback, style_layout, text_contents,
 };
 
 use crate::{
@@ -29,15 +29,16 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution
                         padding: Some(style_layout!(horiz 0.0, vert 8.0)),
                         ..Default::default()
                     })
-                    .builder(|_, props| {
+                    .builder(|mut stack, props| {
+                        stack.text_from(text_contents!(
+                            "geom.ground.scale= ",
+                            |DEBUG_CTL_GROUND_SCALE: v_norm| {
+                                let norm = v_norm.as_float().unwrap_or_default();
+                                EnvValue::Float(Groundplane::scale_from_normalized(norm))
+                            }
+                        ));
                         props
-                            .with_text(TextOptions::from_contents(text_contents!(
-                                "geom.ground.scale= ",
-                                |DEBUG_CTL_GROUND_SCALE: v_norm| {
-                                    let norm = v_norm.as_float().unwrap_or_default();
-                                    EnvValue::Float(Groundplane::scale_from_normalized(norm))
-                                }
-                            )))
+                            // .with_text(TextOptions::from_contents())
                             .with_scroll_step(0.01)
                             .with_starting_value(Groundplane::DEFAULT_SCALE_NORMALIZED)
                             .with_sync_handle(DEBUG_CTL_GROUND_SCALE)
@@ -50,15 +51,15 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution
                         padding: Some(style_layout!(horiz 0.0, vert 8.0)),
                         ..Default::default()
                     })
-                    .builder(|_, props| {
+                    .builder(|mut stack, props| {
+                        stack.text_from(text_contents!(
+                            "geom.ground.uv-scale= ",
+                            |DEBUG_CTL_GROUND_UVSCALE: v_norm| {
+                                let norm = v_norm.as_float().unwrap_or_default();
+                                EnvValue::Float(Groundplane::uvscale_from_normalized(norm))
+                            }
+                        ));
                         props
-                            .with_text(TextOptions::from_contents(text_contents!(
-                                "geom.ground.uv-scale= ",
-                                |DEBUG_CTL_GROUND_UVSCALE: v_norm| {
-                                    let norm = v_norm.as_float().unwrap_or_default();
-                                    EnvValue::Float(Groundplane::uvscale_from_normalized(norm))
-                                }
-                            )))
                             .with_scroll_step(0.01)
                             .with_starting_value(Groundplane::DEFAULT_UVSCALE_NORMALIZED)
                             .with_sync_handle(DEBUG_CTL_GROUND_UVSCALE)

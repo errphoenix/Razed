@@ -174,6 +174,7 @@ pub struct InterfaceSystem<const LAYERS: usize = 10> {
     pub images: InterfaceImageRowTable,
     pub buttons: InterfaceButtonRowTable,
     pub sliders: InterfaceSliderRowTable,
+    pub checkboxes: InterfaceCheckboxRowTable,
 
     intermediate_buffer: Vec<InterfaceObject>,
     compositor: BatchingLayerCompositor<LAYERS>,
@@ -245,6 +246,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             images: InterfaceImageRowTable::new(),
             buttons: InterfaceButtonRowTable::new(),
             sliders: InterfaceSliderRowTable::new(),
+            checkboxes: InterfaceCheckboxRowTable::new(),
             intermediate_buffer: Vec::new(),
             compositor: BatchingLayerCompositor::new(),
             text_composer: TextComposer::new(),
@@ -335,6 +337,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             images: InterfaceImageRowTableView::from(&self.images),
             buttons: InterfaceButtonRowTableView::from(&self.buttons),
             sliders: InterfaceSliderRowTableView::from(&self.sliders),
+            checkboxes: InterfaceCheckboxRowTableView::from(&self.checkboxes),
         };
         aggregator.gather_quad_elements(
             &mut self.text_composer,
@@ -365,19 +368,34 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         &mut self.compositor
     }
 
-    /// Poll environment changes made by external systems.
+    /// Poll environment changes made by external systems directly on widgets.
+    ///
+    /// This affects sliders and checkboxes.
     ///
     /// Must run before interface input updates to ensure correct
     /// behaviour.
     pub fn poll_environment_changes(&mut self) {
         let env = &self.environment;
+
+        // sliders
         {
             let sliders = &mut self.sliders;
-            let caches = &mut sliders.value_cache;
-            let handles = &sliders.value_sync;
+            let caches = &mut sliders.value_cache[1..];
+            let handles = &sliders.value_sync[1..];
             for (id, cache) in handles.iter().zip(caches).filter(|(id, _)| id.is_some()) {
                 let id = id.as_ref().unwrap();
                 let env_value = env.get(id).and_then(|v| v.as_float());
+                *cache = env_value.unwrap_or_default();
+            }
+        }
+        // checkboxes
+        {
+            let checkboxes = &mut self.checkboxes;
+            let caches = &mut checkboxes.value[1..];
+            let handles = &checkboxes.sync_handle[1..];
+            for (id, cache) in handles.iter().zip(caches).filter(|(id, _)| id.is_some()) {
+                let id = id.as_ref().unwrap();
+                let env_value = env.get(id).and_then(|v| v.as_boolean());
                 *cache = env_value.unwrap_or_default();
             }
         }
@@ -420,7 +438,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                         }
                     }
                 }
-                ComponentKind::Slider { handle, .. } => {
+                ComponentKind::Slider(handle) => {
                     let direct = self.sliders.solve_indirect(handle).unwrap();
                     let callback = slider_callbacks[direct.as_index()];
                     let value = &mut self.sliders.value_cache[direct.as_index()];
@@ -428,8 +446,9 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                     match callback {
                         InteractableCallback::None => {}
                         InteractableCallback::Once(cb) => {
-                            // only call once slider is release
-                            if !interact.pressed {
+                            // only call once slider is released
+                            // note: this fails if slider has a sync_handle
+                            if !interact.pressed && interact.press_time.frames != 0 {
                                 cb(&mut self.environment, value)
                             }
                         }
@@ -439,6 +458,16 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                                 cb(&mut self.environment, value)
                             }
                         }
+                    }
+                }
+                ComponentKind::Checkbox(handle) => {
+                    let direct = self.checkboxes.solve_indirect(handle).unwrap();
+                    let value = &mut self.checkboxes.value[direct.as_index()];
+                    if interact.press_time.frames == 1 {
+                        value.toggle();
+                    }
+                    if let Some(sync) = self.checkboxes.sync_handle[direct.as_index()] {
+                        self.environment.insert(sync, *value);
                     }
                 }
 
@@ -524,7 +553,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             return;
         };
 
-        if let ComponentKind::Slider { handle, .. } = self.commons.archetype[table_index] {
+        if let ComponentKind::Slider(handle) = self.commons.archetype[table_index] {
             let slider_index = self.sliders.solve_indirect(handle).unwrap().as_index();
             let vd = self.sliders.scroll_step[slider_index] * scroll_delta;
             let v = self.sliders.value_cache[slider_index];
@@ -616,10 +645,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         let mut max = glam::vec2(position_x + size.width, position_y + size.height);
 
         // correct axis if slider is vertical
-        if let ComponentKind::Slider {
-            handle: slider_id, ..
-        } = self.commons.archetype[did.as_index()]
-        {
+        if let ComponentKind::Slider(slider_id) = self.commons.archetype[did.as_index()] {
             let sdid = self.sliders.solve_indirect(slider_id).unwrap();
             if self.sliders.vertical[sdid.as_index()] {
                 let mut size = max - min;
@@ -889,36 +915,19 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 image_params.tint_opacity,
                 image_params.texture,
             ),
-            ElementOptions::Slider(core, slider_params) => {
-                let mut text_ids = None;
-                if let Some(text) = &slider_params.text {
-                    const SLIDER_LABEL_LAYOUT: LayoutOptions = LayoutOptions::new();
-
-                    let root_text_id =
-                        self.add_new(Some(root_id), core.look, SLIDER_LABEL_LAYOUT, core.layer)?;
-                    let special_text_id = self.make_text(
-                        root_text_id,
-                        text.contents,
-                        text.font_name,
-                        FontMetrics {
-                            font_size: text.font_size,
-                            line_height: text.line_height,
-                        },
-                        text.never_invalidate,
-                    )?;
-                    text_ids = Some((root_text_id, special_text_id));
-                };
-
-                self.make_slider(
-                    root_id,
-                    text_ids,
-                    slider_params.scroll_step,
-                    slider_params.value_init,
-                    slider_params.value_sync_handle,
-                    slider_params.callback,
-                    slider_params.vertical,
-                )
-            }
+            ElementOptions::Slider(_, slider_params) => self.make_slider(
+                root_id,
+                slider_params.scroll_step,
+                slider_params.value_init,
+                slider_params.value_sync_handle,
+                slider_params.callback,
+                slider_params.vertical,
+            ),
+            ElementOptions::Checkbox(_, checkbox_params) => self.make_checkbox(
+                root_id,
+                checkbox_params.starting_value,
+                checkbox_params.sync_handle,
+            ),
         }?;
 
         Ok((root_id, special_id))

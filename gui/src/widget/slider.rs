@@ -1,9 +1,9 @@
-use ethel::{Column, IndirectIndex};
+use ethel::{Column, IndirectIndex, Resolution};
 use janus::StringHash;
 
 use crate::{
     CommonWidgetOptions, ComponentKind, ElementOptions, HasOptions, InteractableCallback,
-    InterfaceSystem, TextContents, TextOptions, WidgetError, WidgetId,
+    InterfaceSystem, WidgetError, WidgetId,
     declare::{UiNodeStack, UiSlider},
 };
 
@@ -11,9 +11,6 @@ pub type SliderCallback = InteractableCallback<f32>;
 
 ethel::table_spec! {
     struct InterfaceSlider {
-        // handle in text table, if has label
-        text_id: Option<IndirectIndex>;
-
         scroll_step: f32;
         value_cache: f32;
         // if the slider value may be affected by external systems, its value
@@ -29,7 +26,6 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     pub fn make_slider(
         &mut self,
         root_id: WidgetId,
-        text_ids: Option<(WidgetId, IndirectIndex)>,
         scroll_step: f32,
         value_init: f32,
         value_sync: Option<StringHash>,
@@ -48,19 +44,9 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 value_init
             };
 
-            let slider_element = (
-                text_ids.map(|(_, id)| id),
-                scroll_step,
-                value_cache,
-                value_sync,
-                callback,
-                vertical,
-            );
+            let slider_element = (scroll_step, value_cache, value_sync, callback, vertical);
             let slider_id = self.sliders.insert(slider_element);
-            self.commons.archetype[commons_id.as_index()] = ComponentKind::Slider {
-                handle: slider_id,
-                text_handle: text_ids.map(|(rid, _)| rid),
-            };
+            self.commons.archetype[commons_id.as_index()] = ComponentKind::Slider(slider_id);
             Ok(slider_id)
         } else {
             Err(WidgetError::InvalidWidgetHandle(root_id.0.as_int()))
@@ -70,7 +56,6 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
 
 #[derive(Clone, Debug, Copy)]
 pub struct SliderOptions {
-    pub text: Option<TextOptions>,
     pub scroll_step: f32,
     /// Normalized (0.0, 1.0)
     pub value_init: f32,
@@ -89,41 +74,11 @@ impl SliderOptions {
 
     pub const fn new() -> Self {
         Self {
-            text: None,
             scroll_step: Self::DEFAULT_SCROLL_STEP,
             value_init: 0f32,
             value_sync_handle: None,
             callback: InteractableCallback::None,
             vertical: false,
-        }
-    }
-
-    pub const fn labelled(label: TextOptions) -> Self {
-        Self::new().with_text(label)
-    }
-
-    pub const fn labelled_literal(label_literal: &'static str) -> Self {
-        Self::new().with_text_literal(label_literal)
-    }
-
-    pub const fn with_text(self, text: TextOptions) -> Self {
-        Self {
-            text: Some(text),
-            ..self
-        }
-    }
-
-    pub const fn with_text_contents(self, text_contents: TextContents) -> Self {
-        Self {
-            text: Some(TextOptions::from_contents(text_contents)),
-            ..self
-        }
-    }
-
-    pub const fn with_text_literal(self, text_literal: &'static str) -> Self {
-        Self {
-            text: Some(TextOptions::from_literal(text_literal)),
-            ..self
         }
     }
 
@@ -159,15 +114,16 @@ pub struct Slider;
 impl HasOptions for Slider {
     type Options = SliderOptions;
 
-    fn complement_options(common: CommonWidgetOptions, this: Self::Options) -> ElementOptions {
+    fn complement_options(
+        common: CommonWidgetOptions,
+        this: Self::Options,
+        _: Resolution,
+    ) -> ElementOptions {
         ElementOptions::Slider(common, this)
     }
 
     fn archetype() -> ComponentKind {
-        ComponentKind::Slider {
-            handle: Default::default(),
-            text_handle: Default::default(),
-        }
+        ComponentKind::Slider(Default::default())
     }
 }
 

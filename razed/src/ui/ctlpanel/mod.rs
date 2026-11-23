@@ -120,15 +120,15 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution
             });
 
             stack.slider(|slider| {
-                slider.with_padding((0.0, 8.0)).builder(|_, props| {
+                slider.with_padding((0.0, 8.0)).builder(|mut stack, props| {
+                    stack.text_from(text_contents!(
+                        "graphics.gamma = ",
+                        |DEBUG_CTL_GRAPHICS_GAMMA: v_gamma| {
+                            let norm = v_gamma.as_float().unwrap_or_default();
+                            EnvValue::Float(Gamma::from_normalized(norm))
+                        }
+                    ));
                     props
-                        .with_text_contents(text_contents!(
-                            "graphics.gamma = ",
-                            |DEBUG_CTL_GRAPHICS_GAMMA: v_gamma| {
-                                let norm = v_gamma.as_float().unwrap_or_default();
-                                EnvValue::Float(Gamma::from_normalized(norm))
-                            }
-                        ))
                         .with_starting_value(graphics::Gamma::DEFAULT_NORMALIZED)
                         .with_sync_handle(DEBUG_CTL_GRAPHICS_GAMMA)
                         .with_callback(slider_callback!(copy DEBUG_CTL_GRAPHICS_GAMMA))
@@ -136,12 +136,12 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution
             });
 
             stack.slider(|slider| {
-                slider.with_padding((0.0, 8.0)).builder(|_, props| {
+                slider.with_padding((0.0, 8.0)).builder(|mut stack, props| {
+                    stack.text_from(text_contents!(
+                        "shading.bias.roughness = ",
+                        DEBUG_CTL_SHADE_BIAS_ROUGHNESS
+                    ));
                     props
-                        .with_text_contents(text_contents!(
-                            "shading.bias.roughness = ",
-                            DEBUG_CTL_SHADE_BIAS_ROUGHNESS
-                        ))
                         .with_starting_value(0.0)
                         .with_scroll_step(0.01)
                         .with_sync_handle(DEBUG_CTL_SHADE_BIAS_ROUGHNESS)
@@ -149,12 +149,12 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution
                 })
             });
             stack.slider(|slider| {
-                slider.with_padding((0.0, 8.0)).builder(|_, props| {
+                slider.with_padding((0.0, 8.0)).builder(|mut stack, props| {
+                    stack.text_from(text_contents!(
+                        "shading.bias.metallic = ",
+                        DEBUG_CTL_SHADE_BIAS_METALLIC
+                    ));
                     props
-                        .with_text_contents(text_contents!(
-                            "shading.bias.metallic = ",
-                            DEBUG_CTL_SHADE_BIAS_METALLIC
-                        ))
                         .with_starting_value(0.0)
                         .with_scroll_step(0.01)
                         .with_sync_handle(DEBUG_CTL_SHADE_BIAS_METALLIC)

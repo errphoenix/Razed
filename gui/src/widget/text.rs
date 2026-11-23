@@ -1,6 +1,6 @@
 use std::fmt::Write;
 
-use ethel::{Column, IndirectIndex};
+use ethel::{Column, IndirectIndex, Resolution};
 use janus::StringHash;
 
 use crate::{
@@ -223,7 +223,11 @@ pub struct Text;
 impl HasOptions for Text {
     type Options = TextOptions;
 
-    fn complement_options(common: CommonWidgetOptions, this: Self::Options) -> ElementOptions {
+    fn complement_options(
+        common: CommonWidgetOptions,
+        this: Self::Options,
+        _: Resolution,
+    ) -> ElementOptions {
         ElementOptions::Text(common, this)
     }
 
