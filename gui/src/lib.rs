@@ -165,6 +165,8 @@ pub struct InterfaceSystem<const LAYERS: usize = 10> {
     layout: TaffyTree<WidgetId>,
     root_node: NodeJointId,
 
+    graph: RelationGraph,
+
     resolution: Resolution,
 
     pub commons: InterfaceCommonRowTable,
@@ -241,6 +243,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             root_node,
             resolution,
             commons,
+            graph: RelationGraph::new(),
             panels: InterfacePanelRowTable::new(),
             floating: InterfaceFloatDataRowTable::new(),
             texts: InterfaceTextRowTable::new(),
@@ -259,6 +262,14 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             grabbing: None,
             looks_manager: LooksManager::default(),
         }
+    }
+
+    pub const fn graph(&self) -> &RelationGraph {
+        &self.graph
+    }
+
+    pub const fn graph_mut(&mut self) -> &mut RelationGraph {
+        &mut self.graph
     }
 
     pub fn set_look_manager(&mut self, look_manager: LooksManager) {
@@ -801,6 +812,70 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         }
     }
 
+    pub fn remove(&mut self, id: WidgetId) {
+        self.graph.query_remove(id);
+        if let Some(did) = self.commons.solve_indirect(id.0) {
+            let archetype = self.commons.archetype[did.as_index()];
+            match archetype {
+                ComponentKind::Button { text_handle, .. } => {
+                    self.graph.query_remove(text_handle);
+                }
+                ComponentKind::Dropdown {
+                    display_text_handle,
+                    ..
+                } => {
+                    self.graph.query_remove(display_text_handle);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn remove_widget_data(&mut self, id: WidgetId) {
+        if let Some(did) = self.commons.solve_indirect(id.0) {
+            let archetype = self.commons.archetype[did.as_index()];
+            match archetype {
+                ComponentKind::Null => {}
+                ComponentKind::Panel(panel_id) => {
+                    self.panels.free(panel_id);
+                }
+                ComponentKind::Button {
+                    handle,
+                    text_handle,
+                } => {
+                    self.buttons.free(handle);
+                    self.remove(text_handle);
+                }
+                ComponentKind::Image(image_id) => {
+                    self.images.free(image_id);
+                }
+                ComponentKind::Text(text_id) => {
+                    self.texts.free(text_id);
+                }
+                ComponentKind::Slider(slider_id) => {
+                    self.sliders.free(slider_id);
+                }
+                ComponentKind::Checkbox(checkbox_id) => {
+                    self.checkboxes.free(checkbox_id);
+                }
+                ComponentKind::Dropdown {
+                    handle,
+                    display_text_handle,
+                } => {
+                    let direct = self.dropdowns.solve_indirect(handle).unwrap();
+                    let active_labels = self.dropdowns.labels[direct.as_index()];
+                    for label in active_labels {
+                        if let Some(label) = label {
+                            self.remove(label);
+                        }
+                    }
+                    self.dropdowns.free(handle);
+                    self.remove(display_text_handle);
+                }
+            }
+        }
+    }
+
     /// Create a new empty or core element.
     ///
     /// This returns a new [`WidgetId`] which can be used to create
@@ -858,11 +933,22 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             InteractionData::default(),
         )));
 
+        self.graph.register(id, Some(parent), None);
+
         self.layout
             .set_node_context(node_id, Some(id))
             .map_err(WidgetError::TaffyLayoutError)?;
 
         Ok(id)
+    }
+
+    pub fn update_graph(&mut self) {
+        self.graph.resolve_removals();
+        let removed = &self.graph.removed_widgets;
+        for &id in removed {
+            self.buttons.free(IndirectIndex::default());
+            //self.remove_widget_data(id);
+        }
     }
 
     pub const fn core_data(&self) -> &InterfaceCommonRowTable {
