@@ -6,6 +6,8 @@ pub mod panel;
 pub mod slider;
 pub mod text;
 
+use std::collections::HashMap;
+
 pub use button::{
     Button, ButtonCallback, ButtonOptions, InterfaceButtonRowTable, InterfaceButtonRowTableView,
 };
@@ -227,5 +229,121 @@ impl ElementOptions {
             ElementOptions::Checkbox(core_element_params, _) => core_element_params,
             ElementOptions::Dropdown(core_element_params, _) => core_element_params,
         }
+    }
+}
+
+pub type ParentGraph = HashMap<WidgetId, WidgetId>;
+pub type ChildrenGraph = HashMap<WidgetId, Vec<WidgetId>>;
+
+#[derive(Clone, Debug, Default)]
+pub struct RelationGraph {
+    // map child to one parent
+    parents: ParentGraph,
+    // map parent to many children
+    children: ChildrenGraph,
+
+    remove_queries: Vec<WidgetId>,
+    removed_propagated: Vec<WidgetId>,
+    pub removed_widgets: Vec<WidgetId>,
+}
+impl RelationGraph {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn has_parent(&self, id: &WidgetId) -> bool {
+        self.parent_of(id).is_some()
+    }
+
+    pub fn has_children(&self, id: &WidgetId) -> bool {
+        self.children_of(id).is_some()
+    }
+
+    pub fn parent_of(&self, id: &WidgetId) -> Option<WidgetId> {
+        self.parents.get(id).copied()
+    }
+
+    pub fn children_of(&self, id: &WidgetId) -> Option<&[WidgetId]> {
+        self.children
+            .get(id)
+            .map(Vec::as_slice)
+            .filter(|v| !v.is_empty())
+    }
+
+    pub fn removed(&self) -> &[WidgetId] {
+        &self.removed_widgets
+    }
+
+    pub fn query_remove(&mut self, id: WidgetId) {
+        self.remove_queries.push(id);
+    }
+
+    pub fn resolve_removals(&mut self) {
+        self.removed_widgets.clear();
+        while !self.remove_queries.is_empty() {
+            self.resolve_removals_impl();
+        }
+    }
+
+    fn resolve_removals_impl(&mut self) {
+        for node in self.remove_queries.drain(..) {
+            self.removed_widgets.push(node);
+            self.parents.remove(&node);
+
+            // vector allocation is kept
+            if let Some(children) = self.children.get_mut(&node) {
+                for child in children.drain(..) {
+                    self.removed_propagated.push(child);
+                }
+            }
+        }
+        {
+            let propagated = self.removed_propagated.drain(..);
+            self.remove_queries.extend(propagated);
+        }
+    }
+
+    pub fn register_parent(&mut self, child: WidgetId, parent: WidgetId) {
+        self.parents.insert(child, parent);
+    }
+
+    pub fn register_child(&mut self, parent: WidgetId, child: WidgetId) {
+        self.children
+            .entry(parent)
+            .or_insert(Vec::new())
+            .push(child);
+    }
+
+    pub fn register_children(&mut self, parent: WidgetId, children: &[WidgetId]) {
+        self.children
+            .entry(parent)
+            .or_insert(Vec::new())
+            .extend(children);
+    }
+
+    pub fn register(
+        &mut self,
+        subject: WidgetId,
+        parent_of_subject: Option<WidgetId>,
+        children_of_subject: Option<&[WidgetId]>,
+    ) {
+        if let Some(parent) = parent_of_subject {
+            self.register_parent(subject, parent);
+            self.register_child(parent, subject);
+        }
+        if let Some(children) = children_of_subject {
+            self.register_children(subject, children);
+            for &child in children {
+                self.register_parent(child, subject);
+            }
+        }
+    }
+
+    pub const fn parents(&self) -> &HashMap<WidgetId, WidgetId> {
+        &self.parents
+    }
+
+    pub const fn children(&self) -> &HashMap<WidgetId, Vec<WidgetId>> {
+        &self.children
     }
 }
