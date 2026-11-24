@@ -47,6 +47,7 @@ pub type UiText = UiNode<crate::Text>;
 pub type UiImage = UiNode<crate::Image>;
 pub type UiSlider = UiNode<crate::Slider>;
 pub type UiCheckbox = UiNode<crate::Checkbox>;
+pub type UiDropdown = UiNode<crate::Dropdown>;
 
 #[derive(Debug)]
 pub struct UiNodeStack<'stack> {
