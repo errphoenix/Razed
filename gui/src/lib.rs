@@ -175,6 +175,7 @@ pub struct InterfaceSystem<const LAYERS: usize = 10> {
     pub buttons: InterfaceButtonRowTable,
     pub sliders: InterfaceSliderRowTable,
     pub checkboxes: InterfaceCheckboxRowTable,
+    pub dropdowns: InterfaceDropdownRowTable,
 
     intermediate_buffer: Vec<InterfaceObject>,
     compositor: BatchingLayerCompositor<LAYERS>,
@@ -247,6 +248,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             buttons: InterfaceButtonRowTable::new(),
             sliders: InterfaceSliderRowTable::new(),
             checkboxes: InterfaceCheckboxRowTable::new(),
+            dropdowns: InterfaceDropdownRowTable::new(),
             intermediate_buffer: Vec::new(),
             compositor: BatchingLayerCompositor::new(),
             text_composer: TextComposer::new(),
@@ -338,6 +340,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             buttons: InterfaceButtonRowTableView::from(&self.buttons),
             sliders: InterfaceSliderRowTableView::from(&self.sliders),
             checkboxes: InterfaceCheckboxRowTableView::from(&self.checkboxes),
+            dropdowns: InterfaceDropdownRowTableView::from(&self.dropdowns),
         };
         aggregator.gather_quad_elements(
             &mut self.text_composer,
@@ -928,6 +931,35 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 checkbox_params.starting_value,
                 checkbox_params.sync_handle,
             ),
+            ElementOptions::Dropdown(core, dropdown_params) => {
+                let entries = dropdown_params.entries;
+                let selected = dropdown_params.starting_selection.unwrap_or(0);
+                let selected_entry = entries[selected as usize].name;
+                let text_font_name = dropdown_params.font_name;
+                let text_size = dropdown_params.font_size;
+                let sync_handle = dropdown_params.sync_handle;
+
+                let text_root_id = {
+                    const DROPDOWN_LABELS_LAYOUT: LayoutOptions = LayoutOptions::new();
+
+                    let root_text_id =
+                        self.add_new(Some(root_id), core.look, DROPDOWN_LABELS_LAYOUT, core.layer)?;
+                    let _ = self.make_text(
+                        root_text_id,
+                        TextContents::literal(selected_entry),
+                        text_font_name,
+                        FontMetrics {
+                            font_size: text_size,
+                            line_height: text_size + 2.0,
+                        },
+                        true,
+                    )?;
+                    root_text_id
+                };
+
+                let entries = entries.map(|e| e.name);
+                self.make_dropdown(root_id, text_root_id, selected, entries, sync_handle)
+            }
         }?;
 
         Ok((root_id, special_id))

@@ -25,6 +25,7 @@ chrono = "0.4.44"
 indoc = "2.0.7"
 rayon = "1.12.0"
 gui = { path = "../gui", features = ["taffy"] }
+gui-macros = { path = "../gui-macros" }
 crossbeam = { version = "0.8.4", features = ["crossbeam-channel"] }
 nalgebra = "0.35.0"
 const_format = "0.2.36"
@@ -32,5 +33,6 @@ image = "0.25.10"
 
 [features]
 default = []
-devmode = []
+measure-gpu = ["rendrs/pipeline-measure"]
+devmode = ["measure-gpu"]
 log-debug = []

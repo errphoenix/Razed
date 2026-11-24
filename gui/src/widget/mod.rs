@@ -1,6 +1,6 @@
 pub mod button;
 pub mod checkbox;
-
+pub mod dropdown;
 pub mod image;
 pub mod panel;
 pub mod slider;
@@ -11,6 +11,10 @@ pub use button::{
 };
 pub use checkbox::{
     Checkbox, CheckboxOptions, InterfaceCheckboxRowTable, InterfaceCheckboxRowTableView,
+};
+pub use dropdown::{
+    Dropdown, DropdownEntry, DropdownOptions, InterfaceDropdownRowTable,
+    InterfaceDropdownRowTableView,
 };
 pub use image::{Image, ImageOptions, InterfaceImageRowTable, InterfaceImageRowTableView};
 pub use panel::{
@@ -64,7 +68,10 @@ pub enum ComponentKind {
     },
     Slider(IndirectIndex),
     Checkbox(IndirectIndex),
-
+    Dropdown {
+        handle: IndirectIndex,
+        display_text_handle: WidgetId,
+    },
 }
 impl std::fmt::Display for ComponentKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -76,7 +83,7 @@ impl std::fmt::Display for ComponentKind {
             ComponentKind::Button { .. } => write!(f, "button"),
             ComponentKind::Slider(_) => write!(f, "slider"),
             ComponentKind::Checkbox(_) => write!(f, "checkbox"),
-
+            ComponentKind::Dropdown { .. } => write!(f, "dropdown-menu"),
         }
     }
 }
@@ -179,6 +186,7 @@ pub enum ElementOptions {
     Image(CommonWidgetOptions, ImageOptions),
     Slider(CommonWidgetOptions, SliderOptions),
     Checkbox(CommonWidgetOptions, CheckboxOptions),
+    Dropdown(CommonWidgetOptions, DropdownOptions),
 }
 impl ElementOptions {
     pub const fn panel(core: CommonWidgetOptions, panel: PanelOptions) -> Self {
@@ -205,6 +213,10 @@ impl ElementOptions {
         Self::Checkbox(core, checkbox)
     }
 
+    pub const fn dropdown(core: CommonWidgetOptions, dropdown: DropdownOptions) -> Self {
+        Self::Dropdown(core, dropdown)
+    }
+
     pub fn common_options(&self) -> &CommonWidgetOptions {
         match self {
             ElementOptions::Panel(core_element_params, _) => core_element_params,
@@ -213,6 +225,7 @@ impl ElementOptions {
             ElementOptions::Image(core_element_params, _) => core_element_params,
             ElementOptions::Slider(core_element_params, _) => core_element_params,
             ElementOptions::Checkbox(core_element_params, _) => core_element_params,
+            ElementOptions::Dropdown(core_element_params, _) => core_element_params,
         }
     }
 }

@@ -12,8 +12,9 @@ use rendrs::batch::{Batch, BatchGroupIndex, BatchManager, BatchUnitIndex};
 
 use crate::{
     FloatState, InterfaceButtonRowTableView, InterfaceCheckboxRowTableView,
-    InterfaceCommonRowTableView, InterfaceFloatDataRowTableView, InterfaceImageRowTableView,
-    InterfacePanelRowTableView, InterfaceSliderRowTableView, InterfaceTextRowTableView,
+    InterfaceCommonRowTableView, InterfaceDropdownRowTableView, InterfaceFloatDataRowTableView,
+    InterfaceImageRowTableView, InterfacePanelRowTableView, InterfaceSliderRowTableView,
+    InterfaceTextRowTableView,
     env::UiEnv,
     look::{LooksManager, Rgb},
     text::{GlyphAtlas, TextComposer},
@@ -30,6 +31,7 @@ pub struct InterfaceAggregator<'t> {
     pub buttons: InterfaceButtonRowTableView<'t>,
     pub sliders: InterfaceSliderRowTableView<'t>,
     pub checkboxes: InterfaceCheckboxRowTableView<'t>,
+    pub dropdowns: InterfaceDropdownRowTableView<'t>,
     pub text_resolve_buf: &'t mut String,
     pub looks: &'t LooksManager,
 }
@@ -420,6 +422,26 @@ impl InterfaceAggregator<'_> {
                 layer,
             });
         }
+    }
+
+    fn gather_dropdown(
+        &self,
+        common_handle: usize,
+        dropdown_index: IndirectIndex,
+        out: &mut Vec<InterfaceObject>,
+    ) {
+        let look_id = self.commons.look[common_handle];
+
+        let look = self.looks.get(look_id);
+        let background = look.menu_background;
+        let opacity = look.menu_background_opacity;
+        let entry_hover = look.menu_option_hover;
+        let entry_press = look.menu_option_press;
+        let entry_select = look.menu_option_select;
+
+        let interact = self.commons.interaction_data[common_handle];
+        // todo: base menu display
+        // todo: open base menu display (separate widget)
     }
 }
 
