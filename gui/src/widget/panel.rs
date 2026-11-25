@@ -67,7 +67,7 @@ ethel::table_spec! {
     }
 }
 
-impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
+impl InterfaceSystem {
     /// Process floating events and interactions.
     ///
     /// # Returns

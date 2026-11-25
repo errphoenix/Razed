@@ -481,53 +481,39 @@ pub enum InterfaceAttachment {
 }
 
 #[derive(Debug, Clone)]
-pub struct BatchingLayerCompositor<const LAYERS: usize> {
-    layers: [BatchManager<Quad>; LAYERS],
+pub struct BatchingLayerCompositor {
+    layers: Vec<BatchManager<Quad>>,
 }
-impl<const LAYERS: usize> Default for BatchingLayerCompositor<LAYERS> {
+impl Default for BatchingLayerCompositor {
     fn default() -> Self {
-        Self {
-            layers: std::array::from_fn(|_| BatchManager::default()),
-        }
+        Self { layers: Vec::new() }
     }
 }
-impl<const LAYERS: usize> IndexMut<usize> for BatchingLayerCompositor<LAYERS> {
+impl IndexMut<usize> for BatchingLayerCompositor {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         self.layer_mut(index)
     }
 }
-impl<const LAYERS: usize> Index<usize> for BatchingLayerCompositor<LAYERS> {
+impl Index<usize> for BatchingLayerCompositor {
     type Output = BatchManager<Quad>;
 
     fn index(&self, index: usize) -> &Self::Output {
         self.layer(index)
     }
 }
-impl<const LAYERS: usize> BatchingLayerCompositor<LAYERS> {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Allocate *each* layer [`batch manager`](BatchManager) with the given
-    /// `capacity`.
-    pub fn with_capacity(capacity: usize) -> Self {
+impl BatchingLayerCompositor {
+    pub fn new(layers: usize) -> Self {
         Self {
-            layers: std::array::from_fn(|_| BatchManager::with_capacity(capacity)),
+            layers: vec![BatchManager::new(); layers],
         }
     }
 
-    /// Returns a chained iterator of all layers' batches.
+    pub const fn layer_span(&self) -> usize {
+        self.layers.len()
+    }
+
     pub fn batches(&self) -> impl Iterator<Item = &Batch<Quad>> {
-        self.layers[0]
-            .batches()
-            .iter()
-            .chain(self.layers[1].batches())
-            .chain(self.layers[2].batches())
-            .chain(self.layers[3].batches())
-            .chain(self.layers[4].batches())
-            .chain(self.layers[5].batches())
-            .chain(self.layers[6].batches())
-            .chain(self.layers[7].batches())
+        self.layers.iter().map(|layer| layer.batches()).flatten()
     }
 
     pub fn clear_layers(&mut self) {
@@ -564,6 +550,10 @@ impl<const LAYERS: usize> BatchingLayerCompositor<LAYERS> {
             texture_id: texture.resource_id(),
         };
 
+        if self.layers.len() <= element.layer as usize {
+            self.layers
+                .resize_with(element.layer as usize + 1, BatchManager::new);
+        }
         let layer = self.layer_mut(element.layer as usize);
         layer.insert(quad, texture)
     }

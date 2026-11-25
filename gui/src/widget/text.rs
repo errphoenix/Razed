@@ -87,7 +87,7 @@ ethel::table_spec! {
     }
 }
 
-impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
+impl InterfaceSystem {
     pub fn invalidate_text_changes(&mut self) {
         self.text_dynamic_list
             .retain(|&w_id| self.data.commons.solve_indirect(w_id.0).is_some());

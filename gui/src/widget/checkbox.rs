@@ -14,7 +14,7 @@ ethel::table_spec! {
     }
 }
 
-impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
+impl InterfaceSystem {
     /// Make a core element into a checkbox element.
     ///
     /// If a label is present, this also requires the `text_id` of a text

@@ -197,7 +197,7 @@ impl InterfaceData {
 }
 
 #[derive(Debug)]
-pub struct InterfaceSystem<const LAYERS: usize = 10> {
+pub struct InterfaceSystem {
     layout: TaffyTree<WidgetId>,
     root_node: NodeJointId,
 
@@ -207,7 +207,7 @@ pub struct InterfaceSystem<const LAYERS: usize = 10> {
     pub data: InterfaceData,
 
     intermediate_buffer: Vec<InterfaceObject>,
-    compositor: BatchingLayerCompositor<LAYERS>,
+    compositor: BatchingLayerCompositor,
 
     text_composer: TextComposer,
     font_library: FontLibrary,
@@ -231,9 +231,9 @@ pub struct InterfaceSystem<const LAYERS: usize = 10> {
 /// TaffyTree is !Send and !SYnc due to internal implementation details
 /// related to raw const* function pointers. This implementation is required
 /// for ethel's threads initialization.
-unsafe impl<const LAYERS: usize> Send for InterfaceSystem<LAYERS> {}
-unsafe impl<const LAYERS: usize> Sync for InterfaceSystem<LAYERS> {}
-impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
+unsafe impl Send for InterfaceSystem {}
+unsafe impl Sync for InterfaceSystem {}
+impl InterfaceSystem {
     pub fn new(resolution: Resolution) -> Self {
         Self::with_environment(resolution, UiEnv::new())
     }
@@ -277,7 +277,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             graph: RelationGraph::new(),
             data,
             intermediate_buffer: Vec::new(),
-            compositor: BatchingLayerCompositor::new(),
+            compositor: BatchingLayerCompositor::new(10),
             text_composer: TextComposer::new(),
             font_library: FontLibrary::new(),
             environment,
@@ -390,11 +390,11 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         self.compositor.clear_layers();
     }
 
-    pub fn compositor(&self) -> &BatchingLayerCompositor<LAYERS> {
+    pub fn compositor(&self) -> &BatchingLayerCompositor {
         &self.compositor
     }
 
-    pub fn compositor_mut(&mut self) -> &mut BatchingLayerCompositor<LAYERS> {
+    pub fn compositor_mut(&mut self) -> &mut BatchingLayerCompositor {
         &mut self.compositor
     }
 
@@ -879,7 +879,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             parent,
             TaffyNodeId(node_id),
             layout_options,
-            layer.min(LAYERS as u32),
+            layer.min(self.compositor.layer_span() as u32),
             visible,
             visible_display_mode,
             // init default feedback values

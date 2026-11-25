@@ -50,6 +50,9 @@
   This severely improves performance: as it greatly reduces vertex fetching cost during dynamic geometry 
   rasterization.
 
+- GUI: unconstrain `LAYERS` generic constant parameter from `BatchingLayerCompositor` and `InterfaceSystem`  
+  The layers list of `BatchingLayerCompositor` is now heap-allocated
+
 ### Fixed
 
 - Crash during debris simulation due to missing check(s)

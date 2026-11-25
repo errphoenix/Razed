@@ -23,7 +23,7 @@ ethel::table_spec! {
     }
 }
 
-impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
+impl InterfaceSystem {
     pub fn make_slider(
         &mut self,
         root_id: WidgetId,

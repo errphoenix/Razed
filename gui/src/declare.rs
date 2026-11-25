@@ -537,7 +537,7 @@ mod tests {
 
     #[test]
     fn declare_widgets() {
-        let mut sys = InterfaceSystem::<1>::new(Resolution::default());
+        let mut sys = InterfaceSystem::new(Resolution::default());
 
         #[allow(unused)]
         const AAA: janus::StringHash = janus::hash_string("a");

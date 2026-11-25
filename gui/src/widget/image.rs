@@ -14,7 +14,7 @@ ethel::table_spec! {
     }
 }
 
-impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
+impl InterfaceSystem {
     /// Make a core element into an image element.
     ///
     /// This requires the core element's `id`.

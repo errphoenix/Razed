@@ -21,7 +21,7 @@ ethel::table_spec! {
     }
 }
 
-impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
+impl InterfaceSystem {
     /// Make a core element into a dropdown-menu element.
     ///
     /// # Returns
@@ -35,7 +35,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         entries: [&'static str; MAX_ENTRIES],
         sync_handle: StringHash,
     ) -> Result<IndirectIndex, WidgetError> {
-        if let Some(commons_id) = self.commons.solve_indirect(root_id.0) {
+        if let Some(commons_id) = self.data.commons.solve_indirect(root_id.0) {
             self.assert_null_archetype(commons_id)?;
             let dropdown_element = (
                 starting_value,
@@ -45,8 +45,8 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 display_label_id,
                 Default::default(),
             );
-            let dropdown_id = self.dropdowns.insert(dropdown_element);
-            self.commons.archetype[commons_id.as_index()] = ComponentKind::Dropdown {
+            let dropdown_id = self.data.dropdowns.insert(dropdown_element);
+            self.data.commons.archetype[commons_id.as_index()] = ComponentKind::Dropdown {
                 handle: dropdown_id,
                 display_text_handle: display_label_id,
             };

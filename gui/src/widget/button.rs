@@ -17,7 +17,7 @@ ethel::table_spec! {
     }
 }
 
-impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
+impl InterfaceSystem {
     /// Make a core element into a button element.
     ///
     /// This, other than the core element's `root_id`, also requires the
