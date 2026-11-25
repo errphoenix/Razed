@@ -6,10 +6,11 @@ pub mod panel;
 pub mod slider;
 pub mod text;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug};
 
 pub use button::{
-    Button, ButtonCallback, ButtonOptions, InterfaceButtonRowTable, InterfaceButtonRowTableView,
+    Button, ButtonCallback, ButtonCallbackCtx, ButtonOptions, InterfaceButtonRowTable,
+    InterfaceButtonRowTableView,
 };
 pub use checkbox::{
     Checkbox, CheckboxOptions, InterfaceCheckboxRowTable, InterfaceCheckboxRowTableView,
@@ -19,20 +20,22 @@ pub use dropdown::{
     InterfaceDropdownRowTableView,
 };
 pub use image::{Image, ImageOptions, InterfaceImageRowTable, InterfaceImageRowTableView};
+use janus::StringHash;
 pub use panel::{
     FloatGrabArea, FloatPanelOptions, FloatState, InterfaceFloatDataRowTable,
     InterfaceFloatDataRowTableView, InterfacePanelRowTable, InterfacePanelRowTableView, Panel,
     PanelOptions,
 };
 pub use slider::{
-    InterfaceSliderRowTable, InterfaceSliderRowTableView, Slider, SliderCallback, SliderOptions,
+    InterfaceSliderRowTable, InterfaceSliderRowTableView, Slider, SliderCallback,
+    SliderCallbackCtx, SliderOptions,
 };
 pub use text::{
     InterfaceTextRowTable, InterfaceTextRowTableView, Text, TextContents, TextNode, TextOptions,
 };
 
-use crate::{Box2d, LayoutOptions, TaffyNodeId, env::UiEnv, look::LookId};
-use ethel::{IndirectIndex, Resolution};
+use crate::{Box2d, InterfaceData, LayoutOptions, TaffyNodeId, env::UiEnv, look::LookId};
+use ethel::{Column, IndirectIndex, Resolution};
 
 #[derive(Clone, Copy, Default, Debug)]
 pub struct InteractionTime {
@@ -65,7 +68,7 @@ pub enum ComponentKind {
     Image(IndirectIndex),
     Button {
         handle: IndirectIndex,
-        /// text root id
+        /// Text widget ID
         text_handle: WidgetId,
     },
     Slider(IndirectIndex),
@@ -277,7 +280,7 @@ pub struct RelationGraph {
     // map parent to many children
     children: ChildrenGraph,
 
-    remove_queries: Vec<WidgetId>,
+    pub remove_queries: Vec<WidgetId>,
     removed_propagated: Vec<WidgetId>,
     pub removed_widgets: Vec<WidgetId>,
 }
@@ -335,6 +338,52 @@ impl RelationGraph {
         {
             let propagated = self.removed_propagated.drain(..);
             self.remove_queries.extend(propagated);
+        }
+    }
+
+    pub fn update(&mut self, data: &mut InterfaceData) {
+        let removed = &self.removed_widgets;
+        for &id in removed {
+            data.buttons.free(IndirectIndex::default());
+            if let Some(did) = data.commons.solve_indirect(id.0) {
+                let archetype = data.commons.archetype[did.as_index()];
+                match archetype {
+                    ComponentKind::Null => {}
+                    ComponentKind::Panel(panel_id) => {
+                        data.panels.free(panel_id);
+                    }
+                    ComponentKind::Button {
+                        handle,
+                        text_handle: _, // is child, do not remove explicitly
+                    } => {
+                        data.buttons.free(handle);
+                    }
+                    ComponentKind::Image(image_id) => {
+                        data.images.free(image_id);
+                    }
+                    ComponentKind::Text(text_id) => {
+                        data.texts.free(text_id);
+                    }
+                    ComponentKind::Slider(slider_id) => {
+                        data.sliders.free(slider_id);
+                    }
+                    ComponentKind::Checkbox(checkbox_id) => {
+                        data.checkboxes.free(checkbox_id);
+                    }
+                    ComponentKind::Dropdown {
+                        handle,
+                        display_text_handle: _, // is child, do not remove explicitly
+                        extended_menu,          // not child, must be removed explicitly
+                    } => {
+                        data.dropdowns.free(handle);
+                        crate::remove_widget_impl(
+                            &mut data.commons,
+                            &mut self.remove_queries,
+                            extended_menu,
+                        );
+                    }
+                }
+            }
         }
     }
 

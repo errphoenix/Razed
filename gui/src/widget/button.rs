@@ -6,7 +6,8 @@ use crate::{
     declare::{UiButton, UiNodeStack},
 };
 
-pub type ButtonCallback = InteractableCallback<InteractionTime>;
+pub type ButtonCallbackCtx = InteractionTime;
+pub type ButtonCallback = InteractableCallback<ButtonCallbackCtx>;
 
 ethel::table_spec! {
     struct InterfaceButton {
@@ -32,11 +33,11 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         text_id: IndirectIndex,
         callback: ButtonCallback,
     ) -> Result<IndirectIndex, WidgetError> {
-        if let Some(commons_id) = self.commons.solve_indirect(root_id.0) {
+        if let Some(commons_id) = self.data.commons.solve_indirect(root_id.0) {
             self.assert_null_archetype(commons_id)?;
             let button_element = (text_id, callback);
-            let button_id = self.buttons.insert(button_element);
-            self.commons.archetype[commons_id.as_index()] = ComponentKind::Button {
+            let button_id = self.data.buttons.insert(button_element);
+            self.data.commons.archetype[commons_id.as_index()] = ComponentKind::Button {
                 handle: button_id,
                 text_handle: text_root_id,
             };

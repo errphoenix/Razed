@@ -90,19 +90,20 @@ ethel::table_spec! {
 impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     pub fn invalidate_text_changes(&mut self) {
         self.text_dynamic_list
-            .retain(|&w_id| self.commons.solve_indirect(w_id.0).is_some());
+            .retain(|&w_id| self.data.commons.solve_indirect(w_id.0).is_some());
 
         for w_id in &self.text_dynamic_list {
-            let root = self.commons.solve_indirect(w_id.0).unwrap();
-            if let ComponentKind::Text(text_id) = self.commons.archetype[root.as_index()] {
-                let tdid = self.texts.solve_indirect(text_id).unwrap().as_index();
+            let root = self.data.commons.solve_indirect(w_id.0).unwrap();
+            if let ComponentKind::Text(text_id) = self.data.commons.archetype[root.as_index()] {
+                let tdid = self.data.texts.solve_indirect(text_id).unwrap().as_index();
                 self.text_resolve_buf.clear();
-                self.texts.contents[tdid].resolve(&self.environment, &mut self.text_resolve_buf);
+                self.data.texts.contents[tdid]
+                    .resolve(&self.environment, &mut self.text_resolve_buf);
                 let current = janus::hash_string(&self.text_resolve_buf);
-                if self.texts.cached_text[tdid] != current {
-                    let taffy_id = self.commons.taffy_id[root.as_index()];
+                if self.data.texts.cached_text[tdid] != current {
+                    let taffy_id = self.data.commons.taffy_id[root.as_index()];
                     self.layout.mark_dirty(taffy_id.0).unwrap();
-                    self.texts.cached_text[tdid] = current;
+                    self.data.texts.cached_text[tdid] = current;
                 }
             }
         }
@@ -123,7 +124,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         metrics: FontMetrics,
         never_invalidate: bool,
     ) -> Result<IndirectIndex, WidgetError> {
-        if let Some(commons_id) = self.commons.solve_indirect(id.0) {
+        if let Some(commons_id) = self.data.commons.solve_indirect(id.0) {
             self.assert_null_archetype(commons_id)?;
             let text_element = (
                 contents,
@@ -132,8 +133,8 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 metrics,
                 TextMeasurement::default(),
             );
-            let text_id = self.texts.insert(text_element);
-            self.commons.archetype[commons_id.as_index()] = ComponentKind::Text(text_id);
+            let text_id = self.data.texts.insert(text_element);
+            self.data.commons.archetype[commons_id.as_index()] = ComponentKind::Text(text_id);
             if !never_invalidate {
                 self.text_dynamic_list.push(id);
             }

@@ -39,6 +39,14 @@ pub trait HasUi: Debug {
     fn is_slider(&self) -> bool {
         matches!(self.archetype(), ComponentKind::Slider { .. })
     }
+
+    fn is_checkbox(&self) -> bool {
+        matches!(self.archetype(), ComponentKind::Checkbox { .. })
+    }
+
+    fn has_callback(&self) -> bool {
+        self.is_slider() || self.is_button()
+    }
 }
 
 pub type UiPanel = UiNode<crate::Panel>;
@@ -144,6 +152,7 @@ impl<T: HasOptions + Debug> UiNode<T> {
         self
     }
 
+    /// Set an absolute position on screen.
     pub fn with_offset(mut self, offset: impl Into<Point>) -> Self {
         let offset = offset.into();
         let layout = &mut self.commons.layout;

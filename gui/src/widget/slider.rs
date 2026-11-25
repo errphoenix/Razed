@@ -7,7 +7,8 @@ use crate::{
     declare::{UiNodeStack, UiSlider},
 };
 
-pub type SliderCallback = InteractableCallback<f32>;
+pub type SliderCallbackCtx = f32;
+pub type SliderCallback = InteractableCallback<SliderCallbackCtx>;
 
 ethel::table_spec! {
     struct InterfaceSlider {
@@ -32,7 +33,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         callback: SliderCallback,
         vertical: bool,
     ) -> Result<IndirectIndex, WidgetError> {
-        if let Some(commons_id) = self.commons.solve_indirect(root_id.0) {
+        if let Some(commons_id) = self.data.commons.solve_indirect(root_id.0) {
             self.assert_null_archetype(commons_id)?;
 
             let value_cache = if let Some(sync_v) = value_sync {
@@ -45,8 +46,8 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             };
 
             let slider_element = (scroll_step, value_cache, value_sync, callback, vertical);
-            let slider_id = self.sliders.insert(slider_element);
-            self.commons.archetype[commons_id.as_index()] = ComponentKind::Slider(slider_id);
+            let slider_id = self.data.sliders.insert(slider_element);
+            self.data.commons.archetype[commons_id.as_index()] = ComponentKind::Slider(slider_id);
             Ok(slider_id)
         } else {
             Err(WidgetError::InvalidWidgetHandle(root_id.0.as_int()))
@@ -77,7 +78,7 @@ impl SliderOptions {
             scroll_step: Self::DEFAULT_SCROLL_STEP,
             value_init: 0f32,
             value_sync_handle: None,
-            callback: InteractableCallback::None,
+            callback: SliderCallback::None,
             vertical: false,
         }
     }
@@ -87,7 +88,7 @@ impl SliderOptions {
             value_init: *prop.get(),
             value_sync_handle: Some(Property::<f32, PROP_ID>::name()),
             callback: SliderCallback::Repeating(|env, value| {
-                env.insert(Property::<f32, PROP_ID>::name(), *value);
+                env.insert(Property::<SliderCallbackCtx, PROP_ID>::name(), *value);
             }),
             scroll_step: Self::DEFAULT_SCROLL_STEP,
             vertical: false,

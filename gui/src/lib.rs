@@ -160,15 +160,8 @@ pub enum WidgetError {
     InvalidWidgetHandle(u32),
 }
 
-#[derive(Debug)]
-pub struct InterfaceSystem<const LAYERS: usize = 10> {
-    layout: TaffyTree<WidgetId>,
-    root_node: NodeJointId,
-
-    graph: RelationGraph,
-
-    resolution: Resolution,
-
+#[derive(Debug, Default)]
+pub struct InterfaceData {
     pub commons: InterfaceCommonRowTable,
     pub panels: InterfacePanelRowTable,
     pub floating: InterfaceFloatDataRowTable,
@@ -178,6 +171,40 @@ pub struct InterfaceSystem<const LAYERS: usize = 10> {
     pub sliders: InterfaceSliderRowTable,
     pub checkboxes: InterfaceCheckboxRowTable,
     pub dropdowns: InterfaceDropdownRowTable,
+}
+impl InterfaceData {
+    pub(crate) fn aggregator<'data>(
+        &'data self,
+        environment: &'data UiEnv,
+        text_resolve_buf: &'data mut String,
+        looks: &'data LooksManager,
+    ) -> InterfaceAggregator<'data> {
+        InterfaceAggregator {
+            environment,
+            text_resolve_buf,
+            looks,
+            commons: InterfaceCommonRowTableView::from(&self.commons),
+            panels: InterfacePanelRowTableView::from(&self.panels),
+            floating: InterfaceFloatDataRowTableView::from(&self.floating),
+            texts: InterfaceTextRowTableView::from(&self.texts),
+            images: InterfaceImageRowTableView::from(&self.images),
+            buttons: InterfaceButtonRowTableView::from(&self.buttons),
+            sliders: InterfaceSliderRowTableView::from(&self.sliders),
+            checkboxes: InterfaceCheckboxRowTableView::from(&self.checkboxes),
+            dropdowns: InterfaceDropdownRowTableView::from(&self.dropdowns),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct InterfaceSystem<const LAYERS: usize = 10> {
+    layout: TaffyTree<WidgetId>,
+    root_node: NodeJointId,
+
+    resolution: Resolution,
+
+    pub graph: RelationGraph,
+    pub data: InterfaceData,
 
     intermediate_buffer: Vec<InterfaceObject>,
     compositor: BatchingLayerCompositor<LAYERS>,
@@ -238,20 +265,17 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         let mut commons = InterfaceCommonRowTable::new();
         commons.taffy_id[ROOT_ID.0.as_index()] = TaffyNodeId(tree_id);
 
+        let data = InterfaceData {
+            commons,
+            ..Default::default()
+        };
+
         Self {
             layout,
             root_node,
             resolution,
-            commons,
             graph: RelationGraph::new(),
-            panels: InterfacePanelRowTable::new(),
-            floating: InterfaceFloatDataRowTable::new(),
-            texts: InterfaceTextRowTable::new(),
-            images: InterfaceImageRowTable::new(),
-            buttons: InterfaceButtonRowTable::new(),
-            sliders: InterfaceSliderRowTable::new(),
-            checkboxes: InterfaceCheckboxRowTable::new(),
-            dropdowns: InterfaceDropdownRowTable::new(),
+            data,
             intermediate_buffer: Vec::new(),
             compositor: BatchingLayerCompositor::new(),
             text_composer: TextComposer::new(),
@@ -327,8 +351,8 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     }
 
     pub fn parent_of(&self, widget: WidgetId) -> Option<WidgetId> {
-        if let Some(direct) = self.commons.solve_indirect(widget.0) {
-            self.commons.parent.get(direct.as_index()).copied()
+        if let Some(direct) = self.data.commons.solve_indirect(widget.0) {
+            self.data.commons.parent.get(direct.as_index()).copied()
         } else {
             None
         }
@@ -339,25 +363,17 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     }
 
     pub fn prepare_elements(&mut self, glyph_atlas: &mut GlyphAtlas) {
-        let mut aggregator = InterfaceAggregator {
-            environment: &self.environment,
-            looks: &self.looks_manager,
-            text_resolve_buf: &mut self.text_resolve_buf,
-            commons: InterfaceCommonRowTableView::from(&self.commons),
-            panels: InterfacePanelRowTableView::from(&self.panels),
-            floating: InterfaceFloatDataRowTableView::from(&self.floating),
-            texts: InterfaceTextRowTableView::from(&self.texts),
-            images: InterfaceImageRowTableView::from(&self.images),
-            buttons: InterfaceButtonRowTableView::from(&self.buttons),
-            sliders: InterfaceSliderRowTableView::from(&self.sliders),
-            checkboxes: InterfaceCheckboxRowTableView::from(&self.checkboxes),
-            dropdowns: InterfaceDropdownRowTableView::from(&self.dropdowns),
-        };
-        aggregator.gather_quad_elements(
-            &mut self.text_composer,
-            glyph_atlas,
-            &mut self.intermediate_buffer,
-        );
+        self.data
+            .aggregator(
+                &self.environment,
+                &mut self.text_resolve_buf,
+                &self.looks_manager,
+            )
+            .gather_quad_elements(
+                &mut self.text_composer,
+                glyph_atlas,
+                &mut self.intermediate_buffer,
+            );
     }
 
     pub fn composite_layers(&mut self, registry: &AssetMetadataRegistry<TextureMetadata>) {
@@ -393,7 +409,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
 
         // sliders
         {
-            let sliders = &mut self.sliders;
+            let sliders = &mut self.data.sliders;
             let caches = &mut sliders.value_cache[1..];
             let handles = &sliders.value_sync[1..];
             for (id, cache) in handles.iter().zip(caches).filter(|(id, _)| id.is_some()) {
@@ -404,7 +420,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         }
         // checkboxes
         {
-            let checkboxes = &mut self.checkboxes;
+            let checkboxes = &mut self.data.checkboxes;
             let caches = &mut checkboxes.value[1..];
             let handles = &checkboxes.sync_handle[1..];
             for (id, cache) in handles.iter().zip(caches).filter(|(id, _)| id.is_some()) {
@@ -417,13 +433,13 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
 
     pub fn process_widget_states(&mut self, delta: DeltaTime) {
         let delta = delta.as_f32();
-        let count = self.commons.len();
+        let count = self.data.commons.len();
 
-        let archetypes = &self.commons.archetype;
-        let interacts = &mut self.commons.interaction_data;
+        let archetypes = &self.data.commons.archetype;
+        let interacts = &mut self.data.commons.interaction_data;
 
-        let button_callbacks = &self.buttons.callback;
-        let slider_callbacks = &self.sliders.callback;
+        let button_callbacks = &self.data.buttons.callback;
+        let slider_callbacks = &self.data.sliders.callback;
 
         for i in (1..count).rev() {
             let archetype = archetypes[i];
@@ -432,30 +448,27 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             match archetype {
                 ComponentKind::Button { handle, .. } => {
                     if interact.pressed {
-                        let direct = self.buttons.solve_indirect(handle).unwrap();
+                        let direct = self.data.buttons.solve_indirect(handle).unwrap();
                         let callback = button_callbacks[direct.as_index()];
                         let press_time = &mut interact.press_time;
 
                         match callback {
                             InteractableCallback::None => {}
-                            e => match e {
-                                InteractableCallback::Once(cb) => {
-                                    if press_time.frames == 1 {
-                                        cb(&mut self.environment, press_time)
-                                    }
-                                }
-                                InteractableCallback::Repeating(cb) => {
+                            InteractableCallback::Once(cb) => {
+                                if press_time.frames == 1 {
                                     cb(&mut self.environment, press_time)
                                 }
-                                _ => unreachable!(),
-                            },
+                            }
+                            InteractableCallback::Repeating(cb) => {
+                                cb(&mut self.environment, press_time)
+                            }
                         }
                     }
                 }
                 ComponentKind::Slider(handle) => {
-                    let direct = self.sliders.solve_indirect(handle).unwrap();
+                    let direct = self.data.sliders.solve_indirect(handle).unwrap();
                     let callback = slider_callbacks[direct.as_index()];
-                    let value = &mut self.sliders.value_cache[direct.as_index()];
+                    let value = &mut self.data.sliders.value_cache[direct.as_index()];
 
                     match callback {
                         InteractableCallback::None => {}
@@ -475,12 +488,12 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                     }
                 }
                 ComponentKind::Checkbox(handle) => {
-                    let direct = self.checkboxes.solve_indirect(handle).unwrap();
-                    let value = &mut self.checkboxes.value[direct.as_index()];
+                    let direct = self.data.checkboxes.solve_indirect(handle).unwrap();
+                    let value = &mut self.data.checkboxes.value[direct.as_index()];
                     if interact.press_time.frames == 1 {
                         value.toggle();
                     }
-                    if let Some(sync) = self.checkboxes.sync_handle[direct.as_index()] {
+                    if let Some(sync) = self.data.checkboxes.sync_handle[direct.as_index()] {
                         self.environment.insert(sync, *value);
                     }
                 }
@@ -509,10 +522,10 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     pub fn process_hover_events(&mut self, x: f32, y: f32, delta: DeltaTime) {
         let delta = delta.as_f32();
 
-        let count = self.commons.len();
-        let visible = &self.commons.visible;
-        let bounds = &self.commons.feedback_bounds;
-        let interacts = &mut self.commons.interaction_data;
+        let count = self.data.commons.len();
+        let visible = &self.data.commons.visible;
+        let bounds = &self.data.commons.feedback_bounds;
+        let interacts = &mut self.data.commons.interaction_data;
 
         for i in (1..count).rev() {
             let bounds = bounds[i];
@@ -531,7 +544,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
 
     fn process_key_input(&mut self, table_index: usize, event: KeyEvent, delta: DeltaTime) -> bool {
         let delta = delta.as_f32();
-        let interact = &mut self.commons.interaction_data[table_index];
+        let interact = &mut self.data.commons.interaction_data[table_index];
 
         // keyboard text (todo)
         {}
@@ -563,20 +576,20 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     }
 
     fn process_scroll_input(&mut self, table_index: usize, scroll_delta: f32) {
-        if !self.commons.visible[table_index] {
+        if !self.data.commons.visible[table_index] {
             return;
         }
 
-        let interact = &mut self.commons.interaction_data[table_index];
+        let interact = &mut self.data.commons.interaction_data[table_index];
         if !interact.hovered {
             return;
         };
 
-        if let ComponentKind::Slider(handle) = self.commons.archetype[table_index] {
-            let slider_index = self.sliders.solve_indirect(handle).unwrap().as_index();
-            let vd = self.sliders.scroll_step[slider_index] * scroll_delta;
-            let v = self.sliders.value_cache[slider_index];
-            self.sliders.value_cache[slider_index] = (v + vd).clamp(0.0, 1.0);
+        if let ComponentKind::Slider(handle) = self.data.commons.archetype[table_index] {
+            let slider_index = self.data.sliders.solve_indirect(handle).unwrap().as_index();
+            let vd = self.data.sliders.scroll_step[slider_index] * scroll_delta;
+            let v = self.data.sliders.value_cache[slider_index];
+            self.data.sliders.value_cache[slider_index] = (v + vd).clamp(0.0, 1.0);
 
             if interact.press_time.frames == 0 {
                 interact.pressed = true;
@@ -608,7 +621,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
 
         let mut consumed = false;
 
-        let count = self.commons.len();
+        let count = self.data.commons.len();
         // start at 2 to skip null node at 0 and root node at 1
         for i in (2..count).rev() {
             for event in events {
@@ -629,30 +642,30 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     }
 
     pub fn rebind_layout(&mut self, id: WidgetId) {
-        if let Some(did) = self.commons.solve_indirect(id.0) {
-            let layout = &self.commons.layout_options[did.as_index()];
-            let taffy_id = self.commons.taffy_id[did.as_index()];
+        if let Some(did) = self.data.commons.solve_indirect(id.0) {
+            let layout = &self.data.commons.layout_options[did.as_index()];
+            let taffy_id = self.data.commons.taffy_id[did.as_index()];
             let _ = self.layout.set_style(taffy_id.0, layout.into_taffy_style());
         }
     }
 
     fn impl_synchronise_layout(&mut self, did: DirectIndex) {
-        let taffy_id = self.commons.taffy_id[did.as_index()];
+        let taffy_id = self.data.commons.taffy_id[did.as_index()];
         if taffy_id.is_null() {
             return;
         }
 
-        let parent = self.commons.parent[did.as_index()];
+        let parent = self.data.commons.parent[did.as_index()];
         let (offset_x, offset_y) = if !self.is_root(parent) {
-            let direct = unsafe { self.commons.solve_indirect_unchecked(parent.0) };
-            let position = self.commons.feedback_anchor[direct.as_index()];
+            let direct = unsafe { self.data.commons.solve_indirect_unchecked(parent.0) };
+            let position = self.data.commons.feedback_anchor[direct.as_index()];
             (position.x, position.y)
         } else {
             (0.0, 0.0)
         };
 
-        let fb_anchor = &mut self.commons.feedback_anchor[did.as_index()];
-        let fb_bounds = &mut self.commons.feedback_bounds[did.as_index()];
+        let fb_anchor = &mut self.data.commons.feedback_anchor[did.as_index()];
+        let fb_bounds = &mut self.data.commons.feedback_bounds[did.as_index()];
         let taffy_id = taffy_id.0;
 
         let node = self.layout.get_final_layout(taffy_id);
@@ -664,9 +677,9 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         let mut max = glam::vec2(position_x + size.width, position_y + size.height);
 
         // correct axis if slider is vertical
-        if let ComponentKind::Slider(slider_id) = self.commons.archetype[did.as_index()] {
-            let sdid = self.sliders.solve_indirect(slider_id).unwrap();
-            if self.sliders.vertical[sdid.as_index()] {
+        if let ComponentKind::Slider(slider_id) = self.data.commons.archetype[did.as_index()] {
+            let sdid = self.data.sliders.solve_indirect(slider_id).unwrap();
+            if self.data.sliders.vertical[sdid.as_index()] {
                 let mut size = max - min;
                 std::mem::swap(&mut size.x, &mut size.y);
                 max = min + size;
@@ -678,16 +691,16 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     }
 
     pub fn set_visible(&mut self, id: WidgetId, visible: bool) {
-        if let Some(did) = self.commons.solve_indirect(id.0) {
-            self.commons.visible[did.as_index()] = visible;
+        if let Some(did) = self.data.commons.solve_indirect(id.0) {
+            self.data.commons.visible[did.as_index()] = visible;
             self.set_visible_impl(did, visible);
         }
     }
 
     pub fn toggle_visible(&mut self, id: WidgetId) {
-        if let Some(did) = self.commons.solve_indirect(id.0) {
+        if let Some(did) = self.data.commons.solve_indirect(id.0) {
             let visible = {
-                let visible = &mut self.commons.visible[did.as_index()];
+                let visible = &mut self.data.commons.visible[did.as_index()];
                 visible.toggle();
                 *visible
             };
@@ -696,10 +709,10 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     }
 
     fn set_visible_impl(&mut self, root_id: DirectIndex, visible: bool) {
-        let taffy = self.commons.taffy_id[root_id.as_index()];
+        let taffy = self.data.commons.taffy_id[root_id.as_index()];
         let mut inner_style = self.layout.style(taffy.0).unwrap().clone();
         if visible {
-            let visible_display_mode = self.commons.restore_display[root_id.as_index()];
+            let visible_display_mode = self.data.commons.restore_display[root_id.as_index()];
             inner_style.display = visible_display_mode.into();
         } else {
             inner_style.display = taffy::Display::None;
@@ -708,21 +721,21 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     }
 
     pub fn synchronise_layout_node(&mut self, node: WidgetId) {
-        if let Some(did) = self.commons.solve_indirect(node.0) {
+        if let Some(did) = self.data.commons.solve_indirect(node.0) {
             self.impl_synchronise_layout(did);
         }
     }
 
     pub fn synchronise_layout(&mut self) {
-        let count = self.commons.len();
+        let count = self.data.commons.len();
         for i in 1..count {
             self.impl_synchronise_layout(DirectIndex::from_index(i, 0));
         }
     }
 
     pub fn evaluate_layout_node(&mut self, node: WidgetId, force: bool) {
-        if let Some(cdid) = self.commons.solve_indirect(node.0) {
-            let taffy_id = self.commons.taffy_id[cdid.as_index()];
+        if let Some(cdid) = self.data.commons.solve_indirect(node.0) {
+            let taffy_id = self.data.commons.taffy_id[cdid.as_index()];
             if taffy_id.is_null() {
                 return;
             }
@@ -744,20 +757,21 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 available,
                 |known_size, available, _id, ctx, _style| {
                     let id = ctx.expect("node has no associated widget with it");
-                    let did = self.commons.solve_indirect(id.0).unwrap();
-                    let archetype = self.commons.archetype[did.as_index()];
+                    let did = self.data.commons.solve_indirect(id.0).unwrap();
+                    let archetype = self.data.commons.archetype[did.as_index()];
                     if let ComponentKind::Text(text_id) = archetype {
                         let width = known_size.width.or(available.width.into_option());
                         let height = known_size.height.or(available.height.into_option());
                         let tdid = self
+                            .data
                             .texts
                             .solve_indirect(text_id)
                             .expect("text id must be valid")
                             .as_index();
 
-                        let contents = self.texts.contents[tdid];
-                        let metrics = self.texts.metrics[tdid];
-                        let font = self.texts.font_name[tdid];
+                        let contents = self.data.texts.contents[tdid];
+                        let metrics = self.data.texts.metrics[tdid];
+                        let font = self.data.texts.font_name[tdid];
 
                         let text_buf = &mut self.text_resolve_buf;
                         text_buf.clear();
@@ -769,7 +783,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                         self.text_composer.set_text(text_buf);
                         let measurement = self.text_composer.measure();
 
-                        self.texts.measure[tdid] = measurement;
+                        self.data.texts.measure[tdid] = measurement;
 
                         const TEXT_LAYOUT_PADDING: f32 = 1.0;
                         return Size {
@@ -797,7 +811,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     }
 
     fn assert_null_archetype(&self, root_id: DirectIndex) -> Result<(), WidgetError> {
-        let archetype = self.commons.archetype[root_id.as_index()];
+        let archetype = self.data.commons.archetype[root_id.as_index()];
         if matches!(archetype, ComponentKind::Null) {
             Ok(())
         } else {
@@ -806,74 +820,14 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     }
 
     pub fn mark_dirty(&mut self, id: WidgetId) {
-        if let Some(commons_id) = self.commons.solve_indirect(id.0) {
-            let taffy_id = self.commons.taffy_id[commons_id.as_index()];
+        if let Some(commons_id) = self.data.commons.solve_indirect(id.0) {
+            let taffy_id = self.data.commons.taffy_id[commons_id.as_index()];
             self.layout.mark_dirty(taffy_id.0).expect("never fails");
         }
     }
 
     pub fn remove(&mut self, id: WidgetId) {
-        self.graph.query_remove(id);
-        if let Some(did) = self.commons.solve_indirect(id.0) {
-            let archetype = self.commons.archetype[did.as_index()];
-            match archetype {
-                ComponentKind::Button { text_handle, .. } => {
-                    self.graph.query_remove(text_handle);
-                }
-                ComponentKind::Dropdown {
-                    display_text_handle,
-                    ..
-                } => {
-                    self.graph.query_remove(display_text_handle);
-                }
-                _ => {}
-            }
-        }
-    }
-
-    fn remove_widget_data(&mut self, id: WidgetId) {
-        if let Some(did) = self.commons.solve_indirect(id.0) {
-            let archetype = self.commons.archetype[did.as_index()];
-            match archetype {
-                ComponentKind::Null => {}
-                ComponentKind::Panel(panel_id) => {
-                    self.panels.free(panel_id);
-                }
-                ComponentKind::Button {
-                    handle,
-                    text_handle,
-                } => {
-                    self.buttons.free(handle);
-                    self.remove(text_handle);
-                }
-                ComponentKind::Image(image_id) => {
-                    self.images.free(image_id);
-                }
-                ComponentKind::Text(text_id) => {
-                    self.texts.free(text_id);
-                }
-                ComponentKind::Slider(slider_id) => {
-                    self.sliders.free(slider_id);
-                }
-                ComponentKind::Checkbox(checkbox_id) => {
-                    self.checkboxes.free(checkbox_id);
-                }
-                ComponentKind::Dropdown {
-                    handle,
-                    display_text_handle,
-                } => {
-                    let direct = self.dropdowns.solve_indirect(handle).unwrap();
-                    let active_labels = self.dropdowns.labels[direct.as_index()];
-                    for label in active_labels {
-                        if let Some(label) = label {
-                            self.remove(label);
-                        }
-                    }
-                    self.dropdowns.free(handle);
-                    self.remove(display_text_handle);
-                }
-            }
-        }
+        remove_widget_impl(&mut self.data.commons, &mut self.graph.remove_queries, id);
     }
 
     /// Create a new empty or core element.
@@ -909,16 +863,17 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         // add this to parent
         {
             let parent_direct = self
+                .data
                 .commons
                 .solve_indirect(parent.0)
                 .ok_or(WidgetError::ParentNotFound(parent))?;
-            let parent_taffy_id = self.commons.taffy_id[parent_direct.as_index()];
+            let parent_taffy_id = self.data.commons.taffy_id[parent_direct.as_index()];
             self.layout
                 .add_child(parent_taffy_id.0, node_id)
                 .map_err(WidgetError::TaffyLayoutError)?;
         }
 
-        let id = WidgetId(self.commons.insert((
+        let id = WidgetId(self.data.commons.insert((
             ComponentKind::Null,
             look_id.map(Into::into).unwrap_or_default(),
             parent,
@@ -942,61 +897,52 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         Ok(id)
     }
 
-    pub fn update_graph(&mut self) {
-        self.graph.resolve_removals();
-        let removed = &self.graph.removed_widgets;
-        for &id in removed {
-            self.buttons.free(IndirectIndex::default());
-            //self.remove_widget_data(id);
-        }
-    }
-
     pub const fn core_data(&self) -> &InterfaceCommonRowTable {
-        &self.commons
+        &self.data.commons
     }
 
     pub const fn core_data_mut(&mut self) -> &mut InterfaceCommonRowTable {
-        &mut self.commons
+        &mut self.data.commons
     }
 
     pub const fn panel_data(&self) -> &InterfacePanelRowTable {
-        &self.panels
+        &self.data.panels
     }
 
     pub const fn panel_data_mut(&mut self) -> &mut InterfacePanelRowTable {
-        &mut self.panels
+        &mut self.data.panels
     }
 
     pub const fn image_data(&self) -> &InterfaceImageRowTable {
-        &self.images
+        &self.data.images
     }
 
     pub const fn image_data_mut(&mut self) -> &mut InterfaceImageRowTable {
-        &mut self.images
+        &mut self.data.images
     }
 
     pub const fn text_data(&self) -> &InterfaceTextRowTable {
-        &self.texts
+        &self.data.texts
     }
 
     pub const fn text_data_mut(&mut self) -> &mut InterfaceTextRowTable {
-        &mut self.texts
+        &mut self.data.texts
     }
 
     pub const fn button_data(&self) -> &InterfaceButtonRowTable {
-        &self.buttons
+        &self.data.buttons
     }
 
     pub const fn button_data_mut(&mut self) -> &mut InterfaceButtonRowTable {
-        &mut self.buttons
+        &mut self.data.buttons
     }
 
     pub const fn slider_data(&self) -> &InterfaceSliderRowTable {
-        &self.sliders
+        &self.data.sliders
     }
 
     pub const fn slider_data_mut(&mut self) -> &mut InterfaceSliderRowTable {
-        &mut self.sliders
+        &mut self.data.sliders
     }
 
     pub fn create_element(
@@ -1086,8 +1032,13 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 let text_root_id = {
                     const DROPDOWN_LABELS_LAYOUT: LayoutOptions = LayoutOptions::new();
 
-                    let root_text_id =
-                        self.add_new(Some(root_id), core.look, DROPDOWN_LABELS_LAYOUT, core.layer)?;
+                    let root_text_id = self.add_new(
+                        Some(root_id),
+                        core.look,
+                        DROPDOWN_LABELS_LAYOUT,
+                        core.layer,
+                        core.visible,
+                    )?;
                     let _ = self.make_text(
                         root_text_id,
                         TextContents::literal(selected_entry),
@@ -1101,12 +1052,35 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                     root_text_id
                 };
 
-                let entries = entries.map(|e| e.name);
-                self.make_dropdown(root_id, text_root_id, selected, entries, sync_handle)
+                todo!()
+
+                //let entries = entries.map(|e| e.name);
+                //self.make_dropdown(root_id, text_root_id, selected, entries, sync_handle)
             }
         }?;
 
         Ok((root_id, special_id))
+    }
+}
+
+fn remove_widget_impl(
+    commons: &mut InterfaceCommonRowTable,
+    graph_rem_list: &mut Vec<WidgetId>,
+    id: WidgetId,
+) {
+    graph_rem_list.push(id);
+    if let Some(did) = commons.solve_indirect(id.0) {
+        let archetype = commons.archetype[did.as_index()];
+        match archetype {
+            ComponentKind::Dropdown {
+                display_text_handle: _, // is child, do not remove explicitly
+                extended_menu,          // not child, must be removed explicitly
+                ..
+            } => {
+                graph_rem_list.push(extended_menu);
+            }
+            _ => {}
+        }
     }
 }
 

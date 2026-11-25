@@ -74,8 +74,8 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     /// Returns the ID of the element that may require layout
     /// re-evaluation (with [`Self::evaluate_layout_node`]), if any.
     pub fn process_floating(&mut self, cursor: &Cursor) -> Option<WidgetId> {
-        let panels_count = self.panels.len();
-        let float_ids = &self.panels.floating;
+        let panels_count = self.data.panels.len();
+        let float_ids = &self.data.panels.floating;
 
         let (x, y, dx, dy) = {
             let c = cursor.current_f32();
@@ -85,23 +85,23 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
 
         for i in (1..panels_count).rev() {
             if let Some(float_id) = float_ids[i]
-                && let Some(fdid) = self.floating.solve_indirect(float_id)
+                && let Some(fdid) = self.data.floating.solve_indirect(float_id)
             {
                 let fdid = fdid.as_index();
-                let roots = &self.panels.root_rvid;
-                let float_bounds = &self.floating.grab_area;
-                let float_offset = &mut self.floating.offset;
-                let float_state = &mut self.floating.state;
+                let roots = &self.data.panels.root_rvid;
+                let float_bounds = &self.data.floating.grab_area;
+                let float_offset = &mut self.data.floating.offset;
+                let float_state = &mut self.data.floating.state;
 
-                let root = self.commons.solve_indirect(roots[i].0).unwrap();
-                let layouts = &mut self.commons.layout_options;
-                let interact = self.commons.interaction_data[root.as_index()];
+                let root = self.data.commons.solve_indirect(roots[i].0).unwrap();
+                let layouts = &mut self.data.commons.layout_options;
+                let interact = self.data.commons.interaction_data[root.as_index()];
 
                 match float_state[fdid] {
                     FloatState::Idle => {
                         if interact.pressed && self.grabbing.is_none() {
                             let bounds = {
-                                let p_bounds = self.commons.feedback_bounds[root.as_index()];
+                                let p_bounds = self.data.commons.feedback_bounds[root.as_index()];
                                 let (min, max) = (p_bounds.min, p_bounds.max);
                                 let (min, max) = match float_bounds[fdid] {
                                     FloatGrabArea::SectionHoriz { height } => {
@@ -134,7 +134,7 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                     }
                     FloatState::Released => {
                         let layout = &mut layouts[root.as_index()];
-                        let p_anchor = self.commons.feedback_anchor[root.as_index()];
+                        let p_anchor = self.data.commons.feedback_anchor[root.as_index()];
 
                         let offset = &mut float_offset[fdid];
                         layout.layout_position = LayoutPosition::Absolute {
@@ -166,27 +166,28 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         hidden: bool,
         float_params: Option<FloatPanelOptions>,
     ) -> Result<IndirectIndex, WidgetError> {
-        if let Some(commons_id) = self.commons.solve_indirect(id.0) {
+        if let Some(commons_id) = self.data.commons.solve_indirect(id.0) {
             self.assert_null_archetype(commons_id)?;
 
             let float_id = float_params.map(|params| {
                 if let Some(base_pos) = params.base_pos {
                     let cdid = commons_id.as_index();
-                    self.commons.feedback_anchor[cdid] = base_pos;
-                    let layout = &mut self.commons.layout_options[cdid];
+                    self.data.commons.feedback_anchor[cdid] = base_pos;
+                    let layout = &mut self.data.commons.layout_options[cdid];
                     layout.layout_position = LayoutPosition::Absolute {
                         x: Some(Value::Absolute(base_pos.x)),
                         y: Some(Value::Absolute(base_pos.y)),
                     };
                 }
 
-                self.floating
+                self.data
+                    .floating
                     .insert((params.grab_area, glam::Vec2::ZERO, FloatState::Idle))
             });
 
             let panel_element = (id, hidden, float_id);
-            let panel_id = self.panels.insert(panel_element);
-            self.commons.archetype[commons_id.as_index()] = ComponentKind::Panel(panel_id);
+            let panel_id = self.data.panels.insert(panel_element);
+            self.data.commons.archetype[commons_id.as_index()] = ComponentKind::Panel(panel_id);
             Ok(panel_id)
         } else {
             Err(WidgetError::InvalidWidgetHandle(id.0.as_int()))

@@ -29,11 +29,12 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         starting_value: bool,
         sync_handle: Option<StringHash>,
     ) -> Result<IndirectIndex, WidgetError> {
-        if let Some(commons_id) = self.commons.solve_indirect(root_id.0) {
+        if let Some(commons_id) = self.data.commons.solve_indirect(root_id.0) {
             self.assert_null_archetype(commons_id)?;
             let checkbox_element = (starting_value, sync_handle);
-            let checkbox_id = self.checkboxes.insert(checkbox_element);
-            self.commons.archetype[commons_id.as_index()] = ComponentKind::Checkbox(checkbox_id);
+            let checkbox_id = self.data.checkboxes.insert(checkbox_element);
+            self.data.commons.archetype[commons_id.as_index()] =
+                ComponentKind::Checkbox(checkbox_id);
             Ok(checkbox_id)
         } else {
             Err(WidgetError::InvalidWidgetHandle(root_id.0.as_int()))

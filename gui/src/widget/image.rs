@@ -29,11 +29,11 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         tint_opacity: f32,
         texture: TextureId,
     ) -> Result<IndirectIndex, WidgetError> {
-        if let Some(commons_id) = self.commons.solve_indirect(id.0) {
+        if let Some(commons_id) = self.data.commons.solve_indirect(id.0) {
             self.assert_null_archetype(commons_id)?;
             let image_element = (tint, tint_opacity, texture);
-            let image_id = self.images.insert(image_element);
-            self.commons.archetype[commons_id.as_index()] = ComponentKind::Image(image_id);
+            let image_id = self.data.images.insert(image_element);
+            self.data.commons.archetype[commons_id.as_index()] = ComponentKind::Image(image_id);
             Ok(image_id)
         } else {
             Err(WidgetError::InvalidWidgetHandle(id.0.as_int()))
