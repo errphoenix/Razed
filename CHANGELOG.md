@@ -24,6 +24,15 @@
 
 - GUI: new hierarchical UI builder to define UI trees
 
+- GUI: implemented new 'checkbox' widget
+
+- GUI: added new `visible` field to common widget data, applicable to all widgets.  
+  `visible` set to `true` will effectively set the internal widget's style `display` property to `none`.
+
+- GUI: created new `Property` type for less tedious UI-state synchronisation
+
+- GUI: implemented widget removal/deletion
+
 ### Changed
 
 - Updated `build.sh` build script to support additional builds
