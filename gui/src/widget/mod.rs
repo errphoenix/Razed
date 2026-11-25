@@ -51,12 +51,77 @@ pub struct InteractionData {
     pub press_time: InteractionTime,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct LocalCallbackBuffer(pub [StringHash; Self::CAPACITY]);
+impl LocalCallbackBuffer {
+    pub const CAPACITY: usize = 16;
+
+    pub const fn empty() -> Self {
+        Self([StringHash::from_u64(0); Self::CAPACITY])
+    }
+
+    pub const fn from_slice(slice: &[StringHash]) -> Self {
+        let mut buf = Self::empty();
+        let mut i = 0;
+        while i < Self::CAPACITY && i < slice.len() {
+            buf.0[i] = slice[i];
+            i += 1;
+        }
+        buf
+    }
+
+    pub const fn from_one(id: StringHash) -> Self {
+        Self::from_slice(&[id])
+    }
+}
+impl<const LEN: usize> From<[StringHash; LEN]> for LocalCallbackBuffer {
+    fn from(value: [StringHash; LEN]) -> Self {
+        Self::from_slice(&value)
+    }
+}
+impl<const LEN: usize> From<&[StringHash; LEN]> for LocalCallbackBuffer {
+    fn from(value: &[StringHash; LEN]) -> Self {
+        Self::from_slice(value)
+    }
+}
+impl From<&[StringHash]> for LocalCallbackBuffer {
+    fn from(value: &[StringHash]) -> Self {
+        Self::from_slice(value)
+    }
+}
+impl From<StringHash> for LocalCallbackBuffer {
+    fn from(value: StringHash) -> Self {
+        Self::from_one(value)
+    }
+}
+impl std::ops::DerefMut for LocalCallbackBuffer {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl std::ops::Deref for LocalCallbackBuffer {
+    type Target = [StringHash; Self::CAPACITY];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default)]
-pub enum InteractableCallback<T: Clone + Copy + Default + std::fmt::Debug> {
+pub enum InteractableCallback<T: Clone + Copy + Default + Debug> {
     #[default]
     None,
     Once(fn(&mut UiEnv, &mut T)),
     Repeating(fn(&mut UiEnv, &mut T)),
+    OnceWithData {
+        op: fn(&mut UiEnv, &mut T, &mut LocalCallbackBuffer),
+        data: LocalCallbackBuffer,
+    },
+    RepeatingWithData {
+        op: fn(&mut UiEnv, &mut T, &mut LocalCallbackBuffer),
+        data: LocalCallbackBuffer,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]

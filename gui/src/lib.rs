@@ -476,6 +476,12 @@ impl InterfaceSystem {
                             InteractableCallback::Repeating(cb) => {
                                 cb(&mut self.environment, press_time)
                             }
+                            InteractableCallback::OnceWithData { op, mut data } => {
+                                op(&mut self.environment, press_time, &mut data)
+                            }
+                            InteractableCallback::RepeatingWithData { op, mut data } => {
+                                op(&mut self.environment, press_time, &mut data)
+                            }
                         }
                     }
                 }
@@ -499,6 +505,12 @@ impl InterfaceSystem {
                             if interact.pressed {
                                 cb(&mut self.environment, value)
                             }
+                        }
+                        InteractableCallback::OnceWithData { op, mut data } => {
+                            op(&mut self.environment, value, &mut data)
+                        }
+                        InteractableCallback::RepeatingWithData { op, mut data } => {
+                            op(&mut self.environment, value, &mut data)
                         }
                     }
                 }

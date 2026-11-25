@@ -33,6 +33,8 @@
 
 - GUI: implemented widget removal/deletion
 
+- GUI: implemented new 'dropdown-menu' widget
+
 ### Changed
 
 - Updated `build.sh` build script to support additional builds
@@ -43,21 +45,24 @@
 
 - GUI: remove all color-related properties from widget options
 
-- Modify geometry submission path for fragments:  
+- Reworked geometry submission path for fragments:  
   Fragments that are not actively deforming are rendered through instancing, like debris.  
   Fragments are only submitted as dynamic geometry if their deformation displacement is above a certain 
   threshold.  
   This severely improves performance: as it greatly reduces vertex fetching cost during dynamic geometry 
   rasterization.
 
-- GUI: unconstrain `LAYERS` generic constant parameter from `BatchingLayerCompositor` and `InterfaceSystem`  
+- GUI: unconstrained `LAYERS` generic constant parameter from `BatchingLayerCompositor` and `InterfaceSystem`  
   The layers list of `BatchingLayerCompositor` is now heap-allocated
+
+- GUI: added `*WithData` variants to `InteractionCallback` enum for runtime selection/mutation of env IDs and
+  increased flexibility for interactable elements.
 
 ### Fixed
 
 - Crash during debris simulation due to missing check(s)
 
-- Restore debug lines rendering under `devmode` feature flag
+- Restored debug lines rendering under `devmode` feature flag
 
 - GUI: correctly select only the top-most floating panel when grabbing a panel that overlays another floating panel, avoiding conflict
 
