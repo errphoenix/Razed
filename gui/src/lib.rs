@@ -496,13 +496,14 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         let delta = delta.as_f32();
 
         let count = self.commons.len();
+        let visible = &self.commons.visible;
         let bounds = &self.commons.feedback_bounds;
         let interacts = &mut self.commons.interaction_data;
 
         for i in (1..count).rev() {
             let bounds = bounds[i];
             let interact = &mut interacts[i];
-            if bounds.contains(x, y) {
+            if visible[i] && bounds.contains(x, y) {
                 interact.hovered = true;
                 interact.hover_time.frames += 1;
                 interact.hover_time.seconds += delta;
@@ -548,6 +549,10 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     }
 
     fn process_scroll_input(&mut self, table_index: usize, scroll_delta: f32) {
+        if !self.commons.visible[table_index] {
+            return;
+        }
+
         let interact = &mut self.commons.interaction_data[table_index];
         if !interact.hovered {
             return;
@@ -656,6 +661,36 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
 
         *fb_anchor = glam::vec2(position_x, position_y);
         *fb_bounds = Box2d { min, max };
+    }
+
+    pub fn set_visible(&mut self, id: WidgetId, visible: bool) {
+        if let Some(did) = self.commons.solve_indirect(id.0) {
+            self.commons.visible[did.as_index()] = visible;
+            self.set_visible_impl(did, visible);
+        }
+    }
+
+    pub fn toggle_visible(&mut self, id: WidgetId) {
+        if let Some(did) = self.commons.solve_indirect(id.0) {
+            let visible = {
+                let visible = &mut self.commons.visible[did.as_index()];
+                visible.toggle();
+                *visible
+            };
+            self.set_visible_impl(did, visible);
+        }
+    }
+
+    fn set_visible_impl(&mut self, root_id: DirectIndex, visible: bool) {
+        let taffy = self.commons.taffy_id[root_id.as_index()];
+        let mut inner_style = self.layout.style(taffy.0).unwrap().clone();
+        if visible {
+            let visible_display_mode = self.commons.restore_display[root_id.as_index()];
+            inner_style.display = visible_display_mode.into();
+        } else {
+            inner_style.display = taffy::Display::None;
+        }
+        let _ = self.layout.set_style(taffy.0, inner_style);
     }
 
     pub fn synchronise_layout_node(&mut self, node: WidgetId) {
@@ -774,8 +809,18 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
         look_id: Option<impl Into<LookId>>,
         layout_options: LayoutOptions,
         layer: u32,
+        visible: bool,
     ) -> Result<WidgetId, WidgetError> {
-        let taffy_style = layout_options.into_taffy_style();
+        let mut taffy_style = layout_options.into_taffy_style();
+
+        // if invisible, set display to `none`
+        // in any case, store real display mode for eventual
+        // visibility toggles
+        let visible_display_mode = taffy_style.display.into();
+        if !visible {
+            taffy_style.display = taffy::Display::None;
+        }
+
         let node_id = self
             .layout
             .new_leaf(taffy_style)
@@ -802,6 +847,8 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
             TaffyNodeId(node_id),
             layout_options,
             layer.min(LAYERS as u32),
+            visible,
+            visible_display_mode,
             // init default feedback values
             glam::Vec2::ZERO,
             Box2d::NULL,
@@ -869,7 +916,13 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
     ) -> Result<(WidgetId, IndirectIndex), WidgetError> {
         let root_id = {
             let core = parameters.common_options();
-            self.add_new(core.parent, core.look, core.layout.clone(), core.layer)?
+            self.add_new(
+                core.parent,
+                core.look,
+                core.layout.clone(),
+                core.layer,
+                core.visible,
+            )?
         };
 
         let special_id = match parameters {
@@ -882,8 +935,13 @@ impl<const LAYERS: usize> InterfaceSystem<LAYERS> {
                 let (text_root_id, text_id) = {
                     const BUTTON_LABEL_LAYOUT: LayoutOptions = LayoutOptions::new();
 
-                    let root_text_id =
-                        self.add_new(Some(root_id), core.look, BUTTON_LABEL_LAYOUT, core.layer)?;
+                    let root_text_id = self.add_new(
+                        Some(root_id),
+                        core.look,
+                        BUTTON_LABEL_LAYOUT,
+                        core.layer,
+                        core.visible,
+                    )?;
                     let special_text_id = self.make_text(
                         root_text_id,
                         text.contents,

@@ -64,7 +64,6 @@ pub enum ComponentKind {
     },
     Slider(IndirectIndex),
     Checkbox(IndirectIndex),
-
 }
 impl std::fmt::Display for ComponentKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -76,7 +75,6 @@ impl std::fmt::Display for ComponentKind {
             ComponentKind::Button { .. } => write!(f, "button"),
             ComponentKind::Slider(_) => write!(f, "slider"),
             ComponentKind::Checkbox(_) => write!(f, "checkbox"),
-
         }
     }
 }
@@ -98,6 +96,33 @@ impl WidgetId {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum LayoutDisplayModeVisible {
+    #[default]
+    Block,
+    Flex,
+    Grid,
+}
+impl From<taffy::Display> for LayoutDisplayModeVisible {
+    fn from(value: taffy::Display) -> Self {
+        match value {
+            taffy::Display::Block => Self::Block,
+            taffy::Display::Flex => Self::Flex,
+            taffy::Display::Grid => Self::Grid,
+            taffy::Display::None => unimplemented!("only accepts visible display mode"),
+        }
+    }
+}
+impl From<LayoutDisplayModeVisible> for taffy::Display {
+    fn from(value: LayoutDisplayModeVisible) -> Self {
+        match value {
+            LayoutDisplayModeVisible::Block => Self::Block,
+            LayoutDisplayModeVisible::Flex => Self::Flex,
+            LayoutDisplayModeVisible::Grid => Self::Grid,
+        }
+    }
+}
+
 ethel::table_spec! {
     struct InterfaceCommon {
         archetype: ComponentKind;
@@ -108,6 +133,8 @@ ethel::table_spec! {
 
         layout_options: LayoutOptions;
         layer: u32;
+        visible: bool;
+        restore_display: LayoutDisplayModeVisible;
 
         // feedback values from taffy tree after evaluation
         feedback_anchor: glam::Vec2; // top left corner
@@ -123,6 +150,7 @@ pub struct CommonWidgetOptions {
     pub look: Option<LookId>,
     pub layout: LayoutOptions,
     pub layer: u32,
+    pub visible: bool,
 }
 impl CommonWidgetOptions {
     pub const DEFAULT_LAYER: u32 = 5;
@@ -133,6 +161,7 @@ impl CommonWidgetOptions {
             look: None,
             layer: Self::DEFAULT_LAYER,
             layout: LayoutOptions::new(),
+            visible: true,
         }
     }
 
@@ -156,6 +185,10 @@ impl CommonWidgetOptions {
 
     pub const fn with_layer(self, layer: u32) -> Self {
         Self { layer, ..self }
+    }
+
+    pub const fn with_visible(self, visible: bool) -> Self {
+        Self { visible, ..self }
     }
 }
 
