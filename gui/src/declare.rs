@@ -44,6 +44,10 @@ pub trait HasUi: Debug {
         matches!(self.archetype(), ComponentKind::Checkbox { .. })
     }
 
+    fn is_dropdown(&self) -> bool {
+        matches!(self.archetype(), ComponentKind::Dropdown { .. })
+    }
+
     fn has_callback(&self) -> bool {
         self.is_slider() || self.is_button()
     }
@@ -194,6 +198,11 @@ impl<T: HasOptions + Debug> UiNode<T> {
 
     pub const fn with_layer(mut self, layer: u32) -> Self {
         self.commons = self.commons.with_layer(layer);
+        self
+    }
+
+    pub const fn with_visible(mut self, visible: bool) -> Self {
+        self.commons = self.commons.with_visible(visible);
         self
     }
 

@@ -68,7 +68,9 @@ impl InterfaceAggregator<'_> {
                 crate::ComponentKind::Checkbox(handle) => {
                     self.gather_checkbox(index, handle, buffer);
                 }
-                _ => {}
+                crate::ComponentKind::Dropdown { handle, .. } => {
+                    self.gather_dropdown(index, handle, buffer)
+                }
             };
         }
     }
@@ -433,15 +435,36 @@ impl InterfaceAggregator<'_> {
         let look_id = self.commons.look[common_handle];
 
         let look = self.looks.get(look_id);
-        let background = look.menu_background;
-        let opacity = look.menu_background_opacity;
-        let entry_hover = look.menu_option_hover;
-        let entry_press = look.menu_option_press;
-        let entry_select = look.menu_option_select;
+        let base_color = look.menu_button;
+        let hover_color = look.menu_button_hover;
+        let press_color = look.menu_button_press;
+        let open_color = look.menu_button_open;
+        let _symbol_color = look.menu_button_symbol;
 
         let interact = self.commons.interaction_data[common_handle];
-        // todo: base menu display
-        // todo: open base menu display (separate widget)
+        let is_open = self.dropdowns.open(dropdown_index);
+
+        let background_color = if interact.pressed {
+            press_color.into()
+        } else if interact.hovered {
+            hover_color.into()
+        } else if *is_open {
+            open_color
+        } else {
+            base_color
+        }
+        .into();
+
+        let bounds = self.commons.feedback_bounds[common_handle];
+        let layer = self.commons.layer[common_handle];
+
+        out.push(InterfaceObject {
+            position: bounds.min,
+            size: bounds.size(),
+            color: background_color,
+            attachment: None,
+            layer,
+        });
     }
 }
 

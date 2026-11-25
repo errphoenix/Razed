@@ -30,6 +30,7 @@ pub use style::*;
 use taffy::prelude::*;
 
 use crate::{
+    declare::HasUi,
     draw::{BatchingLayerCompositor, InterfaceAggregator, InterfaceObject, Quad},
     look::{LookId, LooksManager},
     text::{FontMetrics, GlyphAtlas, TextComposer, font::FontLibrary},
@@ -405,7 +406,7 @@ impl InterfaceSystem {
     /// Must run before interface input updates to ensure correct
     /// behaviour.
     pub fn poll_environment_changes(&mut self) {
-        let env = &self.environment;
+        let env = &mut self.environment;
 
         // sliders
         {
@@ -429,24 +430,37 @@ impl InterfaceSystem {
                 *cache = env_value.unwrap_or_default();
             }
         }
+        // dropdowns
+        {
+            let dropdowns = &mut self.data.dropdowns;
+            let selected = &mut dropdowns.selected[1..];
+            let entries = &dropdowns.entries[1..];
+            let display_handles = &dropdowns.display_sync_handle[1..];
+            let handles = &dropdowns.sync_handle[1..];
+
+            for ((id, selected), (entries, &display_handle)) in handles
+                .iter()
+                .zip(selected)
+                .zip(entries.iter().zip(display_handles))
+            {
+                *selected = env.get(id).and_then(|v| v.as_integer()).unwrap_or_default() as u32;
+                let name_selected = entries[*selected as usize];
+                env.insert(display_handle, name_selected);
+            }
+        }
     }
 
     pub fn process_widget_states(&mut self, delta: DeltaTime) {
         let delta = delta.as_f32();
         let count = self.data.commons.len();
 
-        let archetypes = &self.data.commons.archetype;
-        let interacts = &mut self.data.commons.interaction_data;
-
         let button_callbacks = &self.data.buttons.callback;
         let slider_callbacks = &self.data.sliders.callback;
 
         for i in (1..count).rev() {
-            let archetype = archetypes[i];
-            let interact = &mut interacts[i];
-
-            match archetype {
+            match self.data.commons.archetype[i] {
                 ComponentKind::Button { handle, .. } => {
+                    let interact = &mut self.data.commons.interaction_data[i];
                     if interact.pressed {
                         let direct = self.data.buttons.solve_indirect(handle).unwrap();
                         let callback = button_callbacks[direct.as_index()];
@@ -466,6 +480,7 @@ impl InterfaceSystem {
                     }
                 }
                 ComponentKind::Slider(handle) => {
+                    let interact = &mut self.data.commons.interaction_data[i];
                     let direct = self.data.sliders.solve_indirect(handle).unwrap();
                     let callback = slider_callbacks[direct.as_index()];
                     let value = &mut self.data.sliders.value_cache[direct.as_index()];
@@ -488,6 +503,7 @@ impl InterfaceSystem {
                     }
                 }
                 ComponentKind::Checkbox(handle) => {
+                    let interact = &mut self.data.commons.interaction_data[i];
                     let direct = self.data.checkboxes.solve_indirect(handle).unwrap();
                     let value = &mut self.data.checkboxes.value[direct.as_index()];
                     if interact.press_time.frames == 1 {
@@ -497,10 +513,30 @@ impl InterfaceSystem {
                         self.environment.insert(sync, *value);
                     }
                 }
+                ComponentKind::Dropdown {
+                    handle,
+                    extended_menu,
+                    ..
+                } => {
+                    let interact = &mut self.data.commons.interaction_data[i];
+                    let direct = self.data.dropdowns.solve_indirect(handle).unwrap();
+                    let is_open = &mut self.data.dropdowns.open[direct.as_index()];
+                    if interact.press_time.frames == 1 {
+                        is_open.toggle();
+                    }
+                    let panel_did = self.data.commons.solve_indirect(extended_menu.0).unwrap();
+                    Self::set_visible_impl_a(
+                        &mut self.layout,
+                        &self.data.commons,
+                        panel_did,
+                        *is_open,
+                    );
+                }
 
                 _ => {}
             }
 
+            let interact = &mut self.data.commons.interaction_data[i];
             if interact.pressed {
                 interact.press_time.frames += 1;
                 interact.press_time.seconds += delta;
@@ -643,6 +679,16 @@ impl InterfaceSystem {
 
     pub fn rebind_layout(&mut self, id: WidgetId) {
         if let Some(did) = self.data.commons.solve_indirect(id.0) {
+            if let ComponentKind::Dropdown { extended_menu, .. } =
+                self.data.commons.archetype[did.as_index()]
+            {
+                if let Some(menu_did) = self.data.panels.solve_indirect(extended_menu.0) {
+                    let bounds = self.data.commons.feedback_bounds[did.as_index()];
+                    let pos = bounds.max;
+                    self.data.commons.layout_options[menu_did.as_index()].layout_position =
+                        style_layout!(position Some(pos.x.into()), Some(pos.y.into()));
+                }
+            }
             let layout = &self.data.commons.layout_options[did.as_index()];
             let taffy_id = self.data.commons.taffy_id[did.as_index()];
             let _ = self.layout.set_style(taffy_id.0, layout.into_taffy_style());
@@ -709,15 +755,24 @@ impl InterfaceSystem {
     }
 
     fn set_visible_impl(&mut self, root_id: DirectIndex, visible: bool) {
-        let taffy = self.data.commons.taffy_id[root_id.as_index()];
-        let mut inner_style = self.layout.style(taffy.0).unwrap().clone();
+        Self::set_visible_impl_a(&mut self.layout, &self.data.commons, root_id, visible);
+    }
+
+    fn set_visible_impl_a(
+        taffy: &mut TaffyTree<WidgetId>,
+        commons: &InterfaceCommonRowTable,
+        root_id: DirectIndex,
+        visible: bool,
+    ) {
+        let taffy_id = commons.taffy_id[root_id.as_index()];
+        let mut inner_style = taffy.style(taffy_id.0).unwrap().clone();
         if visible {
-            let visible_display_mode = self.data.commons.restore_display[root_id.as_index()];
+            let visible_display_mode = commons.restore_display[root_id.as_index()];
             inner_style.display = visible_display_mode.into();
         } else {
             inner_style.display = taffy::Display::None;
         }
-        let _ = self.layout.set_style(taffy.0, inner_style);
+        let _ = taffy.set_style(taffy_id.0, inner_style);
     }
 
     pub fn synchronise_layout_node(&mut self, node: WidgetId) {
@@ -1024,10 +1079,17 @@ impl InterfaceSystem {
             ElementOptions::Dropdown(core, dropdown_params) => {
                 let entries = dropdown_params.entries;
                 let selected = dropdown_params.starting_selection.unwrap_or(0);
-                let selected_entry = entries[selected as usize].name;
                 let text_font_name = dropdown_params.font_name;
                 let text_size = dropdown_params.font_size;
                 let sync_handle = dropdown_params.sync_handle;
+
+                let dropdown_display_sync_handle =
+                    crate::dropdown::encode_dropdown_id_display_handle(root_id, &dropdown_params);
+                self.environment.insert(sync_handle, selected);
+                self.environment.insert(
+                    dropdown_display_sync_handle,
+                    entries[selected as usize].name,
+                );
 
                 let text_root_id = {
                     const DROPDOWN_LABELS_LAYOUT: LayoutOptions = LayoutOptions::new();
@@ -1041,7 +1103,7 @@ impl InterfaceSystem {
                     )?;
                     let _ = self.make_text(
                         root_text_id,
-                        TextContents::literal(selected_entry),
+                        text_contents!(dropdown_display_sync_handle),
                         text_font_name,
                         FontMetrics {
                             font_size: text_size,
@@ -1052,10 +1114,27 @@ impl InterfaceSystem {
                     root_text_id
                 };
 
-                todo!()
+                let expanded_panel_id = {
+                    let resolution = self.resolution;
+                    let panel = crate::dropdown::extended_menu_panel(
+                        self.root_id().table_id,
+                        resolution,
+                        core.layer,
+                        &dropdown_params,
+                    );
+                    panel.build_node(core.parent, self)
+                };
 
-                //let entries = entries.map(|e| e.name);
-                //self.make_dropdown(root_id, text_root_id, selected, entries, sync_handle)
+                let entries = entries.map(|e| e.name);
+                self.make_dropdown(
+                    root_id,
+                    text_root_id,
+                    expanded_panel_id,
+                    dropdown_display_sync_handle,
+                    selected,
+                    entries,
+                    sync_handle,
+                )
             }
         }?;
 

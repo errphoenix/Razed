@@ -92,11 +92,11 @@ pub struct Look {
     pub slider_knob_border_press: Rgb,
     pub slider_track: Rgb,
 
-    pub menu_background: Rgb,
-    pub menu_background_opacity: f32,
-    pub menu_option_hover: Rgb,
-    pub menu_option_press: Rgb,
-    pub menu_option_select: Rgb,
+    pub menu_button: Rgb,
+    pub menu_button_hover: Rgb,
+    pub menu_button_press: Rgb,
+    pub menu_button_open: Rgb,
+    pub menu_button_symbol: Rgb,
 }
 impl Default for Look {
     fn default() -> Self {
@@ -144,11 +144,11 @@ impl Look {
             slider_knob_border_press: rgb!(0x0u32),
             slider_track: rgb!(uniform 165),
 
-            menu_background: rgb!(0x676767),
-            menu_background_opacity: 0.8,
-            menu_option_hover: rgb!(0x8a8a8a),
-            menu_option_press: rgb!(0x242424),
-            menu_option_select: rgb!(0x82abff),
+            menu_button: rgb!(0x676767),
+            menu_button_hover: rgb!(0x8a8a8a),
+            menu_button_press: rgb!(0x242424),
+            menu_button_open: rgb!(0x141414),
+            menu_button_symbol: rgb!(0x82abff),
         }
     }
 }

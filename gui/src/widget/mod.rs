@@ -75,7 +75,10 @@ pub enum ComponentKind {
     Checkbox(IndirectIndex),
     Dropdown {
         handle: IndirectIndex,
+        /// Text widget ID
         display_text_handle: WidgetId,
+        /// Panel widget ID
+        extended_menu: WidgetId,
     },
 }
 impl std::fmt::Display for ComponentKind {
