@@ -99,7 +99,7 @@ pub fn wrap_property(item: TokenStream) -> TokenStream {
                     let ident_lower = lowercase_ident(&ident_upper);
                     let ident_pascal = pascalcase_ident(&ident_lower);
 
-                    let ident_dotted = separators_ident(&ident_lower, "-");
+                    let ident_dotted = separators_ident(&ident_lower.to_string(), "-");
                     let prop_id_ident =
                         Ident::new(&format!("PROP_ID_{ident_upper}"), Span::call_site());
                     let to_hash_id = format!("#macro-prop/{ident_dotted}/value");
@@ -163,7 +163,14 @@ pub fn wrap_property(item: TokenStream) -> TokenStream {
                     .into();
                 }
             },
-            _ => unimplemented!(),
+            _ => {
+                return syn::Error::new_spanned(
+                    &input,
+                    "wrap_property block must contain statements",
+                )
+                .to_compile_error()
+                .into();
+            }
         }
     }
     out.into()
@@ -177,9 +184,8 @@ fn pascalcase_ident(ident: &Ident) -> Ident {
     let string = ident.to_string();
     Ident::new(&string.to_pascal_case(), Span::call_site())
 }
-fn separators_ident(ident: &Ident, new_sep: &str) -> Ident {
-    let string = ident.to_string();
-    Ident::new(&string.replace("_", new_sep), Span::call_site())
+fn separators_ident(ident: &str, new_sep: &str) -> String {
+    ident.to_string().replace("_", new_sep)
 }
 
 /// This section is from the `casey` crate's `traits` module.

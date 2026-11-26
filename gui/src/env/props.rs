@@ -26,6 +26,10 @@ impl<const ID: u64, T: PropertyValue> Property<T, ID> {
         self.0 = v.map(EnvValue::into).unwrap_or_default();
     }
 
+    pub fn sync_push(&self, env: &mut UiEnv) {
+        env.insert(Self::name(), self.0.clone());
+    }
+
     pub const fn name() -> StringHash {
         StringHash::from_u64(ID)
     }

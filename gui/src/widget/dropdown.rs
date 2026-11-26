@@ -72,22 +72,6 @@ pub trait HasDropdownEntries {
         0
     }
 }
-impl<T: HasDropdownEntries> HasDropdownEntries for T
-where
-    T: Default,
-{
-    fn discriminant(&self) -> u32 {
-        self.discriminant()
-    }
-
-    fn entries() -> [DropdownEntry; MAX_ENTRIES] {
-        T::entries()
-    }
-
-    fn default() -> u32 {
-        <Self as Default>::default().discriminant()
-    }
-}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DropdownEntry {
@@ -147,8 +131,10 @@ impl DropdownOptions {
         let mut i = 0;
         while i < entries.len() && i < set_entries.len() {
             let entry = set_entries[i];
-            assert!(entry.discriminant < MAX_ENTRIES as u32);
-            entries[entry.discriminant as usize] = set_entries[i];
+            if !entry.is_empty() {
+                assert!(entry.discriminant < MAX_ENTRIES as u32);
+                entries[entry.discriminant as usize] = set_entries[i];
+            }
             i += 1;
         }
         Self { entries, ..self }
