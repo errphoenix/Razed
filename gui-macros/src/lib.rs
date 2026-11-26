@@ -5,6 +5,30 @@ use syn::{Data, DataEnum, Ident, parse_macro_input};
 
 use crate::ident_case_transform::PascalCaseExt;
 
+fn extract_integer(expr: &syn::Expr) -> Result<usize, TokenStream> {
+    match expr {
+        syn::Expr::Lit(lit) => match &lit.lit {
+            syn::Lit::Int(discriminant_int) => discriminant_int
+                .base10_parse()
+                .map_err(|err| err.to_compile_error().into()),
+            _ => {
+                return Err(
+                    syn::Error::new_spanned(expr, "enum discriminant must be an integer")
+                        .to_compile_error()
+                        .into(),
+                );
+            }
+        },
+        _ => {
+            return Err(
+                syn::Error::new_spanned(expr, "enum discriminant must be literal")
+                    .to_compile_error()
+                    .into(),
+            );
+        }
+    }
+}
+
 #[proc_macro_derive(DropdownOptions)]
 pub fn derive_enum_drowndown_options(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as syn::DeriveInput);
@@ -15,30 +39,92 @@ pub fn derive_enum_drowndown_options(item: TokenStream) -> TokenStream {
             let variant_count = variants.len();
             let variant_names = variants.iter().map(|v| &v.ident).collect::<Vec<_>>();
 
+            let mut default = None;
+            let discriminants = {
+                const MAX_VALUE: usize = 16;
+                let mut avail = [true; MAX_VALUE];
+                let mut discriminants = vec![0u32; variants.len()];
+                let mut not_found = Vec::new();
+                for (i, variant) in variants.iter().enumerate() {
+                    if let Some(enum_discr) = &variant.discriminant {
+                        let discriminant = match extract_integer(&enum_discr.1) {
+                            Ok(discriminant) => discriminant,
+                            Err(err) => return err,
+                        };
+
+                        if discriminant >= MAX_VALUE {
+                            return syn::Error::new_spanned(
+                                &input,
+                                "discriminant must be within the interval [0; 15]",
+                            )
+                            .to_compile_error()
+                            .into();
+                        }
+
+                        avail[discriminant] = false;
+                        discriminants[i] = discriminant as u32;
+                    } else {
+                        not_found.push(i);
+                    };
+                }
+
+                // no discriminants provided in enum for these variants,
+                // just assign them to empty gaps in the discriminants list
+                for i in not_found {
+                    let mut discriminant = 0;
+                    let mut j = 0;
+                    while j < MAX_VALUE {
+                        if avail[i] {
+                            discriminant = j;
+                            break;
+                        }
+                        j += 1;
+                    }
+                    avail[discriminant] = false;
+                    discriminants[i] = discriminant as u32;
+                }
+
+                // all variants have a discriminant, now look for default
+                'def_lookup: for (i, variant) in variants.iter().enumerate() {
+                    for attr in &variant.attrs {
+                        if attr.path().is_ident("default") {
+                            default = Some(discriminants[i]);
+                            break 'def_lookup;
+                        }
+                    }
+                }
+
+                discriminants
+            };
+
+            // if no default is given just use the first variant
+            let default = default.unwrap_or(discriminants[0]);
+
             quote! {
                 impl gui::dropdown::HasDropdownEntries for #enum_ident {
                     fn discriminant(&self) -> u32 {
-                        self as _
+                        *self as _
                     }
 
                     fn entries() -> [gui::DropdownEntry; gui::dropdown::MAX_ENTRIES] {
                         let base_entries = Self::dropdown_entries();
-                        if #variant_count == gui::dropdown::MAX_ENTRIES {
-                            base_entries
-                        } else {
-                            let mut entries = [gui::DropdownEntry::empty(); #variant_count];
-                            let mut i = 0;
-                            while i < gui::dropdown::MAX_ENTRIES && i < #variant_count {
-                                entries[i] = base_entries[i];
-                                i += 1;
-                            }
-                            entries
+                        let mut entries = [gui::DropdownEntry::empty(); gui::dropdown::MAX_ENTRIES];
+                        let mut i = 0;
+                        while i < gui::dropdown::MAX_ENTRIES && i < #variant_count {
+                            entries[i] = base_entries[i];
+                            i += 1;
                         }
+                        entries
+                    }
+
+                    fn default() -> u32 {
+                        #default
                     }
                 }
                 impl From<gui::EnvValue> for #enum_ident {
                     fn from(value: gui::EnvValue) -> Self {
-                        let int = value.as_integer().unwrap_or(0) as u32;
+                        let fallback = <Self as gui::dropdown::HasDropdownEntries>::default();
+                        let int = value.as_integer().unwrap_or(fallback as i32) as u32;
                         Self::try_from_discriminant(int).unwrap_or_default()
                     }
                 }
@@ -59,20 +145,20 @@ pub fn derive_enum_drowndown_options(item: TokenStream) -> TokenStream {
                     }
 
                     pub const fn discriminant(&self) -> u32 {
-                        self as u32
+                        *self as u32
                     }
 
                     pub const fn try_from_discriminant(discriminant: u32) -> Option<Self> {
                         match discriminant {
                             #(
-                                #enum_ident::#variant_names as u32 => Some(#enum_ident::#variant_names),
+                                #discriminants => Some(#enum_ident::#variant_names),
                             )*
                             _ => None
                         }
                     }
 
                     pub const fn from_discriminant(discriminant: u32) -> Self {
-                        Self::try_from_discriminant().unwrap()
+                        Self::try_from_discriminant(discriminant).unwrap()
                     }
                 }
             }
