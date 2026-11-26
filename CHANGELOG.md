@@ -35,6 +35,10 @@
 
 - GUI: implemented new 'dropdown-menu' widget
 
+- GUI: create `gui_macros::wrap_property!` procedural macro to generate typed `Property<T>` types
+
+- GUI: create `derive(gui_macros::DropdownOptions)` procedural macro to generate `HasDropdownOptions` impl for enum types.
+
 ### Changed
 
 - Updated `build.sh` build script to support additional builds
