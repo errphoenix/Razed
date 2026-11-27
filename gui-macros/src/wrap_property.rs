@@ -1,6 +1,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
+use syn::parse_quote;
 
 use crate::wrap_property::ident_case_transform::PascalCaseExt;
 
@@ -112,6 +113,16 @@ pub(crate) fn wrap_property_impl(item: proc_macro::TokenStream) -> TokenStream {
     out.into()
 }
 
+fn extract_map_range(expr: syn::ExprRange) -> syn::Expr {
+    let fallback_min = Box::<syn::Expr>::new(parse_quote!(0.0));
+    let fallback_max = Box::<syn::Expr>::new(parse_quote!(1.0));
+
+    let min = expr.start.unwrap_or(fallback_min);
+    let max = expr.end.unwrap_or(fallback_max);
+
+    parse_quote!( |v| #min + (#max - #min) * v )
+}
+
 fn extract_map_attrib(attribs: &mut Vec<syn::Attribute>) -> Result<Option<syn::Expr>, TokenStream> {
     let mut result = Ok(None);
     attribs.retain(|attrib| {
@@ -123,12 +134,22 @@ fn extract_map_attrib(attribs: &mut Vec<syn::Attribute>) -> Result<Option<syn::E
                     }
                 }
                 _ => {
-                    result = Err(syn::Error::new_spanned(
-                        attrib,
-                        "mapping function must be defined as a closure",
-                    )
-                    .to_compile_error()
-                    .into())
+                    let parse_result = attrib.parse_nested_meta(|meta| {
+                        if meta.path.is_ident("range") {
+                            let value = meta.value()?;
+                            let range: syn::ExprRange = value.parse()?;
+                            result = Ok(Some(extract_map_range(range)));
+                        }
+                        Ok(())
+                    });
+                    if let Err(err) = parse_result {
+                        result = Err(syn::Error::new_spanned(
+                            attrib,
+                            format!("invalid mapping descriptor: {err}"),
+                        )
+                        .to_compile_error()
+                        .into())
+                    }
                 }
             }
             false
