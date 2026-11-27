@@ -120,7 +120,7 @@ fn extract_map_range(expr: syn::ExprRange) -> syn::Expr {
     let min = expr.start.unwrap_or(fallback_min);
     let max = expr.end.unwrap_or(fallback_max);
 
-    parse_quote!( |v| #min + (#max - #min) * v )
+    parse_quote!( |v| *v = #min + (#max - #min) * *v )
 }
 
 fn extract_map_attrib(attribs: &mut Vec<syn::Attribute>) -> Result<Option<syn::Expr>, TokenStream> {
@@ -131,25 +131,32 @@ fn extract_map_attrib(attribs: &mut Vec<syn::Attribute>) -> Result<Option<syn::E
                 Ok(expr) => {
                     if matches!(expr, syn::Expr::Closure(_)) {
                         result = Ok(Some(expr));
+                    } else {
+                        let parse_result = attrib.parse_nested_meta(|meta| {
+                            if meta.path.is_ident("range") {
+                                let value = meta.value()?;
+                                let range: syn::ExprRange = value.parse()?;
+                                result = Ok(Some(extract_map_range(range)));
+                            }
+                            Ok(())
+                        });
+                        if let Err(err) = parse_result {
+                            result = Err(syn::Error::new_spanned(
+                                attrib,
+                                format!("invalid mapping descriptor: {err}"),
+                            )
+                            .to_compile_error()
+                            .into())
+                        }
                     }
                 }
-                _ => {
-                    let parse_result = attrib.parse_nested_meta(|meta| {
-                        if meta.path.is_ident("range") {
-                            let value = meta.value()?;
-                            let range: syn::ExprRange = value.parse()?;
-                            result = Ok(Some(extract_map_range(range)));
-                        }
-                        Ok(())
-                    });
-                    if let Err(err) = parse_result {
-                        result = Err(syn::Error::new_spanned(
-                            attrib,
-                            format!("invalid mapping descriptor: {err}"),
-                        )
-                        .to_compile_error()
-                        .into())
-                    }
+                Err(err) => {
+                    result = Err(syn::Error::new_spanned(
+                        attrib,
+                        format!("invalid mapping descriptor: {err}"),
+                    )
+                    .to_compile_error()
+                    .into())
                 }
             }
             false
