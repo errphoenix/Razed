@@ -170,14 +170,67 @@ pub fn derive_enum_drowndown_options(item: TokenStream) -> TokenStream {
     }
 }
 
+fn property_extract_map_attrib(
+    attribs: &mut Vec<syn::Attribute>,
+) -> Result<Option<syn::Expr>, TokenStream> {
+    let mut result = Ok(None);
+    attribs.retain(|attrib| {
+        if attrib.path().is_ident("map") {
+            match attrib.parse_args::<syn::Expr>() {
+                Ok(expr) => {
+                    if matches!(expr, syn::Expr::Closure(_)) {
+                        result = Ok(Some(expr));
+                    }
+                }
+                _ => {
+                    result = Err(syn::Error::new_spanned(
+                        attrib,
+                        "mapping function must be defined as a closure",
+                    )
+                    .to_compile_error()
+                    .into())
+                }
+            }
+            false
+        } else {
+            true
+        }
+    });
+    result
+}
+
+fn property_handle_notcopy_attrib_if_defined(attribs: &mut Vec<syn::Attribute>) {
+    let not_copy = attribs.iter().any(|attr| attr.path().is_ident("not_copy"));
+    attribs.retain(|attr| !attr.path().is_ident("not_copy"));
+    if !not_copy {
+        attribs.push(syn::parse_quote!(#[derive(Copy)]));
+    }
+}
+
 #[proc_macro]
 pub fn wrap_property(item: TokenStream) -> TokenStream {
-    let input = syn::parse_macro_input!(item as syn::Block);
+    let mut input = syn::parse_macro_input!(item as syn::Block);
     let mut out = quote! {};
-    for stmt in &input.stmts {
+    for stmt in &mut input.stmts {
         match stmt {
             syn::Stmt::Item(itm) => match itm {
                 syn::Item::Const(item_const) => {
+                    property_handle_notcopy_attrib_if_defined(&mut item_const.attrs);
+                    let map_fn = match property_extract_map_attrib(&mut item_const.attrs) {
+                        Err(err) => return err,
+                        Ok(map_fn) => map_fn,
+                    };
+
+                    let init_tt = if let Some(map_fn_v) = map_fn {
+                        quote! {
+                            gui::Property::new_const_mapped(value, #map_fn_v)
+                        }
+                    } else {
+                        quote! {
+                            gui::Property::new_const(value)
+                        }
+                    };
+
                     let attribs = &item_const.attrs;
                     let ty = &item_const.ty;
                     let expr = &item_const.expr;
@@ -203,16 +256,15 @@ pub fn wrap_property(item: TokenStream) -> TokenStream {
                         }
                         impl #ident_pascal {
                             pub const fn new(value: #ty) -> Self {
-                                Self(gui::Property::new_const(value))
+                                Self(#init_tt)
                             }
 
                             pub const fn name() -> janus::StringHash {
                                 #prop_id_ident
                             }
 
-                            /// Note that this allocates a new `String`.
-                            pub fn original_name() -> String {
-                                #to_hash_id.to_string()
+                            pub fn original_name() -> &'static str {
+                                &#to_hash_id
                             }
 
                             pub const fn get(&self) -> &#ty {
