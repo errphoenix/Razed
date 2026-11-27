@@ -335,6 +335,6 @@ pub const G_FRAGMENTS_DEFORMED_SSBO_IMAP_CAGES: GlslStorage = ethel::shader_glsl
 };
 pub const G_FRAGMENTS_DEFORMED_SSBO_MAP: GlslStorage = ethel::shader_glsl_ssbo! {
     buf Map => {
-        [dyn_array uint : fi_map]
+        [dyn_array uint : fd_map]
     }
 };

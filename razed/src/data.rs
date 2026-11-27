@@ -3,8 +3,7 @@ use std::sync::{Arc, atomic::AtomicU32};
 use crate::{
     render::{
         self,
-        graphics::{DebugRenderOptions, Groundplane, RenderParams, RenderStats},
-        shading::attributes::ShadingAttributesMode,
+        graphics::{RenderOptions, RenderStats},
         task::deform_cages::{CagePoints, LatticeAttachments},
     },
     simulation::cage::{
@@ -164,39 +163,36 @@ pub struct FrameDataBuffers {
     pub fragment_count_deforming: TriCell<u32>,
     pub fragment_count_instanced: TriCell<u32>,
     pub debris_geom_count: TriCell<u32>,
+    pub cage_points_count: Arc<AtomicU32>,
+    pub lattice_constraint_count: Arc<AtomicU32>,
 
     pub fragments_map_instanced: TriBuffer<u32>,
     pub fragments_map_deforming: TriBuffer<u32>,
 
     pub fragments: FragmentsPartitionedTriBuffer,
     pub debris: DebrisPartitionedTriBuffer,
-
     pub cages: CagePartitionedBuffer,
     pub cage_map: TriBuffer<DirectIndex>,
-    pub cage_points_count: Arc<AtomicU32>,
     pub cage_feedback: TriBuffer<OffsetRotation>,
-    pub cage_sync_frame: CageSyncFrameBuffers,
-
     pub lattice_debug: LatticePartitionedTriBuffer,
-    pub lattice_constraint_count: Arc<AtomicU32>,
     #[cfg(feature = "devmode")]
     pub lines_debug: DbgLinesPartitionedTriBuffer,
 
     pub interface_storage: UiDataBuffer,
     pub interface_commands: UiCommandsBuffer,
 
+    pub cage_sync_frame: CageSyncFrameBuffers,
+
     pub render_frame_last_duration: TriCell<DeltaTime>,
 
-    pub debug_material_index: TriCell<u32>,
-
-    pub shading_attributes_mode: TriCell<Option<ShadingAttributesMode>>,
-    pub render_params: RenderParams,
-    pub render_stats: TriCell<RenderStats>,
-    pub debug_render_options: TriCell<DebugRenderOptions>,
-
-    pub groundplane: TriCell<Groundplane>,
-    pub overlays: TriCell<Overlays>,
     pub mouse_world_position: TriCell<Option<glam::Vec3>>,
+    pub overlays: TriCell<Overlays>,
+
+    pub render_options: TriCell<RenderOptions>,
+
+    pub render_stats: TriCell<RenderStats>,
+
+    pub debug_material_index: TriCell<u32>,
 }
 impl FrameDataBuffers {
     pub fn new() -> Self {
@@ -204,36 +200,36 @@ impl FrameDataBuffers {
             fragment_count_deforming: TriCell::new(0),
             fragment_count_instanced: TriCell::new(0),
             debris_geom_count: TriCell::new(0),
-            fragments_map_instanced: TriBuffer::zeroed(crate::data::FRAGMENTS_ALLOC),
+            cage_points_count: Arc::new(AtomicU32::new(0)),
+            lattice_constraint_count: Arc::new(AtomicU32::new(0)),
+
             fragments_map_deforming: TriBuffer::zeroed(crate::data::FRAGMENTS_ALLOC),
+            fragments_map_instanced: TriBuffer::zeroed(crate::data::FRAGMENTS_ALLOC),
 
             fragments: FragmentsPartitionedTriBuffer::new(),
             debris: DebrisPartitionedTriBuffer::new(),
-
             cages: CagePartitionedBuffer::new(),
             cage_map: TriBuffer::zeroed(CAGES_ALLOC),
-            cage_points_count: Arc::new(AtomicU32::new(0)),
             cage_feedback: TriBuffer::zeroed(CAGES_ALLOC),
-            cage_sync_frame: CageSyncFrameBuffers::new(),
-
             lattice_debug: LatticePartitionedTriBuffer::new(),
-            lattice_constraint_count: Arc::new(AtomicU32::new(0)),
             #[cfg(feature = "devmode")]
             lines_debug: DbgLinesPartitionedTriBuffer::new(),
 
             interface_commands: TriBuffer::zeroed(INTERFACE_COMMANDS_ALLOC),
             interface_storage: TriBuffer::zeroed(INTERFACE_INSTANCES_ALLOC),
 
+            cage_sync_frame: CageSyncFrameBuffers::new(),
+
             render_frame_last_duration: TriCell::new(DeltaTime::default()),
 
-            debug_material_index: TriCell::new(0),
-            shading_attributes_mode: TriCell::new(None),
-            render_params: RenderParams::default(),
-            render_stats: TriCell::new(RenderStats::default()),
-            debug_render_options: Default::default(),
-            groundplane: Default::default(),
-            overlays: Default::default(),
             mouse_world_position: Default::default(),
+            overlays: Default::default(),
+
+            render_options: TriCell::new(RenderOptions::default()),
+
+            render_stats: TriCell::new(RenderStats::default()),
+
+            debug_material_index: TriCell::new(0),
         }
     }
 }

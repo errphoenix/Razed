@@ -2,6 +2,7 @@ pub mod cage;
 pub mod debris;
 pub mod fragment;
 pub mod lattice;
+pub mod settings;
 
 pub const HASH_RESOLUTION: SpatialResolution = SpatialResolution::new(2.0);
 
@@ -17,17 +18,13 @@ use crate::{
     FragmentMeshVolumes,
     data::{FrameDataBuffers, Overlays},
     procedural::{VoxelGrid, VoxelGridOptions},
-    render::{
-        RenderGroup,
-        geometry::FragmentDomains,
-        graphics::{DebugRenderOptions, Gamma, Groundplane, RenderStats},
-        shading::attributes::ShadingAttributesMode,
-    },
+    render::{RenderGroup, geometry::FragmentDomains, graphics::RenderStats},
     simulation::{
         cage::CageSystem,
         debris::{DebrisSystem, MotionAccumulator},
         fragment::{FragmentSystem, FragmentsRowTableView},
         lattice::{LatticeSystem, NodesRowTableView},
+        settings::Settings,
     },
     structure::{DamageCloud, DamageFalloffModel, DamageOverlay, DamageSystem},
 };
@@ -89,56 +86,43 @@ impl Default for PerfAverages {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct SimCtl {
-    pub speed: f32,
-    pub running: bool,
-}
-impl Default for SimCtl {
-    fn default() -> Self {
-        Self {
-            speed: 1f32,
-            running: true,
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct State {
     first_frame: bool,
-    sim_control: SimCtl,
 
     local_keyev_buf: Vec<InputEvent>,
 
-    profiler: ethel::profile::Profiler,
     render_frame_time: TriCell<DeltaTime>,
-
     perf_avg: PerfAverages,
-
-    ui_system: InterfaceSystem,
-
-    pub glyph_atlas: GlyphAtlas,
-    pub glyph_pipe: Option<crossbeam::channel::Sender<GlyphRaster>>,
+    profiler: ethel::profile::Profiler,
 
     pub textures_metadata_registry: AssetMetadataRegistry<TextureMetadata>,
     pub texture_registry_pipe: RegistryPipe<crate::assets::Texture>,
 
+    pub glyph_atlas: GlyphAtlas,
+    pub glyph_pipe: Option<crossbeam::channel::Sender<GlyphRaster>>,
+
     camera: camera::Orbital,
     mouse_world_pos: Option<glam::Vec3>,
 
-    #[allow(unused, reason = "currently unused, might be discarded")]
-    mesh_ids: Vec<ethel::mesh::Id>, // generic objects mesh ids imap
+    ui_system: InterfaceSystem,
 
     fragment_domains: FragmentDomains,
-
-    phys_forces_reg: ForcesRegistry,
     lattice: LatticeSystem,
     cage: CageSystem,
     fragments: FragmentSystem,
     debris: DebrisSystem,
     damage_sys: DamageSystem,
-    damage_mode: bool,
 
+    phys_forces_reg: ForcesRegistry,
+
+    damage_mode: bool,
+    settings: Settings,
+    local_overlays: Overlays,
+
+    local_render_stats: RenderStats,
+
+    /* below misc data that should be moved elsewhere */
     /// Parallel to NodesRowTable of LatticeSystem
     lattice_bind_pose: Vec<glam::Vec3>,
 
@@ -146,18 +130,12 @@ pub struct State {
     frag_map: Vec<u32>,
 
     /// Selected lattice link id
-    selection: Option<IndirectIndex>,
     dead_fragments: Vec<IndirectIndex>,
 
     pub frag_volumes: FragmentMeshVolumes,
     pub frag_meshmap: FxSpatialHash<ethel::mesh::Id>,
 
     selected_material: u32,
-    attributes_shading_mode: Option<ShadingAttributesMode>,
-    // render stats copy from render thread
-    render_stats_cpy: RenderStats,
-
-    local_overlays: Overlays,
 }
 
 const CAMERA_YAW_CLAMP: std::ops::Range<f32> = f32::NEG_INFINITY..f32::INFINITY;
@@ -170,7 +148,6 @@ impl Default for State {
         Self {
             ui_system,
             first_frame: true,
-            sim_control: SimCtl::default(),
             lattice: LatticeSystem::new(XpbdSolver::new(
                 XpbdOptions::default().with_ground_level(Some(GROUND_LEVEL)),
             )),
@@ -185,9 +162,7 @@ impl Default for State {
             cage: Default::default(),
             fragments: Default::default(),
             debris: Default::default(),
-            mesh_ids: Default::default(),
             frag_map: Default::default(),
-            selection: Default::default(),
             dead_fragments: Default::default(),
             frag_volumes: Default::default(),
             frag_meshmap: Default::default(),
@@ -199,13 +174,13 @@ impl Default for State {
             perf_avg: Default::default(),
             glyph_pipe: None,
             selected_material: 2,
-            attributes_shading_mode: None,
-            render_stats_cpy: RenderStats::default(),
+            local_render_stats: RenderStats::default(),
             damage_sys: DamageSystem::new(),
             damage_mode: false,
             local_overlays: Overlays::default(),
             phys_forces_reg: Default::default(),
             mouse_world_pos: Default::default(),
+            settings: Default::default(),
         }
     }
 }
@@ -249,8 +224,8 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 
         // re-initialize start profiler time inside cross() to avoid including
         // block time (if any) in profile report
-        // this is because blocking here is not an indication of bad
-        // performance
+        // this is because blocking time here is not always relevant in a
+        // profiling context
         let mut t0 = Instant::now();
         frame_boundary.cross(|section, storage| {
             t0 = Instant::now();
@@ -265,71 +240,13 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
                 .set_and_advance(self.selected_material);
 
             // pull render stats
-            self.render_stats_cpy = storage.render_stats.get();
+            self.local_render_stats = storage.render_stats.get();
 
             // upload render params, other opts
             {
                 let _ = storage
-                    .shading_attributes_mode
-                    .set_and_advance(self.attributes_shading_mode);
-
-                let render_params = &storage.render_params;
-
-                use crate::ui::env_names::*;
-                if let Some(gamma_n) = self
-                    .ui_system
-                    .env()
-                    .get(&DEBUG_CTL_GRAPHICS_GAMMA)
-                    .and_then(|v| v.as_float())
-                {
-                    let gamma = Gamma::new_clamped(Gamma::from_normalized(gamma_n));
-                    render_params.gamma.set_and_advance(gamma).unwrap();
-                }
-
-                let draw_viz_lattice = self.ui_system.env().get_boolean(&DEBUG_CTL_RENDER_LATTICE);
-                let draw_viz_cage = self.ui_system.env().get_boolean(&DEBUG_CTL_RENDER_CAGE);
-                let bias_roughness = self
-                    .ui_system
-                    .env()
-                    .get_float(&DEBUG_CTL_SHADE_BIAS_ROUGHNESS);
-                let bias_metallic = self
-                    .ui_system
-                    .env()
-                    .get_float(&DEBUG_CTL_SHADE_BIAS_METALLIC);
-
-                let _ = storage
-                    .debug_render_options
-                    .set_and_advance(DebugRenderOptions {
-                        draw_viz_lattice,
-                        draw_viz_cage,
-                        bias_roughness,
-                        bias_metallic,
-                    });
-
-                let groundplane = &storage.groundplane;
-                let groundplane_draw = self
-                    .ui_system
-                    .env()
-                    .get(&DEBUG_CTL_GROUND_DRAW)
-                    .and_then(|v| v.as_boolean())
-                    .unwrap_or(true);
-                let groundplane_scale = self
-                    .ui_system
-                    .env()
-                    .get(&DEBUG_CTL_GROUND_SCALE)
-                    .and_then(|v| v.as_float())
-                    .unwrap_or(Groundplane::DEFAULT_SCALE_NORMALIZED);
-                let groundplane_uvscale = self
-                    .ui_system
-                    .env()
-                    .get(&DEBUG_CTL_GROUND_UVSCALE)
-                    .and_then(|v| v.as_float())
-                    .unwrap_or(Groundplane::DEFAULT_UVSCALE_NORMALIZED);
-                let _ = groundplane.set_and_advance(Groundplane {
-                    scale: Groundplane::scale_from_normalized(groundplane_scale),
-                    uvscale: Groundplane::uvscale_from_normalized(groundplane_uvscale),
-                    draw: groundplane_draw,
-                });
+                    .render_options
+                    .set_and_advance((&self.settings.render).into());
 
                 let _ = storage.overlays.set_and_advance(self.local_overlays);
 
@@ -515,12 +432,12 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
         _view_point: &janus::sync::TriCell<camera::ViewPoint>,
         delta: janus::context::DeltaTime,
     ) {
-        if !self.sim_control.running {
+        if !self.settings.sim.running.get() {
             return;
         }
 
         self.perf_avg.tps_average.register(1, Instant::now());
-        let delta = delta * self.sim_control.speed;
+        let delta = delta * *self.settings.sim.speed.get();
 
         self.profiler.capture_duration("lattice_update", || {
             const WIND_FORCE: f32 = 0.0;
@@ -571,14 +488,16 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             // simulation control keys
             const SIM_SPEED_STEP: f32 = 0.01;
             if input.keys().key_pressed(crate::input::SIM_TOGGLE) {
-                self.sim_control.running = !self.sim_control.running;
+                self.settings.sim.running.toggle();
             }
             if input.keys().key_down(crate::input::SIM_SPEED_UP) {
-                self.sim_control.speed += SIM_SPEED_STEP;
+                *self.settings.sim.speed.get_mut() += SIM_SPEED_STEP;
             }
             if input.keys().key_down(crate::input::SIM_SPEED_DOWN) {
-                self.sim_control.speed -= SIM_SPEED_STEP;
-                self.sim_control.speed = self.sim_control.speed.max(0.01);
+                *self.settings.sim.speed.get_mut() -= SIM_SPEED_STEP;
+                if *self.settings.sim.speed.get() < 0.0 {
+                    *self.settings.sim.speed.get_mut() = 0.0;
+                }
             }
         }
 
@@ -665,12 +584,7 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 
         {
             let grabbed = input.keys().key_down(crate::input::CAMERA_ORBIT);
-            let vsync = self
-                .ui_system()
-                .env()
-                .get(&crate::ui::env_names::DEBUG_CTL_DISPLAY_VSYNC)
-                .and_then(|v| v.as_boolean())
-                .unwrap_or_default();
+            let vsync = *self.settings.display.vsync.get();
 
             input.surface_options().update(|mut flags| {
                 let prev_grabbed = flags.cursor_grabbed();
@@ -684,13 +598,6 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
             });
         }
 
-        if let Some(selected) = self.selection.take()
-            && input
-                .keys()
-                .key_pressed(crate::input::MISC_DELETE_CONSTRAINT)
-        {
-            self.lattice.break_constraint(selected);
-        }
         if input.keys().key_pressed(crate::input::CAMERA_SET_ANCHOR) && !ui_consume_input {
             let new_anchor = self.mouse_world_pos.unwrap_or_default();
             self.camera.set_anchor(new_anchor);
@@ -758,7 +665,9 @@ impl ethel::StateHandler<FrameDataBuffers, RenderGroup> for State {
 
         self.profiler.capture_duration("debris_sleep", || {
             const SIM_SPEED_LOW_THRESHOLD: f32 = 0.75;
-            if self.sim_control.running || self.sim_control.speed < SIM_SPEED_LOW_THRESHOLD {
+            if *self.settings.sim.running.get()
+                || *self.settings.sim.speed.get() < SIM_SPEED_LOW_THRESHOLD
+            {
                 self.debris.accumulate_motion();
                 self.debris.freeze_old_debris(delta);
             }
@@ -806,60 +715,48 @@ impl State {
         use crate::ui::env_names::*;
 
         {
+            let settings = &mut self.settings.profiler;
             let profiler_action = {
                 let env = &mut self.ui_system.environment;
                 env.insert(PROFILER_FRAME_COUNT, self.profiler.current_page() as u32);
-                env.insert(PROFILER_RUNNING, self.profiler.is_running());
-                env.get_integer(&PROFILER_ACTION) as u8
+                *settings.command.get() as u8
             };
-            if profiler_action & crate::PROFILER_ACTION_PAUSE != 0 {
+            if profiler_action & crate::PROFILER_COMMAND_PAUSE != 0 {
                 if self.profiler.is_running() {
                     self.profiler.pause();
                     tracing::info!("Paused live profiler.")
                 }
-            } else if profiler_action & crate::PROFILER_ACTION_START != 0 {
+                settings.running.set(false);
+                settings.running.sync_push(&mut self.ui_system.environment);
+            } else if profiler_action & crate::PROFILER_COMMAND_START != 0 {
                 if !self.profiler.is_running() {
                     self.profiler.start();
                     tracing::info!("Started live profiler.")
                 }
-            } else if profiler_action & crate::PROFILER_ACTION_DUMP != 0 {
+                settings.running.set(true);
+                settings.running.sync_push(&mut self.ui_system.environment);
+            } else if profiler_action & crate::PROFILER_COMMAND_DUMP != 0 {
                 self.save_profiler_report();
             }
-            self.ui_system.environment.insert(PROFILER_ACTION, 0);
+        }
+
+        if self.first_frame {
+            let env = &mut self.ui_system.environment;
+            self.settings.render.sync_push(env);
+            self.settings.profiler.sync_push(env);
+            self.settings.sim.sync_push(env);
+            self.settings.display.sync_push(env);
+        } else {
+            let env = &self.ui_system.environment;
+            self.settings.render.sync_fetch(env);
+
+            self.settings.display.sync_fetch(env);
+            self.settings.profiler.sync_fetch(env);
+            self.settings.sim.sync_fetch(env);
         }
 
         {
             let env = &mut self.ui_system.environment;
-            if self.first_frame {
-                env.insert(DEBUG_CTL_DISPLAY_VSYNC, true);
-                env.insert(DEBUG_CTL_RENDER_LATTICE, true);
-                env.insert(DEBUG_CTL_RENDER_CAGE, true);
-                env.insert(DEBUG_CTL_GRAPHICS_GAMMA, Gamma::DEFAULT_NORMALIZED);
-                env.insert(DEBUG_CTL_SHADE_MODE, 0);
-                env.insert(DEBUG_CTL_GROUND_DRAW, true);
-                env.insert(
-                    DEBUG_CTL_GROUND_SCALE,
-                    Groundplane::DEFAULT_SCALE_NORMALIZED,
-                );
-                env.insert(
-                    DEBUG_CTL_GROUND_UVSCALE,
-                    Groundplane::DEFAULT_UVSCALE_NORMALIZED,
-                );
-            } else {
-                let shade_mode = env
-                    .get(&DEBUG_CTL_SHADE_MODE)
-                    .map(|var| var.as_integer().unwrap_or_default())
-                    .unwrap_or_default();
-
-                match shade_mode {
-                    0 => self.attributes_shading_mode = None,
-                    set => {
-                        self.attributes_shading_mode =
-                            ShadingAttributesMode::try_from_id(set as u32 - 1)
-                    }
-                }
-            }
-
             if self.perf_avg.update() {
                 let render_time_avg = self.perf_avg.render_time_average.average();
                 let simul_time_avg = self.perf_avg.simul_time_average.average();
@@ -889,7 +786,7 @@ impl State {
                         gbank_mprint,
                         instance_count,
                         instancelist_count,
-                    } = self.render_stats_cpy;
+                    } = self.local_render_stats;
                     env.insert(DEBUG_RENDER_GBANK_VUSE_PERC, gbank_vuse_perc);
                     env.insert(DEBUG_RENDER_GBANK_TUSE_PERC, gbank_tuse_perc);
                     env.insert(DEBUG_RENDER_GBANK_TRIS_COUNT, tris_count);
@@ -898,16 +795,6 @@ impl State {
                     env.insert(DEBUG_RENDER_GBANK_INSTANCELIST_COUNT, instancelist_count);
                 }
             }
-
-            env.insert(
-                SIM_CTL_STATE,
-                if self.sim_control.running {
-                    "running"
-                } else {
-                    "paused"
-                },
-            );
-            env.insert(SIM_CTL_SPEED, self.sim_control.speed);
         }
     }
 

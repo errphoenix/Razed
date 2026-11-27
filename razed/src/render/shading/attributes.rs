@@ -4,7 +4,7 @@ use rendrs::{
     pipeline::{ImageAccessKind, ImageObject, ImageObjectTarget},
 };
 
-use crate::render::ViewData;
+use crate::{render::ViewData, simulation::settings::ShadingMode};
 
 pub type ShadingAttributesPass = ComputePass<ShadingAttributesCtxWrapper, 0, 4>;
 
@@ -64,26 +64,6 @@ pub const fn attributes_pass(
     )
 }
 
-#[repr(u32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ShadingAttributesMode {
-    BarycentricWeights = 0,
-    TangentFrame = 1,
-    UvScreenDerivatives = 2,
-    VisibilityBuffer = 3,
-}
-impl ShadingAttributesMode {
-    pub const fn try_from_id(id: u32) -> Option<Self> {
-        match id {
-            0 => Some(Self::BarycentricWeights),
-            1 => Some(Self::TangentFrame),
-            2 => Some(Self::UvScreenDerivatives),
-            3 => Some(Self::VisibilityBuffer),
-            _ => None,
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct ShadingAttributesCtx<'ctx> {
     pub shader: &'ctx ComputeShaderShadingAttributes,
@@ -91,7 +71,7 @@ pub struct ShadingAttributesCtx<'ctx> {
     pub resolution: PixelResolution,
     pub view_data: ViewData,
 
-    pub mode: ShadingAttributesMode,
+    pub mode: ShadingMode,
 }
 rendrs::context_wrapper!(for<'ctx> ShadingAttributesCtx);
 

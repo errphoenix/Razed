@@ -5,15 +5,13 @@ use rendrs::{
     },
 };
 
-use crate::render::graphics::RenderParams;
-
 pub type PostTonemapPass = ComputePass<PostTonemapCtxWrapper, 0, 2>;
 
 #[derive(Debug)]
 pub struct PostTonemapCtx<'ctx> {
     pub shader: &'ctx ComputeShaderPostTonemap,
     pub resolution: PixelResolution,
-    pub render_params: &'ctx RenderParams,
+    pub gamma: f32,
 }
 rendrs::context_wrapper!(for<'ctx> PostTonemapCtx);
 
@@ -43,12 +41,9 @@ pub const fn tonemap_pass(
         |_, ctx| {
             let resolution = ctx.resolution;
 
-            let gamma = ctx.render_params.gamma.as_f32();
-            //let exposure = ctx.render_params.exposure...;
-
             let res = [resolution.width(), resolution.height()];
             ctx.shader.uniform_resolution_uvec2(res);
-            ctx.shader.uniform_gamma_float(gamma);
+            ctx.shader.uniform_gamma_float(ctx.gamma);
 
             let wg_x = resolution.width().div_ceil(WORKGROUP_SIZE_XY);
             let wg_y = resolution.height().div_ceil(WORKGROUP_SIZE_XY);

@@ -3,6 +3,8 @@ use gui::{
     text_contents,
 };
 
+use crate::simulation::settings::{PROP_ID_SIM_RUNNING, PROP_ID_SIM_SPEED};
+
 pub use super::*;
 
 pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution) -> WidgetId {
@@ -20,8 +22,8 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution
             .apply(system)
     };
 
-    debug_text(text_contents!("FPS = ", DEBUG_PERF_FPS_AVG));
-    debug_text(text_contents!("TPS = ", DEBUG_PERF_TPS_TOTAL));
+    debug_text(text_contents!("::FPS = ", DEBUG_PERF_FPS_AVG));
+    debug_text(text_contents!("::TPS = ", DEBUG_PERF_TPS_TOTAL));
     debug_text(text_contents!(
         "Frame::Duration.Simulation = ",
         DEBUG_PERF_LAST_SIMUL_FRAME_TIME_MILLIS,
@@ -48,8 +50,8 @@ pub fn root(system: &mut InterfaceSystem, root: WidgetId, resolution: Resolution
     debug_text(text_contents!("World::Cages = ", DEBUG_COUNTER_CAGES,));
     debug_text(text_contents!("World::Debris = ", DEBUG_COUNTER_DEBRIS,));
 
-    debug_text(text_contents!("Sim::State = ", SIM_CTL_STATE,));
-    debug_text(text_contents!("Sim::Speed = ", SIM_CTL_SPEED,));
+    debug_text(text_contents!("Sim::Active = ", PROP_ID_SIM_RUNNING,));
+    debug_text(text_contents!("Sim::Speed = ", PROP_ID_SIM_SPEED,));
 
     debug_text(text_contents!(
         "GeomBank::VertexUse = ",

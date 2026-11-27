@@ -56,6 +56,7 @@ use crate::{
         },
         util::equirect_decode::ComputeShaderUtilEquirectDecode,
     },
+    simulation::settings::ShadingMode,
 };
 
 pub const DEFAULT_DEPTH_FUNC: u32 = janus::gl::GREATER;
@@ -392,6 +393,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             .render_frame_last_duration
             .set_and_advance(self.last_frame_render);
 
+        let render_options = &frame_data.render_options.get();
+
         let render_pool = &self.render_pool;
         let cage_count = frame_data.cage_points_count.load(Ordering::Acquire);
 
@@ -425,15 +428,14 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         // geometry composition pass - ground plane
         {
-            let groundplane = frame_data.groundplane.get();
-            if groundplane.draw {
+            if render_options.draw_ground {
                 self.pipeline().geom_groundplane.execute(
                     section,
                     render_pool,
                     &PlaneGeomCtx {
                         _marker: std::marker::PhantomData,
-                        size: groundplane.scale,
-                        uv_scaling: groundplane.uvscale,
+                        size: render_options.ground_scale,
+                        uv_scaling: render_options.ground_uvscale,
                     },
                 );
             }
@@ -503,8 +505,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             let data = &frame_data.debris;
             let view_data = self.view_data;
             let material_registry = self.materials.locations();
-
-            println!("{count}");
 
             self.pipeline().geom_fragments_instanced.execute(
                 section,
@@ -584,8 +584,6 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             self.view_data.view_mat,
         );
 
-        let render_doptions = frame_data.debug_render_options.get();
-
         {
             let resolution = self.resolution;
             let view_data = self.view_data;
@@ -593,9 +591,8 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
             let irradiance_sh = &self.shader_buffers().irradiance_sh_coeffs;
             let materials_buf = &self.shader_buffers().materials;
 
-            let render_mode = frame_data.shading_attributes_mode.get();
-            match render_mode {
-                None => {
+            match render_options.shading_mode {
+                ShadingMode::StandardPbr => {
                     let shader = &self.shaders.shading_pbr;
                     self.pipeline().shading_pbr.execute(
                         section,
@@ -607,12 +604,12 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                             materials_buf,
                             resolution,
                             view_data,
-                            dparam_bias_rough: render_doptions.bias_roughness,
-                            dparam_bias_metal: render_doptions.bias_metallic,
+                            dparam_bias_rough: render_options.bias_roughness,
+                            dparam_bias_metal: render_options.bias_metallic,
                         },
                     );
                 }
-                Some(mode) => {
+                shade_attrib_mode => {
                     let shader = &self.shaders.shading_attributes;
                     self.pipeline().shading_attributes.execute(
                         section,
@@ -621,7 +618,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                             shader,
                             resolution,
                             view_data,
-                            mode,
+                            mode: shade_attrib_mode,
                         },
                     );
                 }
@@ -637,11 +634,10 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         // tonemapping + gamma correction vfx pass
         {
-            let render_params = &frame_data.render_params;
             let ctx = PostTonemapCtx {
                 shader: &self.shaders.post_tonemap,
                 resolution: self.resolution,
-                render_params,
+                gamma: render_options.gamma,
             };
             self.pipeline()
                 .post_tonemap
@@ -650,7 +646,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
 
         // lattice & cage optional viz. draw passes
         {
-            if render_doptions.draw_viz_lattice {
+            if render_options.draw_lattice {
                 self.pipeline().debug_draw_lattice.execute(
                     section,
                     render_pool,
@@ -663,7 +659,7 @@ impl ethel::RenderHandler<FrameDataBuffers> for Renderer {
                     },
                 );
             }
-            if render_doptions.draw_viz_cage {
+            if render_options.draw_cage {
                 self.pipeline().debug_draw_cages.execute(
                     section,
                     render_pool,
