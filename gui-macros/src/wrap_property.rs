@@ -12,17 +12,40 @@ pub(crate) fn wrap_property_impl(item: proc_macro::TokenStream) -> TokenStream {
         match stmt {
             syn::Stmt::Item(itm) => match itm {
                 syn::Item::Const(item_const) => {
-                    handle_notcopy_attrib_if_defined(&mut item_const.attrs);
-                    let map_fn = match extract_map_attrib(&mut item_const.attrs) {
-                        Err(err) => return err,
-                        Ok(map_fn) => map_fn,
-                    };
-
+                    let ident_upper = &item_const.ident;
+                    let ident_lower = lowercase_ident(&ident_upper);
+                    let ident_pascal = pascalcase_ident(&ident_lower);
                     let ty = &item_const.ty;
-                    let init_fn = if let Some(map_fn_v) = map_fn {
+                    let expr = &item_const.expr;
+
+                    handle_notcopy_attrib_if_defined(&mut item_const.attrs);
+
+                    let mut map_range_defined = false;
+                    let map_fn = match impl_map_attribute(&mut item_const.attrs) {
+                        Err(err) => return err,
+                        Ok(MapAttribGen::Closure(expr)) => Some(expr),
+                        Ok(MapAttribGen::DefinedRange(range)) => {
+                            out.extend(impl_mapping_helpers(
+                                &ident_pascal,
+                                ty,
+                                expr,
+                                &range.min,
+                                &range.max,
+                            ));
+                            map_range_defined = true;
+                            Some(range.as_closure)
+                        }
+                        _ => None,
+                    };
+                    let init_fn = if let Some(map_fn) = map_fn {
+                        let value = if map_range_defined {
+                            quote! { Self::normalize(value.into()) }
+                        } else {
+                            quote! { value }
+                        };
                         quote! {
                             pub fn new(value: impl Into<#ty>) -> Self {
-                                Self(gui::Property::with_value_mapped(value, #map_fn_v))
+                                Self(gui::Property::with_value_mapped(#value, #map_fn))
                             }
                         }
                     } else {
@@ -34,11 +57,6 @@ pub(crate) fn wrap_property_impl(item: proc_macro::TokenStream) -> TokenStream {
                     };
 
                     let attribs = &item_const.attrs;
-                    let expr = &item_const.expr;
-                    let ident_upper = &item_const.ident;
-                    let ident_lower = lowercase_ident(&ident_upper);
-                    let ident_pascal = pascalcase_ident(&ident_lower);
-
                     let ident_dotted = separators_ident(&ident_lower.to_string(), "-");
                     let prop_id_ident =
                         syn::Ident::new(&format!("PROP_ID_{ident_upper}"), Span::call_site());
@@ -110,33 +128,50 @@ pub(crate) fn wrap_property_impl(item: proc_macro::TokenStream) -> TokenStream {
             }
         }
     }
+
     out.into()
 }
 
-fn extract_map_range(expr: syn::ExprRange) -> syn::Expr {
-    let fallback_min = Box::<syn::Expr>::new(parse_quote!(0.0));
-    let fallback_max = Box::<syn::Expr>::new(parse_quote!(1.0));
-
-    let min = expr.start.unwrap_or(fallback_min);
-    let max = expr.end.unwrap_or(fallback_max);
-
-    parse_quote!( |v| *v = #min + (#max - #min) * *v )
+struct MapRange {
+    as_closure: syn::Expr,
+    min: syn::Expr,
+    max: syn::Expr,
 }
 
-fn extract_map_attrib(attribs: &mut Vec<syn::Attribute>) -> Result<Option<syn::Expr>, TokenStream> {
-    let mut result = Ok(None);
+fn extract_map_range(expr: syn::ExprRange) -> MapRange {
+    let fallback_min: syn::Expr = parse_quote!(0.0);
+    let fallback_max: syn::Expr = parse_quote!(1.0);
+
+    let min = expr.start.map(|b| (*b).clone()).unwrap_or(fallback_min);
+    let max = expr.end.map(|b| (*b).clone()).unwrap_or(fallback_max);
+
+    MapRange {
+        as_closure: parse_quote!( |v| *v = #min + (#max - #min) * *v ),
+        max,
+        min,
+    }
+}
+
+enum MapAttribGen {
+    Nothing,
+    Closure(syn::Expr),
+    DefinedRange(MapRange),
+}
+
+fn impl_map_attribute(attribs: &mut Vec<syn::Attribute>) -> Result<MapAttribGen, TokenStream> {
+    let mut result = Ok(MapAttribGen::Nothing);
     attribs.retain(|attrib| {
         if attrib.path().is_ident("map") {
             match attrib.parse_args::<syn::Expr>() {
                 Ok(expr) => {
                     if matches!(expr, syn::Expr::Closure(_)) {
-                        result = Ok(Some(expr));
+                        result = Ok(MapAttribGen::Closure(expr));
                     } else {
                         let parse_result = attrib.parse_nested_meta(|meta| {
                             if meta.path.is_ident("range") {
                                 let value = meta.value()?;
                                 let range: syn::ExprRange = value.parse()?;
-                                result = Ok(Some(extract_map_range(range)));
+                                result = Ok(MapAttribGen::DefinedRange(extract_map_range(range)));
                             }
                             Ok(())
                         });
@@ -185,6 +220,36 @@ fn pascalcase_ident(ident: &syn::Ident) -> syn::Ident {
 }
 fn separators_ident(ident: &str, new_sep: &str) -> String {
     ident.to_string().replace("_", new_sep)
+}
+
+fn impl_mapping_helpers(
+    name: &syn::Ident,
+    ty: &syn::Type,
+    default: &syn::Expr,
+    range_min: &syn::Expr,
+    range_max: &syn::Expr,
+) -> proc_macro2::TokenStream {
+    quote! {
+        impl #name {
+            pub const MIN: #ty = #range_min;
+            pub const MAX: #ty = #range_max;
+            pub const SPAN: #ty = #range_max - #range_min;
+            pub const DEFAULT: #ty = #default;
+            pub const DEFAULT_NORMALIZED: #ty = Self::normalize(Self::DEFAULT);
+
+            pub const fn map(value: &mut #ty) {
+                *value = Self::from_normalized(*value);
+            }
+
+            pub const fn from_normalized(value: #ty) -> #ty {
+                value * Self::SPAN + Self::MIN
+            }
+
+            pub const fn normalize(value: #ty) -> #ty {
+                (value - Self::MIN) / Self::SPAN
+            }
+        }
+    }
 }
 
 /// This section is from the `casey` crate's `traits` module.
