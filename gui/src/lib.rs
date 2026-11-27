@@ -1,3 +1,5 @@
+pub use gui_macros::*;
+
 pub mod declare;
 pub mod draw;
 pub mod env;
