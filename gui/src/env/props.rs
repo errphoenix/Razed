@@ -8,6 +8,9 @@ impl<T> PropertyValue for T where T: Clone + Default + Into<EnvValue> + From<Env
 #[derive(Clone, Default, Debug)]
 pub struct Property<T: PropertyValue, const ID: u64> {
     inner: T,
+    // only store unmapped value if a
+    // mapping function is defined
+    inner_unmapped: Option<T>,
     map_fn: Option<fn(&mut T)>,
 }
 impl<const ID: u64, T: PropertyValue + Copy> Copy for Property<T, ID> {}
@@ -15,6 +18,7 @@ impl<const ID: u64, T: PropertyValue> Property<T, ID> {
     pub fn new() -> Self {
         Self {
             inner: T::default(),
+            inner_unmapped: None,
             map_fn: None,
         }
     }
@@ -22,6 +26,7 @@ impl<const ID: u64, T: PropertyValue> Property<T, ID> {
     pub fn new_mapped(map_fn: fn(&mut T)) -> Self {
         Self {
             inner: T::default(),
+            inner_unmapped: None,
             map_fn: Some(map_fn),
         }
     }
@@ -29,13 +34,18 @@ impl<const ID: u64, T: PropertyValue> Property<T, ID> {
     pub fn with_value(value: impl Into<T>) -> Self {
         Self {
             inner: value.into(),
+            inner_unmapped: None,
             map_fn: None,
         }
     }
 
     pub fn with_value_mapped(value: impl Into<T>, map_fn: fn(&mut T)) -> Self {
+        let unmapped = value.into();
+        let mut mapped = unmapped.clone();
+        map_fn(&mut mapped);
         Self {
-            inner: value.into(),
+            inner: mapped,
+            inner_unmapped: Some(unmapped),
             map_fn: Some(map_fn),
         }
     }
@@ -43,14 +53,8 @@ impl<const ID: u64, T: PropertyValue> Property<T, ID> {
     pub const fn new_const(value: T) -> Self {
         Self {
             inner: value,
+            inner_unmapped: None,
             map_fn: None,
-        }
-    }
-
-    pub const fn new_const_mapped(value: T, map_fn: fn(&mut T)) -> Self {
-        Self {
-            inner: value,
-            map_fn: Some(map_fn),
         }
     }
 
@@ -64,7 +68,11 @@ impl<const ID: u64, T: PropertyValue> Property<T, ID> {
     }
 
     pub fn sync_push(&self, env: &mut UiEnv) {
-        env.insert(Self::name(), self.inner.clone());
+        if let Some(unmapped) = &self.inner_unmapped {
+            env.insert(Self::name(), unmapped.clone());
+        } else {
+            env.insert(Self::name(), self.inner.clone());
+        }
     }
 
     pub const fn name() -> StringHash {

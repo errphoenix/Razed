@@ -221,18 +221,22 @@ pub fn wrap_property(item: TokenStream) -> TokenStream {
                         Ok(map_fn) => map_fn,
                     };
 
-                    let init_tt = if let Some(map_fn_v) = map_fn {
+                    let ty = &item_const.ty;
+                    let init_fn = if let Some(map_fn_v) = map_fn {
                         quote! {
-                            gui::Property::new_const_mapped(value, #map_fn_v)
+                            pub fn new(value: impl Into<#ty>) -> Self {
+                                Self(gui::Property::with_value_mapped(value, #map_fn_v))
+                            }
                         }
                     } else {
                         quote! {
-                            gui::Property::new_const(value)
+                            pub const fn new(value: #ty) -> Self {
+                                Self(gui::Property::new_const(value))
+                            }
                         }
                     };
 
                     let attribs = &item_const.attrs;
-                    let ty = &item_const.ty;
                     let expr = &item_const.expr;
                     let ident_upper = &item_const.ident;
                     let ident_lower = lowercase_ident(&ident_upper);
@@ -255,9 +259,7 @@ pub fn wrap_property(item: TokenStream) -> TokenStream {
                             }
                         }
                         impl #ident_pascal {
-                            pub const fn new(value: #ty) -> Self {
-                                Self(#init_tt)
-                            }
+                            #init_fn
 
                             pub const fn name() -> janus::StringHash {
                                 #prop_id_ident
